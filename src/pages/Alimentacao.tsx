@@ -9,6 +9,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -16,7 +17,7 @@ import {
 import { toast } from "sonner";
 import {
   Plus, Trash2, Sparkles, UtensilsCrossed, Camera, Loader2, Check, X,
-  Flame, Droplet, Settings2, Undo2,
+  Flame, Droplet, Settings2, Undo2, RefreshCw,
 } from "lucide-react";
 
 interface MealPayload {
@@ -27,6 +28,7 @@ interface MealPayload {
   carbs_g?: number;
   fat_g?: number;
   items?: string[];
+  note?: string;
   source?: string;
 }
 interface MealEvent { id: string; occurred_at: string; payload: MealPayload }
@@ -84,6 +86,8 @@ export default function Alimentacao() {
   const [analyzing, setAnalyzing] = useState(false);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [savingPhoto, setSavingPhoto] = useState(false);
+  const [photoData, setPhotoData] = useState<{ data: string; media_type: string } | null>(null);
+  const [photoNote, setPhotoNote] = useState("");
 
   // ── Personalização das garrafas ──────────────────────────────
   const bottles: WaterBottle[] = profile?.water_bottles?.length ? profile.water_bottles : DEFAULT_WATER_BOTTLES;
@@ -135,20 +139,15 @@ export default function Alimentacao() {
   };
 
   // ── Fluxo da foto ────────────────────────────────────────────
-  const onPickPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // permite escolher a mesma foto de novo
-    if (!file) return;
-    setEstimate(null);
+  const runAnalysis = async (photo: { data: string; media_type: string }, note: string) => {
     setAnalyzing(true);
     try {
-      const { data: img, media_type } = await fileToResizedBase64(file);
       const { data, error } = await supabase.functions.invoke("analyze-meal", {
-        body: { image: img, media_type },
+        body: { image: photo.data, media_type: photo.media_type, note: note.trim() || undefined },
       });
       if (error || data?.error) throw new Error(data?.error ?? "falha");
       if (!data?.is_food || !data?.estimate) {
-        toast.info("Não reconheci comida nessa foto. Tente enquadrar melhor o prato.");
+        toast.info("Não reconheci comida nessa foto. Tente enquadrar melhor o prato — ou descreva na observação.");
         return;
       }
       setEstimate(data.estimate as Estimate);
@@ -157,6 +156,32 @@ export default function Alimentacao() {
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const onPickPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite escolher a mesma foto de novo
+    if (!file) return;
+    setEstimate(null);
+    try {
+      const photo = await fileToResizedBase64(file);
+      setPhotoData(photo);
+      await runAnalysis(photo, photoNote);
+    } catch {
+      toast.error("Não consegui abrir essa imagem. Tente outra foto.");
+    }
+  };
+
+  const reanalyze = async () => {
+    if (!photoData) return;
+    setEstimate(null);
+    await runAnalysis(photoData, photoNote);
+  };
+
+  const resetPhoto = () => {
+    setEstimate(null);
+    setPhotoData(null);
+    setPhotoNote("");
   };
 
   const setCalories = (v: string) => {
@@ -168,16 +193,18 @@ export default function Alimentacao() {
   const confirmPhoto = async () => {
     if (!user || !estimate) return;
     setSavingPhoto(true);
+    const note = photoNote.trim();
     const { error } = await supabase.from("life_events").insert({
       user_id: user.id, pillar: "alimentacao", kind: "meal",
       payload: {
         description: estimate.description,
-        summary: `Refeição (~${estimate.calories} kcal): ${estimate.description}`,
+        summary: `Refeição (~${estimate.calories} kcal): ${estimate.description}${note ? ` — obs: ${note}` : ""}`,
         calories: estimate.calories,
         protein_g: estimate.protein_g,
         carbs_g: estimate.carbs_g,
         fat_g: estimate.fat_g,
         items: estimate.items,
+        note: note || undefined,
         source: "photo",
       },
       source: "photo",
@@ -185,7 +212,7 @@ export default function Alimentacao() {
     setSavingPhoto(false);
     if (error) { toast.error("Não consegui salvar."); return; }
     toast.success("Refeição registrada pela foto. +4 XP");
-    setEstimate(null);
+    resetPhoto();
     qc.invalidateQueries();
   };
 
@@ -258,6 +285,21 @@ export default function Alimentacao() {
           className="hidden" onChange={onPickPhoto}
         />
 
+        {/* Observação: ajuda a IA a acertar (ex.: "a carne é cupim") */}
+        <div className="space-y-1">
+          <Textarea
+            value={photoNote}
+            onChange={(e) => setPhotoNote(e.target.value)}
+            placeholder={'Observação (opcional) — ex.: "a carne é cupim", "comi um sagu junto"'}
+            rows={2} maxLength={200}
+            className="resize-none text-sm"
+            disabled={analyzing}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Detalhes assim deixam a estimativa mais certeira — e ficam salvos com a refeição.
+          </p>
+        </div>
+
         {!estimate && (
           <Button
             variant="secondary" className="w-full"
@@ -265,7 +307,7 @@ export default function Alimentacao() {
           >
             {analyzing
               ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analisando a foto...</>)
-              : (<><Camera className="w-4 h-4 mr-2" /> Tirar / escolher foto</>)}
+              : (<><Camera className="w-4 h-4 mr-2" /> {photoData ? "Tirar outra foto" : "Tirar / escolher foto"}</>)}
           </Button>
         )}
 
@@ -307,11 +349,22 @@ export default function Alimentacao() {
               {estimate.note && <p className="text-xs text-muted-foreground italic">{estimate.note}</p>}
             </div>
 
-            <div className="flex gap-2 justify-end">
-              <Button variant="ghost" onClick={() => setEstimate(null)} disabled={savingPhoto}>
+            {photoNote.trim() && (
+              <p className="text-xs text-muted-foreground">
+                Editou a observação? Toque em <span className="font-medium">Reanalisar</span> para refazer a estimativa.
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-2 justify-end">
+              <Button variant="ghost" onClick={resetPhoto} disabled={savingPhoto || analyzing}>
                 <X className="w-4 h-4 mr-1" /> Descartar
               </Button>
-              <Button onClick={confirmPhoto} disabled={savingPhoto}>
+              <Button variant="outline" onClick={reanalyze} disabled={savingPhoto || analyzing}>
+                {analyzing
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : (<><RefreshCw className="w-4 h-4 mr-1" /> Reanalisar</>)}
+              </Button>
+              <Button onClick={confirmPhoto} disabled={savingPhoto || analyzing}>
                 {savingPhoto ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Registrar</>)}
               </Button>
             </div>
@@ -391,9 +444,14 @@ export default function Alimentacao() {
               <div className="space-y-1">
                 {items.map((m) => (
                   <div key={m.id} className="flex items-center gap-2 rounded-md border p-2.5">
-                    <span className="text-sm flex-1 min-w-0 break-words">
-                      {m.payload?.description ?? m.payload?.summary ?? "Refeição"}
-                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm break-words">
+                        {m.payload?.description ?? m.payload?.summary ?? "Refeição"}
+                      </span>
+                      {m.payload?.note && (
+                        <span className="block text-xs text-muted-foreground italic break-words">obs: {m.payload.note}</span>
+                      )}
+                    </div>
                     {Number(m.payload?.calories) > 0 && (
                       <span className="shrink-0 inline-flex items-center gap-1 text-xs text-muted-foreground rounded-full bg-muted px-2 py-0.5">
                         <Flame className="w-3 h-3" /> {Math.round(Number(m.payload!.calories))} kcal
