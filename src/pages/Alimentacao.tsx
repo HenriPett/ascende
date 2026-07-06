@@ -17,8 +17,12 @@ import {
 import { toast } from "sonner";
 import {
   Plus, Trash2, Sparkles, UtensilsCrossed, Camera, Loader2, Check, X,
-  Flame, Droplet, Settings2, Undo2, RefreshCw,
+  Flame, Droplet, Settings2, Undo2, RefreshCw, Scale, Pencil, ScanLine, TrendingUp,
 } from "lucide-react";
+import {
+  ResponsiveContainer, LineChart, Line, BarChart, Bar,
+  XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine,
+} from "recharts";
 
 interface MealPayload {
   description?: string;
@@ -33,6 +37,15 @@ interface MealPayload {
 }
 interface MealEvent { id: string; occurred_at: string; payload: MealPayload }
 interface WaterEvent { id: string; occurred_at: string; payload: { ml?: number } }
+interface WeightEvent { id: string; occurred_at: string; payload: { kg?: number } }
+interface BodyEvent { id: string; occurred_at: string; payload: { body_fat_pct?: number; body_fat_range?: string; lean_mass_kg?: number } }
+
+interface BodyEstimate {
+  body_fat_pct: number;
+  body_fat_range: string;
+  lean_mass_kg?: number;
+  note?: string;
+}
 
 interface Estimate {
   description: string;
@@ -94,6 +107,18 @@ export default function Alimentacao() {
   const goalMl = profile?.water_goal_ml ?? DEFAULT_WATER_GOAL_ML;
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // ── Peso e composição corporal ───────────────────────────────
+  const [weightInput, setWeightInput] = useState("");
+  const [weightGoalInput, setWeightGoalInput] = useState("");
+  const [savingWeight, setSavingWeight] = useState(false);
+  const bodyFileRef = useRef<HTMLInputElement>(null);
+  const [bodyAnalyzing, setBodyAnalyzing] = useState(false);
+  const [bodyEstimate, setBodyEstimate] = useState<BodyEstimate | null>(null);
+  const [savingBody, setSavingBody] = useState(false);
+
+  // ── Edição de calorias no histórico ──────────────────────────
+  const [editingMeal, setEditingMeal] = useState<MealEvent | null>(null);
+
   const { data: meals, isLoading } = useQuery({
     queryKey: ["meals", user?.id],
     enabled: !!user,
@@ -117,6 +142,31 @@ export default function Alimentacao() {
         .eq("user_id", user!.id).eq("kind", "water").gte("occurred_at", dayStart.toISOString())
         .order("occurred_at", { ascending: false });
       return (data ?? []) as WaterEvent[];
+    },
+  });
+
+  const { data: weights } = useQuery({
+    queryKey: ["weights", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const since = new Date(Date.now() - 90 * 864e5).toISOString();
+      const { data } = await supabase.from("life_events")
+        .select("id,occurred_at,payload")
+        .eq("user_id", user!.id).eq("kind", "weight").gte("occurred_at", since)
+        .order("occurred_at", { ascending: true }).limit(200);
+      return (data ?? []) as WeightEvent[];
+    },
+  });
+
+  const { data: bodyScans } = useQuery({
+    queryKey: ["body-scans", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase.from("life_events")
+        .select("id,occurred_at,payload")
+        .eq("user_id", user!.id).eq("kind", "body")
+        .order("occurred_at", { ascending: false }).limit(5);
+      return (data ?? []) as BodyEvent[];
     },
   });
 
@@ -236,6 +286,139 @@ export default function Alimentacao() {
     await supabase.from("life_events").delete().eq("id", last.id);
     qc.invalidateQueries({ queryKey: ["water-today", user?.id] });
   };
+
+  // ── Peso ─────────────────────────────────────────────────────
+  const logWeight = async () => {
+    const kg = Number(weightInput.replace(",", "."));
+    if (!user || !kg || kg < 20 || kg > 400) { toast.error("Informe um peso válido em kg. Ex.: 78,5"); return; }
+    setSavingWeight(true);
+    const { error } = await supabase.from("life_events").insert({
+      user_id: user.id, pillar: "alimentacao", kind: "weight",
+      payload: { kg, summary: `Peso: ${kg} kg` }, source: "form",
+    });
+    setSavingWeight(false);
+    if (error) { toast.error("Não consegui salvar."); return; }
+    toast.success("Peso registrado. +3 XP");
+    setWeightInput("");
+    qc.invalidateQueries();
+  };
+
+  const saveWeightGoal = async () => {
+    if (!user) return;
+    const kg = Number(weightGoalInput.replace(",", "."));
+    if (!kg || kg < 20 || kg > 400) { toast.error("Meta inválida. Ex.: 75"); return; }
+    const { error } = await supabase.from("profiles").update({ weight_goal_kg: kg }).eq("user_id", user.id);
+    if (error) { toast.error("Não consegui salvar a meta."); return; }
+    toast.success("Meta de peso salva.");
+    setWeightGoalInput("");
+    refreshProfile();
+  };
+
+  // ── Análise corporal por foto ────────────────────────────────
+  const latestWeightKg = (weights ?? []).length
+    ? Number((weights ?? [])[(weights ?? []).length - 1].payload?.kg) || undefined
+    : undefined;
+
+  const onPickBodyPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBodyEstimate(null);
+    setBodyAnalyzing(true);
+    try {
+      const { data: img, media_type } = await fileToResizedBase64(file);
+      const { data, error } = await supabase.functions.invoke("analyze-body", {
+        body: { image: img, media_type, weight_kg: latestWeightKg },
+      });
+      if (error || data?.error) throw new Error(data?.error ?? "falha");
+      if (!data?.valid || !data?.estimate) {
+        toast.info(data?.reason ?? "Não consegui analisar essa foto. Tente uma foto de corpo inteiro, de frente, com boa luz.");
+        return;
+      }
+      setBodyEstimate(data.estimate as BodyEstimate);
+    } catch {
+      toast.error("Não consegui analisar agora. Verifique sua conexão e tente de novo.");
+    } finally {
+      setBodyAnalyzing(false);
+    }
+  };
+
+  const confirmBody = async () => {
+    if (!user || !bodyEstimate) return;
+    setSavingBody(true);
+    const { error } = await supabase.from("life_events").insert({
+      user_id: user.id, pillar: "alimentacao", kind: "body",
+      payload: {
+        body_fat_pct: bodyEstimate.body_fat_pct,
+        body_fat_range: bodyEstimate.body_fat_range,
+        lean_mass_kg: bodyEstimate.lean_mass_kg,
+        summary: `Composição corporal (estimativa por foto): ~${bodyEstimate.body_fat_pct}% de gordura`,
+      },
+      source: "photo",
+    });
+    setSavingBody(false);
+    if (error) { toast.error("Não consegui salvar."); return; }
+    toast.success("Estimativa registrada. +4 XP");
+    setBodyEstimate(null);
+    qc.invalidateQueries();
+  };
+
+  // ── Edição de calorias no histórico ──────────────────────────
+  const saveMealCalories = async (meal: MealEvent, calories: number) => {
+    const payload = { ...meal.payload, calories };
+    const desc = payload.description ?? "Refeição";
+    payload.summary = calories > 0 ? `Refeição (~${calories} kcal): ${desc}` : `Refeição: ${desc}`;
+    const { error } = await supabase.from("life_events").update({ payload }).eq("id", meal.id);
+    if (error) { toast.error("Não consegui atualizar."); return; }
+    toast.success("Calorias atualizadas.");
+    setEditingMeal(null);
+    qc.invalidateQueries({ queryKey: ["meals"] });
+  };
+
+  // ── Dados dos gráficos ───────────────────────────────────────
+  const weightGoal = Number(profile?.weight_goal_kg) || null;
+  const weightSeries = (weights ?? [])
+    .map((w) => ({ t: w.occurred_at, kg: Number(w.payload?.kg) }))
+    .filter((w) => w.kg > 0)
+    .map((w) => ({
+      dia: new Date(w.t).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
+      kg: w.kg,
+      ts: new Date(w.t).getTime(),
+    }));
+
+  // Tendência: regressão linear simples (kg por semana)
+  const trendKgWeek = (() => {
+    if (weightSeries.length < 3) return null;
+    const n = weightSeries.length;
+    const xs = weightSeries.map((w) => w.ts / 864e5); // dias
+    const ys = weightSeries.map((w) => w.kg);
+    const mx = xs.reduce((a, b) => a + b, 0) / n;
+    const my = ys.reduce((a, b) => a + b, 0) / n;
+    let num = 0, den = 0;
+    for (let i = 0; i < n; i++) { num += (xs[i] - mx) * (ys[i] - my); den += (xs[i] - mx) ** 2; }
+    if (!den) return null;
+    return (num / den) * 7; // kg/semana
+  })();
+
+  const caloriesByDay = (() => {
+    const map: Record<string, number> = {};
+    for (const m of meals ?? []) {
+      const kcal = Number(m.payload?.calories);
+      if (kcal > 0) {
+        const d = m.occurred_at.slice(0, 10);
+        map[d] = (map[d] ?? 0) + kcal;
+      }
+    }
+    const out: { dia: string; kcal: number }[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 864e5);
+      const iso = d.toISOString().slice(0, 10);
+      if (map[iso]) out.push({ dia: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }), kcal: Math.round(map[iso]) });
+    }
+    return out;
+  })();
+
+  const latestScan = (bodyScans ?? [])[0];
 
   // Agrupa refeições por dia
   const byDay: Record<string, MealEvent[]> = {};
@@ -414,6 +597,179 @@ export default function Alimentacao() {
         </div>
       </Card>
 
+      {/* ── Evolução corporal ────────────────────────────────── */}
+      <Card className="p-4 space-y-4">
+        <div>
+          <h2 className="font-display font-semibold flex items-center gap-1.5">
+            <Scale className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
+            Evolução corporal
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Peso, tendência e composição. O número é só um dado — a direção importa mais que o dia.
+          </p>
+        </div>
+
+        {/* Registro de peso + meta */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div className="flex gap-2">
+            <Input inputMode="decimal" placeholder="Peso de hoje (kg)" value={weightInput}
+              onChange={(e) => setWeightInput(e.target.value)} />
+            <Button variant="secondary" onClick={logWeight} disabled={savingWeight}>
+              {savingWeight ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <Input inputMode="decimal"
+              placeholder={weightGoal ? `Meta: ${String(weightGoal).replace(".", ",")} kg` : "Meta de peso (kg)"}
+              value={weightGoalInput} onChange={(e) => setWeightGoalInput(e.target.value)} />
+            <Button variant="outline" onClick={saveWeightGoal}>Meta</Button>
+          </div>
+        </div>
+
+        {/* Gráfico de peso */}
+        {weightSeries.length >= 2 ? (
+          <>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={weightSeries} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="dia" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
+                      borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
+                    }}
+                    formatter={(v: number) => [`${String(v).replace(".", ",")} kg`, "Peso"]}
+                  />
+                  {weightGoal && (
+                    <ReferenceLine y={weightGoal} stroke="hsl(var(--gold))" strokeDasharray="5 4"
+                      label={{ value: "meta", fontSize: 10, fill: "hsl(var(--gold))", position: "insideTopRight" }} />
+                  )}
+                  <Line type="monotone" dataKey="kg" stroke="hsl(var(--alimentacao))" strokeWidth={2}
+                    dot={{ r: 2.5, fill: "hsl(var(--alimentacao))" }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {trendKgWeek !== null && (
+              <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  Tendência: {Math.abs(trendKgWeek) < 0.05
+                    ? "peso estável nas últimas semanas."
+                    : `${trendKgWeek > 0 ? "ganhando" : "perdendo"} ~${Math.abs(trendKgWeek).toFixed(1).replace(".", ",")} kg/semana.`}
+                  {weightGoal && weightSeries.length > 0 && (() => {
+                    const cur = weightSeries[weightSeries.length - 1].kg;
+                    const diff = weightGoal - cur;
+                    if (Math.abs(diff) < 0.5) return " Você está na sua meta. 🎉";
+                    const rightDirection = (diff > 0 && trendKgWeek > 0.05) || (diff < 0 && trendKgWeek < -0.05);
+                    return rightDirection
+                      ? ` Faltam ${Math.abs(diff).toFixed(1).replace(".", ",")} kg — a direção está certa, mantenha o padrão.`
+                      : ` Faltam ${Math.abs(diff).toFixed(1).replace(".", ",")} kg para a meta. Quer um plano que caiba na sua rotina e no seu bolso? Pergunte ao Conselheiro.`;
+                  })()}
+                </span>
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center py-2">
+            Registre seu peso pelo menos duas vezes para o gráfico aparecer.
+          </p>
+        )}
+
+        {/* Calorias por dia */}
+        {caloriesByDay.length >= 2 && (
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-1.5">Calorias estimadas por dia (14 dias)</p>
+            <div className="h-32">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={caloriesByDay} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+                  <XAxis dataKey="dia" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    cursor={{ fill: "hsl(var(--muted) / 0.5)" }}
+                    contentStyle={{
+                      background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
+                      borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
+                    }}
+                    formatter={(v: number) => [`${v} kcal`, "Total"]}
+                  />
+                  <Bar dataKey="kcal" fill="hsl(var(--alimentacao) / 0.7)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Soma das estimativas por foto — dias sem registro não aparecem.
+            </p>
+          </div>
+        )}
+
+        {/* Composição corporal por foto */}
+        <div className="rounded-lg border p-3 space-y-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <ScanLine className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
+                Composição corporal por foto
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Estimativa visual do % de gordura e massa magra. É uma aproximação com margem
+                larga — para precisão, bioimpedância ou DEXA com um profissional. A foto não fica salva.
+              </p>
+            </div>
+          </div>
+
+          <input ref={bodyFileRef} type="file" accept="image/*" capture="environment"
+            className="hidden" onChange={onPickBodyPhoto} />
+
+          {latestScan && !bodyEstimate && (
+            <p className="text-xs rounded-md bg-muted px-2.5 py-1.5">
+              Última estimativa ({new Date(latestScan.occurred_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}):
+              ~{latestScan.payload?.body_fat_pct}% de gordura
+              {latestScan.payload?.lean_mass_kg ? ` · ~${String(latestScan.payload.lean_mass_kg).replace(".", ",")} kg de massa magra` : ""}
+            </p>
+          )}
+
+          {!bodyEstimate && (
+            <Button variant="secondary" className="w-full"
+              onClick={() => bodyFileRef.current?.click()} disabled={bodyAnalyzing}>
+              {bodyAnalyzing
+                ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analisando...</>)
+                : (<><Camera className="w-4 h-4 mr-2" /> Enviar foto de corpo inteiro</>)}
+            </Button>
+          )}
+
+          {bodyEstimate && (
+            <div className="space-y-2.5 animate-fade-up">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-md bg-muted px-3 py-2">
+                  <p className="text-[11px] text-muted-foreground">Gordura corporal (faixa)</p>
+                  <p className="text-sm font-semibold">{bodyEstimate.body_fat_range}</p>
+                </div>
+                <div className="rounded-md bg-muted px-3 py-2">
+                  <p className="text-[11px] text-muted-foreground">Massa magra estimada</p>
+                  <p className="text-sm font-semibold">
+                    {bodyEstimate.lean_mass_kg
+                      ? `~${String(bodyEstimate.lean_mass_kg).replace(".", ",")} kg`
+                      : "registre seu peso p/ calcular"}
+                  </p>
+                </div>
+              </div>
+              {bodyEstimate.note && <p className="text-xs text-muted-foreground italic">{bodyEstimate.note}</p>}
+              <div className="flex gap-2 justify-end">
+                <Button variant="ghost" size="sm" onClick={() => setBodyEstimate(null)} disabled={savingBody}>
+                  <X className="w-4 h-4 mr-1" /> Descartar
+                </Button>
+                <Button size="sm" onClick={confirmBody} disabled={savingBody}>
+                  {savingBody ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Registrar</>)}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* Registro rápido em texto */}
       <Card className="p-4">
         <form onSubmit={addText} className="flex gap-2">
@@ -458,6 +814,10 @@ export default function Alimentacao() {
                       </span>
                     )}
                     <Button variant="ghost" size="icon" className="w-7 h-7 shrink-0 text-muted-foreground"
+                      onClick={() => setEditingMeal(m)} aria-label="Editar calorias">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="w-7 h-7 shrink-0 text-muted-foreground"
                       onClick={() => remove(m.id)} aria-label="Excluir refeição">
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
@@ -474,7 +834,68 @@ export default function Alimentacao() {
         initialGoalMl={goalMl} initialBottles={bottles}
         onSaved={refreshProfile}
       />
+
+      <CalorieEditDialog
+        meal={editingMeal}
+        onClose={() => setEditingMeal(null)}
+        onSave={saveMealCalories}
+      />
     </div>
+  );
+}
+
+/** Diálogo para editar as calorias de uma refeição já registrada. */
+function CalorieEditDialog({
+  meal, onClose, onSave,
+}: {
+  meal: MealEvent | null;
+  onClose: () => void;
+  onSave: (meal: MealEvent, calories: number) => Promise<void>;
+}) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Sincroniza quando abre com outra refeição
+  const current = meal ? String(Math.round(Number(meal.payload?.calories) || 0)) : "";
+
+  const save = async () => {
+    if (!meal) return;
+    const n = Math.max(0, Math.round(Number((value || current).replace(/\D/g, ""))));
+    setSaving(true);
+    await onSave(meal, n);
+    setSaving(false);
+    setValue("");
+  };
+
+  return (
+    <Dialog open={!!meal} onOpenChange={(v) => { if (!v) { setValue(""); onClose(); } }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Editar calorias</DialogTitle>
+          <DialogDescription className="break-words">
+            {meal?.payload?.description ?? "Refeição"}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center gap-2">
+          <Flame className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--alimentacao))" }} />
+          <Input
+            inputMode="numeric" autoFocus
+            className="h-9 w-28 text-base font-semibold"
+            placeholder={current || "0"}
+            value={value} onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") save(); }}
+            aria-label="Calorias"
+          />
+          <span className="text-sm text-muted-foreground">kcal</span>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

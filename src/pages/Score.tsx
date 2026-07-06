@@ -7,29 +7,62 @@ import { useXp } from "@/hooks/useXp";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { PILLARS } from "@/lib/pillars";
+import { levelTitle, nextTitle } from "@/lib/xp";
 import { monthStartISO } from "@/lib/format";
+import { Flame, TrendingUp, CalendarCheck } from "lucide-react";
 
 function clamp(n: number) { return Math.max(0, Math.min(100, Math.round(n))); }
+
+/** Anel grande do nível, com brilho dourado. */
+function LevelRing({ level, progress }: { level: number; progress: number }) {
+  const r = 52, c = 2 * Math.PI * r;
+  return (
+    <div className="relative w-[132px] h-[132px] shrink-0 gold-glow">
+      <svg viewBox="0 0 132 132" className="w-full h-full -rotate-90">
+        <circle cx="66" cy="66" r={r} fill="none" stroke="hsl(0 0% 100% / 0.12)" strokeWidth="9" />
+        <circle
+          cx="66" cy="66" r={r} fill="none"
+          stroke="hsl(var(--gold))" strokeWidth="9" strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - progress)}
+          style={{ transition: "stroke-dashoffset .6s ease" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[11px] uppercase tracking-widest text-white/60">Nível</span>
+        <span className="font-display text-5xl font-semibold leading-none" style={{ color: "hsl(var(--gold))" }}>
+          {level}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function Score() {
   const { user } = useAuth();
   const { profile } = useProfile();
-  const { xp, level, progress, nextFloor } = useXp();
+  const { xp, level, progress, nextFloor, currentFloor } = useXp();
+  const title = levelTitle(level);
+  const upcoming = nextTitle(level);
 
   const { data } = useQuery({
     queryKey: ["score-data", user?.id],
     enabled: !!user,
     queryFn: async () => {
       const since14 = new Date(Date.now() - 14 * 864e5).toISOString();
-      const [{ data: events }, { data: txs }, { data: habits }, { data: logs }] = await Promise.all([
+      const since7 = new Date(Date.now() - 7 * 864e5).toISOString();
+      const [{ data: events }, { data: txs }, { data: habits }, { data: logs }, { data: weekXp }] = await Promise.all([
         supabase.from("life_events").select("pillar,kind,occurred_at,payload").eq("user_id", user!.id).gte("occurred_at", since14),
         supabase.from("transactions").select("kind,amount").eq("user_id", user!.id).gte("occurred_at", monthStartISO()),
         supabase.from("habits").select("id").eq("user_id", user!.id).eq("active", true),
         supabase.from("habit_logs").select("log_date").eq("user_id", user!.id).gte("log_date", new Date(Date.now() - 13 * 864e5).toISOString().slice(0, 10)),
+        supabase.from("xp_log").select("points,created_at").eq("user_id", user!.id).gte("created_at", since7),
       ]);
-      return { events: events ?? [], txs: txs ?? [], habitsCount: (habits ?? []).length, logs: logs ?? [] };
+      return { events: events ?? [], txs: txs ?? [], habitsCount: (habits ?? []).length, logs: logs ?? [], weekXp: weekXp ?? [] };
     },
   });
+
+  const xpWeek = (data?.weekXp ?? []).reduce((s, r) => s + r.points, 0);
+  const activeDays = new Set((data?.weekXp ?? []).map((r) => String(r.created_at).slice(0, 10))).size;
 
   // ─── Cálculo do score por pilar (0–100, transparente) ───
   const scores: Record<string, { value: number | null; why: string }> = {
@@ -75,14 +108,16 @@ export default function Score() {
       scores.alimentacao = { value: clamp((mealDays / 14) * 100), why: "Baseado em quantos dos últimos 14 dias tiveram refeições registradas." };
     }
 
-    // Mente: média de humor + frequência de prática
+    // Mente: média de humor + frequência de prática/diário
     const moods = events.filter((e) => e.kind === "mood").map((e) => Number((e.payload as { score?: number })?.score)).filter((n) => n >= 1);
-    const practices = new Set(events.filter((e) => e.kind === "practice").map((e) => e.occurred_at.slice(0, 10))).size;
+    const practices = new Set(
+      events.filter((e) => e.kind === "practice" || e.kind === "journal").map((e) => e.occurred_at.slice(0, 10))
+    ).size;
     const mparts: number[] = [];
     if (moods.length) mparts.push(clamp(((moods.reduce((a, b) => a + b, 0) / moods.length) - 1) * 25));
     if (practices > 0) mparts.push(clamp((practices / 14) * 100));
     if (mparts.length) {
-      scores.mente = { value: clamp(mparts.reduce((a, b) => a + b, 0) / mparts.length), why: "Baseado no humor médio e na frequência da sua prática." };
+      scores.mente = { value: clamp(mparts.reduce((a, b) => a + b, 0) / mparts.length), why: "Baseado no humor médio e na frequência de prática e diário." };
     }
   }
 
@@ -102,20 +137,63 @@ export default function Score() {
         </p>
       </div>
 
-      {/* Nível e XP */}
-      <Card className="p-5 bg-primary text-primary-foreground">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm opacity-80">Nível atual</p>
-            <p className="font-display text-4xl font-semibold text-gold" style={{ color: "hsl(41 70% 62%)" }}>{level}</p>
+      {/* ── Herói do nível ───────────────────────────────────── */}
+      <Card className="level-hero border-0 text-white overflow-hidden">
+        <div className="p-5 sm:p-6">
+          <div className="flex items-center gap-5">
+            <LevelRing level={level} progress={progress} />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] uppercase tracking-widest text-white/55">Título da subida</p>
+              <p className="font-display text-2xl sm:text-3xl font-semibold" style={{ color: "hsl(var(--gold))" }}>
+                {title}
+              </p>
+              <p className="text-sm text-white/75 mt-1">
+                {xp - currentFloor} / {nextFloor - currentFloor} XP para o nível {level + 1}
+              </p>
+              {upcoming && (
+                <p className="text-xs text-white/55 mt-0.5">
+                  Próximo título: <span className="text-white/80">{upcoming.title}</span> no nível {upcoming.atLevel}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm opacity-80">{xp} XP</p>
-            <p className="text-xs opacity-70">próximo nível aos {nextFloor} XP</p>
+
+          {/* Marcos da trilha */}
+          <div className="mt-5">
+            <div className="relative h-2 rounded-full bg-white/10">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full"
+                style={{
+                  width: `${progress * 100}%`,
+                  background: "linear-gradient(90deg, hsl(41 62% 42%), hsl(41 75% 60%))",
+                  transition: "width .6s ease",
+                }}
+              />
+              {[0.25, 0.5, 0.75].map((m) => (
+                <span key={m} className="absolute top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/40" style={{ left: `${m * 100}%` }} />
+              ))}
+            </div>
+            <div className="flex justify-between text-[11px] text-white/50 mt-1.5">
+              <span>Nv {level}</span>
+              <span>Nv {level + 1}</span>
+            </div>
           </div>
-        </div>
-        <div className="mt-3 h-2 rounded-full bg-primary-foreground/15">
-          <div className="h-2 rounded-full" style={{ width: `${progress * 100}%`, background: "hsl(41 70% 62%)" }} />
+
+          {/* Estatísticas rápidas */}
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            <div className="rounded-lg border border-white/10 px-3 py-2" style={{ background: "hsl(0 0% 100% / 0.07)" }}>
+              <p className="text-[11px] text-white/55 flex items-center gap-1"><Flame className="w-3 h-3" /> XP total</p>
+              <p className="text-sm font-semibold">{xp}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 px-3 py-2" style={{ background: "hsl(0 0% 100% / 0.07)" }}>
+              <p className="text-[11px] text-white/55 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> XP na semana</p>
+              <p className="text-sm font-semibold">{xpWeek}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 px-3 py-2" style={{ background: "hsl(0 0% 100% / 0.07)" }}>
+              <p className="text-[11px] text-white/55 flex items-center gap-1"><CalendarCheck className="w-3 h-3" /> Dias ativos (7d)</p>
+              <p className="text-sm font-semibold">{activeDays}/7</p>
+            </div>
+          </div>
         </div>
       </Card>
 

@@ -3,28 +3,37 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useTheme, type Theme } from "@/hooks/useTheme";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Download, LogOut, Loader2, Smartphone, Share } from "lucide-react";
+import { LogOut, Loader2, Smartphone, Share, Sun, Moon, Monitor } from "lucide-react";
 import { PILLARS, type PillarId } from "@/lib/pillars";
+import { cn } from "@/lib/utils";
+
+const THEMES: { id: Theme; label: string; icon: typeof Sun }[] = [
+  { id: "light", label: "Claro", icon: Sun },
+  { id: "dark", label: "Escuro", icon: Moon },
+  { id: "system", label: "Sistema", icon: Monitor },
+];
 
 export default function Ajustes() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { profile, refresh } = useProfile();
+  const { theme, setTheme } = useTheme();
 
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [income, setIncome] = useState("");
   const [budget, setBudget] = useState("");
   const [spirit, setSpirit] = useState("");
+  const [hasReligion, setHasReligion] = useState(true);
   const [pillars, setPillars] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
@@ -33,6 +42,7 @@ export default function Ajustes() {
     setIncome(profile.monthly_income != null ? String(profile.monthly_income) : "");
     setBudget(profile.monthly_budget != null ? String(profile.monthly_budget) : "");
     setSpirit(profile.spirituality_label ?? "");
+    setHasReligion(profile.has_religion !== false);
     setPillars(profile.pillars ?? []);
   }, [profile]);
 
@@ -47,51 +57,14 @@ export default function Ajustes() {
       goal: goal.trim() || null,
       monthly_income: income ? Number(income) : null,
       monthly_budget: budget ? Number(budget) : null,
-      spirituality_label: spirit.trim() || null,
+      spirituality_label: hasReligion ? (spirit.trim() || null) : null,
+      has_religion: hasReligion,
       pillars,
     }).eq("user_id", user.id);
     setSaving(false);
     if (error) { toast.error("Não consegui salvar."); return; }
     toast.success("Ajustes salvos.");
     refresh();
-  };
-
-  const exportData = async () => {
-    if (!user) return;
-    setExporting(true);
-    try {
-      const [profileQ, events, txs, habits, logs, chat, xp] = await Promise.all([
-        supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
-        supabase.from("life_events").select("*").eq("user_id", user.id),
-        supabase.from("transactions").select("*").eq("user_id", user.id),
-        supabase.from("habits").select("*").eq("user_id", user.id),
-        supabase.from("habit_logs").select("*").eq("user_id", user.id),
-        supabase.from("chat_messages").select("*").eq("user_id", user.id),
-        supabase.from("xp_log").select("*").eq("user_id", user.id),
-      ]);
-      const dump = {
-        exportado_em: new Date().toISOString(),
-        perfil: profileQ.data,
-        linha_do_tempo: events.data,
-        transacoes: txs.data,
-        habitos: habits.data,
-        registros_de_habitos: logs.data,
-        conversas: chat.data,
-        xp: xp.data,
-      };
-      const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `ascende-meus-dados-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("Seus dados foram exportados.");
-    } catch {
-      toast.error("Não consegui exportar agora.");
-    } finally {
-      setExporting(false);
-    }
   };
 
   const signOut = async () => {
@@ -102,6 +75,34 @@ export default function Ajustes() {
   return (
     <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
       <h1 className="font-display text-2xl font-semibold">Ajustes</h1>
+
+      {/* Aparência */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="font-display font-semibold">Aparência</h2>
+          <p className="text-xs text-muted-foreground">
+            Amanhecer ou noite na montanha — você escolhe.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTheme(t.id)}
+              className={cn(
+                "flex flex-col items-center gap-1.5 rounded-lg border py-3 text-sm transition-colors",
+                theme === t.id
+                  ? "border-primary ring-1 ring-primary bg-primary/5 font-medium"
+                  : "text-muted-foreground hover:bg-muted/60"
+              )}
+              aria-pressed={theme === t.id}
+            >
+              <t.icon className="w-4 h-4" />
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </Card>
 
       <Card className="p-4 space-y-3">
         <h2 className="font-display font-semibold">Perfil</h2>
@@ -124,11 +125,24 @@ export default function Ajustes() {
             <Input id="budget" type="number" min="0" value={budget} onChange={(e) => setBudget(e.target.value)} />
           </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="spirit">Nome da sua prática (Mente & Espírito)</Label>
-          <Input id="spirit" maxLength={60} value={spirit} onChange={(e) => setSpirit(e.target.value)}
-            placeholder="oração, meditação, silêncio..." />
+
+        {/* Espiritualidade / desenvolvimento da mente */}
+        <div className="flex items-center justify-between pt-1">
+          <div>
+            <Label htmlFor="has-religion" className="cursor-pointer">Tenho prática espiritual/religiosa</Label>
+            <p className="text-xs text-muted-foreground">
+              Desligado, o pilar vira "Mente & Foco": diário, humor e treino mental — sem vocabulário espiritual.
+            </p>
+          </div>
+          <Switch id="has-religion" checked={hasReligion} onCheckedChange={setHasReligion} />
         </div>
+        {hasReligion && (
+          <div className="space-y-1.5">
+            <Label htmlFor="spirit">Nome da sua prática (Mente & Espírito)</Label>
+            <Input id="spirit" maxLength={60} value={spirit} onChange={(e) => setSpirit(e.target.value)}
+              placeholder="oração, meditação, silêncio..." />
+          </div>
+        )}
       </Card>
 
       <Card className="p-4 space-y-3">
@@ -188,18 +202,10 @@ export default function Ajustes() {
         </div>
       </Card>
 
-      <Card className="p-4 space-y-3">
-        <div>
-          <h2 className="font-display font-semibold">Seus dados são seus</h2>
-          <p className="text-xs text-muted-foreground">
-            Exporte tudo o que o Ascende sabe sobre você em um arquivo. Para excluir sua conta e
-            todos os dados definitivamente, escreva para o suporte — a exclusão apaga tudo, sem cópias.
-          </p>
-        </div>
-        <Button variant="outline" className="w-full" onClick={exportData} disabled={exporting}>
-          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Download className="w-4 h-4 mr-1.5" /> Exportar meus dados (JSON)</>)}
-        </Button>
-      </Card>
+      <p className="text-xs text-muted-foreground px-1">
+        Seus dados são seus. Para excluir sua conta e todos os dados definitivamente, escreva
+        para o suporte — a exclusão apaga tudo, sem cópias.
+      </p>
 
       <Button variant="ghost" className="w-full text-muted-foreground" onClick={signOut}>
         <LogOut className="w-4 h-4 mr-1.5" /> Sair da conta

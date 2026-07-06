@@ -7,13 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Moon, Dumbbell, CircleCheck, Circle } from "lucide-react";
+import { Plus, Trash2, Moon, Dumbbell, CircleCheck, Circle, BarChart3 } from "lucide-react";
 import { todayISO } from "@/lib/format";
 import { PILLARS } from "@/lib/pillars";
 import { cn } from "@/lib/utils";
+import {
+  ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar,
+  BarChart, Bar, Cell, XAxis, YAxis, Tooltip, CartesianGrid,
+} from "recharts";
 
 interface Habit { id: string; name: string; pillar: string }
 interface HLog { id: string; habit_id: string; log_date: string }
+interface WorkoutEvent { id: string; occurred_at: string; payload: { description?: string; muscles?: string[] } }
+
+const MUSCLES = ["Peito", "Costas", "Pernas", "Ombros", "Braços", "Core", "Cardio"] as const;
 
 export default function Vitalidade() {
   const { user } = useAuth();
@@ -23,17 +30,26 @@ export default function Vitalidade() {
   const [newPillar, setNewPillar] = useState("vitalidade");
   const [sleepHours, setSleepHours] = useState("");
   const [workout, setWorkout] = useState("");
+  const [muscles, setMuscles] = useState<string[]>([]);
 
   const { data } = useQuery({
     queryKey: ["vitalidade", user?.id],
     enabled: !!user,
     queryFn: async () => {
       const since = new Date(Date.now() - 27 * 864e5).toISOString().slice(0, 10);
-      const [{ data: habits }, { data: logs }] = await Promise.all([
+      const since30 = new Date(Date.now() - 30 * 864e5).toISOString();
+      const [{ data: habits }, { data: logs }, { data: workouts }] = await Promise.all([
         supabase.from("habits").select("id,name,pillar").eq("user_id", user!.id).eq("active", true).order("created_at"),
         supabase.from("habit_logs").select("id,habit_id,log_date").eq("user_id", user!.id).gte("log_date", since),
+        supabase.from("life_events").select("id,occurred_at,payload")
+          .eq("user_id", user!.id).eq("kind", "workout").gte("occurred_at", since30)
+          .order("occurred_at", { ascending: false }).limit(120),
       ]);
-      return { habits: (habits ?? []) as Habit[], logs: (logs ?? []) as HLog[] };
+      return {
+        habits: (habits ?? []) as Habit[],
+        logs: (logs ?? []) as HLog[],
+        workouts: (workouts ?? []) as WorkoutEvent[],
+      };
     },
   });
 
@@ -79,17 +95,43 @@ export default function Vitalidade() {
     invalidate();
   };
 
+  const toggleMuscle = (m: string) =>
+    setMuscles((ms) => (ms.includes(m) ? ms.filter((x) => x !== m) : [...ms, m]));
+
   const logWorkout = async () => {
-    if (!user || !workout.trim()) return;
+    if (!user || (!workout.trim() && !muscles.length)) {
+      toast.error("Descreva o treino ou marque os grupos trabalhados.");
+      return;
+    }
+    const desc = workout.trim() || muscles.join(", ");
     const { error } = await supabase.from("life_events").insert({
       user_id: user.id, pillar: "vitalidade", kind: "workout",
-      payload: { description: workout.trim(), summary: `Treino: ${workout.trim()}` }, source: "form",
+      payload: {
+        description: desc,
+        muscles,
+        summary: `Treino: ${desc}${muscles.length ? ` (${muscles.join(", ")})` : ""}`,
+      },
+      source: "form",
     });
     if (error) { toast.error("Não consegui salvar."); return; }
     toast.success("Treino registrado. +8 XP");
     setWorkout("");
+    setMuscles([]);
     invalidate();
   };
+
+  // ── Relatório: partes do corpo treinadas (30 dias) ──────────
+  const muscleCounts: Record<string, number> = Object.fromEntries(MUSCLES.map((m) => [m, 0]));
+  let taggedWorkouts = 0;
+  for (const w of data?.workouts ?? []) {
+    const ms = w.payload?.muscles ?? [];
+    if (ms.length) taggedWorkouts++;
+    for (const m of ms) if (m in muscleCounts) muscleCounts[m]++;
+  }
+  const maxCount = Math.max(1, ...Object.values(muscleCounts));
+  const radarData = MUSCLES.map((m) => ({ muscle: m, treinos: muscleCounts[m] }));
+  const barData = [...radarData].sort((a, b) => b.treinos - a.treinos);
+  const leastTrained = MUSCLES.filter((m) => muscleCounts[m] === Math.min(...MUSCLES.filter((x) => x !== "Cardio").map((x) => muscleCounts[x])) && m !== "Cardio");
 
   // Heatmap: últimos 28 dias, % de hábitos concluídos por dia
   const heat = (() => {
@@ -125,13 +167,90 @@ export default function Vitalidade() {
         </Card>
         <Card className="p-4 space-y-2">
           <p className="text-sm font-medium flex items-center gap-1.5"><Dumbbell className="w-4 h-4" /> Treino de hoje</p>
-          <div className="flex gap-2">
-            <Input maxLength={80} placeholder="Ex.: pernas, corrida 5km" value={workout}
-              onChange={(e) => setWorkout(e.target.value)} />
-            <Button onClick={logWorkout} variant="secondary">Salvar</Button>
+          <Input maxLength={80} placeholder="Ex.: pernas, corrida 5km" value={workout}
+            onChange={(e) => setWorkout(e.target.value)} />
+          <div className="flex flex-wrap gap-1.5">
+            {MUSCLES.map((m) => (
+              <button
+                key={m} type="button" onClick={() => toggleMuscle(m)}
+                className={cn(
+                  "text-xs rounded-full border px-2.5 py-1 transition-colors",
+                  muscles.includes(m)
+                    ? "border-transparent text-white"
+                    : "text-muted-foreground hover:bg-muted/60"
+                )}
+                style={muscles.includes(m) ? { background: "hsl(var(--vitalidade))" } : undefined}
+                aria-pressed={muscles.includes(m)}
+              >
+                {m}
+              </button>
+            ))}
           </div>
+          <Button onClick={logWorkout} variant="secondary" className="w-full">Salvar treino</Button>
         </Card>
       </div>
+
+      {/* ── Relatório: partes do corpo treinadas ─────────────── */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="font-display font-semibold flex items-center gap-1.5">
+            <BarChart3 className="w-4 h-4" style={{ color: "hsl(var(--vitalidade))" }} />
+            Corpo treinado — últimos 30 dias
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Marque os grupos ao salvar o treino e este mapa mostra o equilíbrio da sua rotina.
+          </p>
+        </div>
+
+        {taggedWorkouts === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            Nenhum treino com grupos marcados ainda. No próximo treino, toque nos grupos
+            trabalhados antes de salvar — o gráfico nasce daí.
+          </p>
+        ) : (
+          <>
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={radarData} outerRadius="75%">
+                  <PolarGrid stroke="hsl(var(--border))" />
+                  <PolarAngleAxis dataKey="muscle" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                  <Radar dataKey="treinos" stroke="hsl(var(--vitalidade))"
+                    fill="hsl(var(--vitalidade))" fillOpacity={0.35} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="h-40">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barData} margin={{ top: 4, right: 8, left: -22, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="muscle" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    cursor={{ fill: "hsl(var(--muted) / 0.5)" }}
+                    contentStyle={{
+                      background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
+                      borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
+                    }}
+                  />
+                  <Bar dataKey="treinos" radius={[5, 5, 0, 0]}>
+                    {barData.map((d, i) => (
+                      <Cell key={i} fill={`hsl(var(--vitalidade) / ${0.35 + (d.treinos / maxCount) * 0.65})`} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {leastTrained.length > 0 && leastTrained.length < 6 && (
+              <p className="text-xs text-muted-foreground">
+                💡 {leastTrained.join(" e ")} {leastTrained.length === 1 ? "apareceu" : "apareceram"} menos
+                no período — se fizer sentido para o seu objetivo, vale dar atenção.
+              </p>
+            )}
+          </>
+        )}
+      </Card>
 
       {/* Hábitos */}
       <Card className="p-4 space-y-3">

@@ -1,6 +1,7 @@
 import { NavLink, Outlet, Link } from "react-router-dom";
-import { Sun, MessageCircle, Mountain, BarChart3, Settings } from "lucide-react";
+import { Sun, Moon, MessageCircle, Mountain, BarChart3, Settings } from "lucide-react";
 import { useXp } from "@/hooks/useXp";
+import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -10,6 +11,20 @@ const NAV = [
   { to: "/app/score", label: "Score", icon: BarChart3 },
   { to: "/app/ajustes", label: "Ajustes", icon: Settings },
 ];
+
+function ThemeToggle() {
+  const { isDark, setTheme } = useTheme();
+  return (
+    <button
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+      aria-label={isDark ? "Mudar para tema claro" : "Mudar para tema escuro"}
+      title={isDark ? "Tema claro" : "Tema escuro"}
+    >
+      {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+    </button>
+  );
+}
 
 function LevelBadge() {
   const { level, progress, xp } = useXp();
@@ -68,7 +83,10 @@ export default function AppLayout() {
             ))}
           </nav>
 
-          <LevelBadge />
+          <div className="flex items-center gap-1.5">
+            <ThemeToggle />
+            <LevelBadge />
+          </div>
         </div>
       </header>
 

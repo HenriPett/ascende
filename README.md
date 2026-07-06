@@ -8,12 +8,12 @@ Este guia leva você do zero ao app no ar, **mesmo que você nunca tenha feito i
 
 ## O que você vai precisar
 
-| Serviço | Para quê | Custo |
-|---|---|---|
-| [Supabase](https://supabase.com) | Banco de dados, login e funções de IA | Grátis (plano free) |
-| [Anthropic](https://console.anthropic.com) | A inteligência artificial (Claude) | Pago por uso (centavos por conversa) |
-| [Netlify](https://netlify.com) | Hospedar o site | Grátis |
-| [Node.js 20+](https://nodejs.org) instalado no seu computador | Rodar os comandos dos passos 4 e 5 | Grátis |
+| Serviço                                                       | Para quê                              | Custo                                |
+| ------------------------------------------------------------- | ------------------------------------- | ------------------------------------ |
+| [Supabase](https://supabase.com)                              | Banco de dados, login e funções de IA | Grátis (plano free)                  |
+| [Anthropic](https://console.anthropic.com)                    | A inteligência artificial (Claude)    | Pago por uso (centavos por conversa) |
+| [Netlify](https://netlify.com)                                | Hospedar o site                       | Grátis                               |
+| [Node.js 20+](https://nodejs.org) instalado no seu computador | Rodar os comandos dos passos 4 e 5    | Grátis                               |
 
 ---
 
@@ -43,7 +43,7 @@ Este guia leva você do zero ao app no ar, **mesmo que você nunca tenha feito i
 
 ## Passo 4 — Publicar as funções de IA
 
-As três funções (Conselheiro, Captura e Briefing) rodam dentro do Supabase. Para publicá-las:
+As funções de IA (Conselheiro, Captura, Briefing e Foto da Refeição) rodam dentro do Supabase. Para publicá-las:
 
 1. Crie sua chave da Anthropic em [console.anthropic.com](https://console.anthropic.com) → **API Keys** → **Create Key** (adicione créditos em Billing, US$ 5 já dá para muito uso).
 2. Abra o **terminal** (Prompt de Comando no Windows) **dentro desta pasta** e rode, um por vez:
@@ -51,10 +51,11 @@ As três funções (Conselheiro, Captura e Briefing) rodam dentro do Supabase. P
 ```bash
 npx supabase login
 ```
+
 (vai abrir o navegador para você autorizar)
 
 ```bash
-npx supabase functions deploy ai-chat capture briefing --project-ref SEU_REFERENCE_ID
+npx supabase functions deploy ai-chat capture briefing analyze-meal analyze-body --project-ref SEU_REFERENCE_ID
 ```
 
 ```bash
@@ -95,12 +96,12 @@ Se a captura/briefing/chat falharem mas o resto funcionar, o problema está no P
 
 ## Problemas comuns
 
-| Sintoma | Causa provável | Solução |
-|---|---|---|
-| Tela branca com erro de "variáveis não configuradas" | `.env` não preenchido antes do build | Refaça o Passo 5, item 1 e 2 |
-| "O Conselheiro está indisponível" | Chave da Anthropic errada ou sem créditos | Refaça o `secrets set` do Passo 4 |
-| Criou conta mas não entra | Confirmação de e-mail ativa | Confirme o e-mail recebido, ou desative no Passo 2 |
-| Captura não encontra nada | Normal se o texto não tem eventos | Descreva ações: gastos, sono, treino, refeições, humor |
+| Sintoma                                              | Causa provável                            | Solução                                                |
+| ---------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------ |
+| Tela branca com erro de "variáveis não configuradas" | `.env` não preenchido antes do build      | Refaça o Passo 5, item 1 e 2                           |
+| "O Conselheiro está indisponível"                    | Chave da Anthropic errada ou sem créditos | Refaça o `secrets set` do Passo 4                      |
+| Criou conta mas não entra                            | Confirmação de e-mail ativa               | Confirme o e-mail recebido, ou desative no Passo 2     |
+| Captura não encontra nada                            | Normal se o texto não tem eventos         | Descreva ações: gastos, sono, treino, refeições, humor |
 
 ## Custos de IA (referência)
 
@@ -111,7 +112,7 @@ O app usa **Claude Haiku** para a captura (baratíssimo) e **Claude Sonnet** par
 ```
 ├── src/                    # aplicativo (React + Vite + Tailwind)
 ├── supabase/setup.sql      # cria todo o banco (Passo 2)
-├── supabase/functions/     # as 3 funções de IA (Passo 4)
+├── supabase/functions/     # as funções de IA (Passo 4)
 ├── netlify.toml            # configuração do Netlify (já pronta)
 └── .env.example            # modelo das variáveis (Passo 5)
 ```

@@ -62,7 +62,11 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   lines.push(`Nome: ${p.name || "não informado"}.`);
   if (p.goal) lines.push(`Objetivo declarado: ${p.goal}.`);
   lines.push(`Pilares ativos: ${(p.pillars ?? []).join(", ") || "nenhum ainda"}.`);
-  if (p.spirituality_label) lines.push(`Prática espiritual (vocabulário escolhido pela pessoa): ${p.spirituality_label}.`);
+  if (p.has_religion === false) {
+    lines.push(`IMPORTANTE: a pessoa NÃO tem prática religiosa. O pilar dela é "Mente & Foco" — desenvolvimento mental (foco, clareza, meditação laica, leitura). Nunca use vocabulário espiritual ou religioso com ela.`);
+  } else if (p.spirituality_label) {
+    lines.push(`Prática espiritual (vocabulário escolhido pela pessoa): ${p.spirituality_label}.`);
+  }
   if (p.monthly_income) lines.push(`Renda mensal aproximada: ${BRL(Number(p.monthly_income))}.`);
   if (p.monthly_budget) lines.push(`Orçamento mensal desejado: ${BRL(Number(p.monthly_budget))}.`);
 
@@ -98,7 +102,52 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   const moods = (kinds["mood"] ?? []).slice(0, 10).map((e) => (e.payload as any)?.label ?? (e.payload as any)?.score).filter(Boolean);
   if (moods.length) lines.push(`HUMOR (mais recentes primeiro): ${moods.join(", ")}.`);
 
-  if (kinds["workout"]?.length) lines.push(`TREINOS nos últimos 30 dias: ${kinds["workout"].length}.`);
+  if (kinds["workout"]?.length) {
+    const mCount: Record<string, number> = {};
+    for (const e of kinds["workout"]) {
+      for (const m of ((e.payload as any)?.muscles ?? []) as string[]) mCount[m] = (mCount[m] ?? 0) + 1;
+    }
+    const dist = Object.entries(mCount).sort((a, b) => b[1] - a[1]).map(([m, n]) => `${m} ${n}x`).join(", ");
+    lines.push(`TREINOS nos últimos 30 dias: ${kinds["workout"].length}.` +
+      (dist ? ` Grupos trabalhados: ${dist}.` : ""));
+  }
+
+  // Peso e composição corporal
+  if (kinds["weight"]?.length) {
+    const ws = kinds["weight"]
+      .map((e) => ({ d: e.occurred_at.slice(0, 10), kg: Number((e.payload as any)?.kg) }))
+      .filter((w) => w.kg > 0)
+      .sort((a, b) => a.d.localeCompare(b.d));
+    if (ws.length) {
+      const latest = ws[ws.length - 1];
+      const first = ws[0];
+      const delta = latest.kg - first.kg;
+      const goal = Number(p.weight_goal_kg) || 0;
+      lines.push(
+        `PESO: atual ${latest.kg} kg (registrado em ${latest.d}).` +
+        (ws.length > 1 ? ` Variação em 30 dias: ${delta >= 0 ? "+" : ""}${delta.toFixed(1)} kg.` : "") +
+        (goal ? ` Meta declarada: ${goal} kg.` : "")
+      );
+    }
+  }
+  if (kinds["body"]?.length) {
+    const b = (kinds["body"][0].payload as any) ?? {};
+    lines.push(
+      `COMPOSIÇÃO CORPORAL (estimativa visual por foto, margem larga): ~${b.body_fat_pct}% de gordura` +
+      (b.lean_mass_kg ? `, ~${b.lean_mass_kg} kg de massa magra` : "") + `.`
+    );
+  }
+
+  if (kinds["practice"]?.length) lines.push(`PRÁTICA ESPIRITUAL/MENTE: ${kinds["practice"].length} registros em 30 dias.`);
+
+  // Diário — pensamentos recentes (a pessoa sabe que o Conselheiro vê o que ela registra)
+  if (kinds["journal"]?.length) {
+    const trechos = kinds["journal"].slice(0, 3)
+      .map((e) => String((e.payload as any)?.text ?? "").slice(0, 160)).filter(Boolean)
+      .map((t) => `"${t}"`).join(" | ");
+    lines.push(`DIÁRIO: ${kinds["journal"].length} entradas em 30 dias.` +
+      (trechos ? ` Trechos recentes: ${trechos}.` : ""));
+  }
   if (kinds["meal"]?.length) {
     const last = kinds["meal"].slice(0, 6).map((e) => {
       const pl = (e.payload as any) ?? {};
@@ -127,7 +176,6 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       `média de ~${(avg7 / 1000).toFixed(1)}L/dia nos últimos 7 dias.`
     );
   }
-  if (kinds["practice"]?.length) lines.push(`PRÁTICA ESPIRITUAL/MENTE: ${kinds["practice"].length} registros em 30 dias.`);
   if (kinds["gratitude"]?.length) {
     const g = kinds["gratitude"].slice(0, 3).map((e) => (e.payload as any)?.text).filter(Boolean).join(" | ");
     if (g) lines.push(`GRATIDÃO recente: ${g}.`);

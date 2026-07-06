@@ -14,6 +14,18 @@ export const DEFAULT_WATER_BOTTLES: WaterBottle[] = [
   { label: "Garrafão", ml: 1000 },
 ];
 
+export const JOURNAL_COLORS: { id: string; label: string; hsl: string }[] = [
+  { id: "violeta", label: "Violeta", hsl: "258 30% 50%" },
+  { id: "oceano", label: "Oceano", hsl: "205 60% 42%" },
+  { id: "floresta", label: "Floresta", hsl: "150 35% 34%" },
+  { id: "terracota", label: "Terracota", hsl: "12 58% 46%" },
+  { id: "ouro", label: "Ouro", hsl: "41 62% 42%" },
+  { id: "rosa", label: "Rosa", hsl: "335 55% 52%" },
+  { id: "grafite", label: "Grafite", hsl: "220 10% 38%" },
+];
+export const journalColorHsl = (id?: string | null) =>
+  (JOURNAL_COLORS.find((c) => c.id === id) ?? JOURNAL_COLORS[0]).hsl;
+
 export interface Profile {
   user_id: string;
   name: string | null;
@@ -25,6 +37,9 @@ export interface Profile {
   onboarded: boolean;
   water_goal_ml: number | null;
   water_bottles: WaterBottle[] | null;
+  journal_color: string | null;
+  has_religion: boolean | null;
+  weight_goal_kg: number | null;
 }
 
 export function useProfile() {

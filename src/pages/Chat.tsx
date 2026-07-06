@@ -6,11 +6,23 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Send, Loader2, Sparkles } from "lucide-react";
+import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, FileText, Image as ImageIcon } from "lucide-react";
 import { Markdown } from "@/components/core/Markdown";
 import { cn } from "@/lib/utils";
 
 interface Msg { id?: string; role: "user" | "assistant"; content: string; pending?: boolean }
+
+interface Attachment {
+  name: string;
+  kind: "image" | "pdf" | "text";
+  media_type?: string;
+  data?: string;   // base64 (image/pdf)
+  text?: string;   // conteúdo (arquivos de texto)
+}
+
+const MAX_ATTACHMENTS = 4;
+const MAX_PDF_BYTES = 4 * 1024 * 1024;   // 4 MB
+const MAX_TEXT_CHARS = 20_000;
 
 const SUGGESTIONS = [
   "Monte um plano alimentar para ganho de massa que caiba no meu orçamento",
@@ -19,13 +31,71 @@ const SUGGESTIONS = [
   "Quanto posso gastar com lazer este mês sem me apertar?",
 ];
 
+/** Reduz imagem no navegador e devolve base64 jpeg. */
+function imageToBase64(file: File, maxDim = 1200): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const s = maxDim / Math.max(width, height);
+        width = Math.round(width * s); height = Math.round(height * s);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject(new Error("canvas")); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("img")); };
+    img.src = url;
+  });
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1]);
+    r.onerror = () => reject(new Error("read"));
+    r.readAsDataURL(file);
+  });
+}
+
+function fileToText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error("read"));
+    r.readAsText(file);
+  });
+}
+
+// Reconhecimento de voz do navegador (Chrome, Safari, Edge)
+type SpeechRecognitionLike = {
+  lang: string; continuous: boolean; interimResults: boolean;
+  onresult: ((e: any) => void) | null; onend: (() => void) | null; onerror: ((e: any) => void) | null;
+  start: () => void; stop: () => void;
+};
+function getSpeechRecognition(): SpeechRecognitionLike | null {
+  const w = window as any;
+  const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+  return SR ? new SR() : null;
+}
+
 export default function Chat() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [local, setLocal] = useState<Msg[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [listening, setListening] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const recRef = useRef<SpeechRecognitionLike | null>(null);
 
   const { data: history, isLoading } = useQuery({
     queryKey: ["chat", user?.id],
@@ -44,23 +114,107 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, sending]);
 
+  // Para o microfone ao sair da tela
+  useEffect(() => () => { recRef.current?.stop(); }, []);
+
+  // ── Anexos ───────────────────────────────────────────────────
+  const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    for (const file of files) {
+      if (attachments.length + 1 > MAX_ATTACHMENTS) {
+        toast.error(`Máximo de ${MAX_ATTACHMENTS} anexos por mensagem.`);
+        break;
+      }
+      try {
+        if (file.type.startsWith("image/")) {
+          const data = await imageToBase64(file);
+          setAttachments((a) => [...a, { name: file.name, kind: "image", media_type: "image/jpeg", data }]);
+        } else if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+          if (file.size > MAX_PDF_BYTES) { toast.error(`"${file.name}" passa de 4 MB. Envie um PDF menor.`); continue; }
+          const data = await fileToBase64(file);
+          setAttachments((a) => [...a, { name: file.name, kind: "pdf", media_type: "application/pdf", data }]);
+        } else if (
+          file.type.startsWith("text/") ||
+          /\.(txt|md|csv|json)$/i.test(file.name)
+        ) {
+          const text = (await fileToText(file)).slice(0, MAX_TEXT_CHARS);
+          setAttachments((a) => [...a, { name: file.name, kind: "text", text }]);
+        } else {
+          toast.error(`Tipo de arquivo não suportado: "${file.name}". Envie fotos, PDF, TXT, MD ou CSV.`);
+        }
+      } catch {
+        toast.error(`Não consegui ler "${file.name}".`);
+      }
+    }
+  };
+
+  const removeAttachment = (i: number) =>
+    setAttachments((a) => a.filter((_, j) => j !== i));
+
+  // ── Voz ──────────────────────────────────────────────────────
+  const toggleMic = () => {
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const rec = getSpeechRecognition();
+    if (!rec) {
+      toast.error("Seu navegador não suporta ditado por voz. Funciona no Chrome, Edge e Safari.");
+      return;
+    }
+    rec.lang = "pt-BR";
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (e: any) => {
+      let final = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      }
+      if (final) setInput((v) => (v ? v + " " : "") + final.trim());
+    };
+    rec.onend = () => { setListening(false); recRef.current = null; };
+    rec.onerror = (e: any) => {
+      setListening(false); recRef.current = null;
+      if (e?.error === "not-allowed") toast.error("Permita o acesso ao microfone para falar com o Conselheiro.");
+    };
+    recRef.current = rec;
+    setListening(true);
+    rec.start();
+  };
+
+  // ── Envio ────────────────────────────────────────────────────
   const send = async (text?: string) => {
     const content = (text ?? input).trim();
-    if (!content || sending) return;
+    if ((!content && !attachments.length) || sending) return;
+    recRef.current?.stop();
+    const sentAttachments = attachments;
+    const displayContent = content ||
+      `Enviei ${sentAttachments.length === 1 ? "um arquivo" : `${sentAttachments.length} arquivos`} para você analisar.`;
     setInput("");
+    setAttachments([]);
     setSending(true);
-    setLocal((l) => [...l, { role: "user", content }]);
+    setLocal((l) => [...l, {
+      role: "user",
+      content: displayContent + (sentAttachments.length ? `\n📎 ${sentAttachments.map((a) => a.name).join(", ")}` : ""),
+    }]);
     try {
-      const { data, error } = await supabase.functions.invoke("ai-chat", { body: { message: content } });
+      const { data, error } = await supabase.functions.invoke("ai-chat", {
+        body: {
+          message: displayContent,
+          attachments: sentAttachments.length ? sentAttachments : undefined,
+        },
+      });
       if (error || data?.error) throw new Error(data?.error ?? "erro");
       setLocal([]);
       qc.invalidateQueries({ queryKey: ["chat", user?.id] });
     } catch (e) {
-      setLocal((l) => l.filter((m) => m.content !== content));
+      setLocal((l) => l.slice(0, -1));
       const msg = e instanceof Error && e.message !== "erro" ? e.message
         : "O Conselheiro não respondeu agora. Tente de novo em instantes.";
       toast.error(msg);
       setInput(content);
+      setAttachments(sentAttachments);
     } finally {
       setSending(false);
     }
@@ -92,6 +246,9 @@ export default function Chat() {
                 {s}
               </button>
             ))}
+            <p className="text-xs text-muted-foreground pt-1">
+              Você também pode anexar fotos, PDFs e documentos (📎) ou falar por voz (🎙).
+            </p>
           </div>
         )}
 
@@ -120,11 +277,45 @@ export default function Chat() {
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex gap-2 items-end pt-2 border-t">
+      {/* Anexos pendentes */}
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pt-2">
+          {attachments.map((a, i) => (
+            <span key={i} className="inline-flex items-center gap-1.5 text-xs rounded-full border bg-card px-2.5 py-1 max-w-[220px]">
+              {a.kind === "image" ? <ImageIcon className="w-3 h-3 shrink-0" /> : <FileText className="w-3 h-3 shrink-0" />}
+              <span className="truncate">{a.name}</span>
+              <button onClick={() => removeAttachment(i)} aria-label={`Remover ${a.name}`}
+                className="text-muted-foreground hover:text-foreground">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-1.5 items-end pt-2 border-t">
+        <input
+          ref={fileRef} type="file" multiple className="hidden"
+          accept="image/*,.pdf,.txt,.md,.csv,.json"
+          onChange={onPickFiles}
+        />
+        <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground"
+          onClick={() => fileRef.current?.click()} disabled={sending}
+          aria-label="Anexar arquivos">
+          <Paperclip className="w-4 h-4" />
+        </Button>
+        <Button
+          variant={listening ? "default" : "ghost"} size="icon"
+          className={cn("shrink-0", listening ? "animate-pulse" : "text-muted-foreground")}
+          onClick={toggleMic} disabled={sending}
+          aria-label={listening ? "Parar de ouvir" : "Falar por voz"}
+        >
+          {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+        </Button>
         <Textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Pergunte qualquer coisa sobre a sua vida..."
+          placeholder={listening ? "Ouvindo... fale à vontade" : "Pergunte qualquer coisa sobre a sua vida..."}
           rows={1}
           maxLength={4000}
           className="resize-none min-h-[44px]"
@@ -132,7 +323,7 @@ export default function Chat() {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
           }}
         />
-        <Button size="icon" onClick={() => send()} disabled={sending || !input.trim()} aria-label="Enviar">
+        <Button size="icon" onClick={() => send()} disabled={sending || (!input.trim() && !attachments.length)} aria-label="Enviar">
           <Send className="w-4 h-4" />
         </Button>
       </div>
