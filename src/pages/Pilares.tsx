@@ -36,7 +36,7 @@ export default function Pilares() {
         </p>
       </div>
 
-      <div className="grid gap-3">
+      <div className="grid grid-cols-1 gap-3">
         {PILLARS.map((p) => {
           const isActive = active.has(p.id);
           const n = counts?.[p.id] ?? 0;

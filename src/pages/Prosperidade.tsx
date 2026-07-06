@@ -80,17 +80,17 @@ export default function Prosperidade() {
 
       {/* Resumo do mês */}
       <div className="grid grid-cols-3 gap-2.5">
-        <Card className="p-3.5">
+        <Card className="p-3 min-w-0 overflow-hidden">
           <p className="text-[11px] text-muted-foreground">Entradas</p>
-          <p className="font-semibold text-success text-sm md:text-base">{brl(income)}</p>
+          <p className="font-semibold text-success text-[13px] sm:text-base tracking-tight">{brl(income)}</p>
         </Card>
-        <Card className="p-3.5">
+        <Card className="p-3 min-w-0 overflow-hidden">
           <p className="text-[11px] text-muted-foreground">Saídas</p>
-          <p className="font-semibold text-destructive text-sm md:text-base">{brl(expense)}</p>
+          <p className="font-semibold text-destructive text-[13px] sm:text-base tracking-tight">{brl(expense)}</p>
         </Card>
-        <Card className="p-3.5">
+        <Card className="p-3 min-w-0 overflow-hidden">
           <p className="text-[11px] text-muted-foreground">Saldo do mês</p>
-          <p className="font-semibold text-sm md:text-base">{brl(income - expense)}</p>
+          <p className="font-semibold text-[13px] sm:text-base tracking-tight">{brl(income - expense)}</p>
         </Card>
       </div>
 

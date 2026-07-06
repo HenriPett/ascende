@@ -99,7 +99,7 @@ export default function Chat() {
           <div key={m.id ?? `local-${i}`} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
             <div
               className={cn(
-                "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm",
+                "max-w-[85%] min-w-0 break-words rounded-2xl px-4 py-2.5 text-sm",
                 m.role === "user"
                   ? "bg-primary text-primary-foreground rounded-br-sm leading-relaxed whitespace-pre-line"
                   : "bg-card border rounded-bl-sm"

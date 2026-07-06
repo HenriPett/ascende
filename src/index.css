@@ -69,7 +69,10 @@
   body {
     @apply bg-background text-foreground font-sans;
     font-feature-settings: "ss01";
+    overflow-x: clip; /* rede de segurança: nunca rolar na horizontal */
   }
+
+  img, video, svg { max-width: 100%; }
 
   h1, h2, h3 { font-family: "Fraunces", Georgia, serif; }
 

@@ -114,7 +114,7 @@ export default function Vitalidade() {
       </div>
 
       {/* Registro rápido: sono e treino */}
-      <div className="grid sm:grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         <Card className="p-4 space-y-2">
           <p className="text-sm font-medium flex items-center gap-1.5"><Moon className="w-4 h-4" /> Sono da última noite</p>
           <div className="flex gap-2">
@@ -163,15 +163,15 @@ export default function Vitalidade() {
         </div>
 
         <form onSubmit={addHabit} className="flex gap-2">
-          <Input maxLength={80} placeholder="Novo hábito — ex.: beber 2L de água"
-            value={newHabit} onChange={(e) => setNewHabit(e.target.value)} />
+          <Input maxLength={80} placeholder="Novo hábito"
+            className="min-w-0 flex-1" value={newHabit} onChange={(e) => setNewHabit(e.target.value)} />
           <Select value={newPillar} onValueChange={setNewPillar}>
-            <SelectTrigger className="w-[130px] shrink-0"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[112px] shrink-0"><SelectValue /></SelectTrigger>
             <SelectContent>
               {PILLARS.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button type="submit" size="icon" aria-label="Criar hábito"><Plus className="w-4 h-4" /></Button>
+          <Button type="submit" size="icon" className="shrink-0" aria-label="Criar hábito"><Plus className="w-4 h-4" /></Button>
         </form>
       </Card>
 

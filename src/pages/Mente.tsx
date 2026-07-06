@@ -152,7 +152,7 @@ export default function Mente() {
                 <span className="text-xs text-muted-foreground w-14 shrink-0">
                   {new Date(e.occurred_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                 </span>
-                <span className="truncate">
+                <span className="truncate min-w-0 flex-1">
                   {e.payload?.text ?? e.payload?.summary ?? e.payload?.description ?? e.kind}
                 </span>
               </div>

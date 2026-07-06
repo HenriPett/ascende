@@ -130,7 +130,7 @@ export default function Onboarding() {
       >
         {selected.length === PILLARS.length ? "Limpar seleção" : "Quero começar com todos os pilares"}
       </button>
-      <div className="grid gap-2.5">
+      <div className="grid grid-cols-1 gap-2.5">
         {PILLARS.map((p) => {
           const active = selected.includes(p.id);
           return (

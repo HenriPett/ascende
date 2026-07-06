@@ -181,7 +181,7 @@ export default function Landing() {
           que realmente mudam sua vida acontecem exatamente nas conexões que eles não veem.
         </p>
 
-        <div className="mt-10 grid sm:grid-cols-3 gap-3 text-left">
+        <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
           {[
             {
               icon: UtensilsCrossed,
@@ -217,7 +217,7 @@ export default function Landing() {
           <h2 className="font-display text-3xl md:text-4xl font-semibold text-center mb-12">
             Como funciona a subida
           </h2>
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               {
                 n: "1",
@@ -255,7 +255,7 @@ export default function Landing() {
         <p className="text-center text-muted-foreground mt-3 mb-10 max-w-xl mx-auto">
           Comece por um, por dois ou pelos quatro — o tamanho do primeiro passo é seu.
         </p>
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {PILLARS.map((p) => (
             <div
               key={p.id}
@@ -282,7 +282,7 @@ export default function Landing() {
       {/* ─── Conselheiro ─── */}
       <section className="border-y bg-primary text-primary-foreground">
         <div className="container py-16 md:py-24 max-w-4xl">
-          <div className="grid md:grid-cols-2 gap-10 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
             <div>
               <p className="text-xs font-semibold tracking-[0.25em] uppercase mb-4" style={{ color: "hsl(41 70% 62%)" }}>
                 O Conselheiro

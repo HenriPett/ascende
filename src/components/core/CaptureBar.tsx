@@ -152,8 +152,8 @@ export default function CaptureBar() {
                   style={{ background: meta ? `hsl(var(${meta.colorVar}))` : "hsl(var(--muted-foreground))" }}
                   aria-hidden
                 />
-                <span className="text-sm flex-1">{ev.summary}</span>
-                <span className="text-[11px] text-muted-foreground">{meta?.name ?? ev.pillar}</span>
+                <span className="text-sm flex-1 min-w-0 break-words">{ev.summary}</span>
+                <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">{meta?.name ?? ev.pillar}</span>
               </label>
             );
           })}

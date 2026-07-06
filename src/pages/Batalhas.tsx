@@ -75,7 +75,7 @@ function CreateBattle({ onCreated }: { onCreated: () => void }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button><Plus className="w-4 h-4 mr-1.5" /> Nova batalha</Button>
+        <Button className="shrink-0"><Plus className="w-4 h-4 mr-1.5" /> Nova batalha</Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90dvh] overflow-y-auto max-w-lg">
         <DialogHeader>
@@ -256,7 +256,7 @@ export default function Batalhas() {
   return (
     <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h1 className="font-display text-2xl font-semibold flex items-center gap-2">
             <Swords className="w-6 h-6 text-gold" /> Batalhas
           </h1>
