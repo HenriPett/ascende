@@ -2,6 +2,18 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 
+export interface WaterBottle {
+  label: string;
+  ml: number;
+}
+
+export const DEFAULT_WATER_GOAL_ML = 2000;
+export const DEFAULT_WATER_BOTTLES: WaterBottle[] = [
+  { label: "Copo", ml: 250 },
+  { label: "Garrafa", ml: 500 },
+  { label: "Garrafão", ml: 1000 },
+];
+
 export interface Profile {
   user_id: string;
   name: string | null;
@@ -11,6 +23,8 @@ export interface Profile {
   monthly_budget: number | null;
   goal: string | null;
   onboarded: boolean;
+  water_goal_ml: number | null;
+  water_bottles: WaterBottle[] | null;
 }
 
 export function useProfile() {

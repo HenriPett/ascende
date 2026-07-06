@@ -100,8 +100,32 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
 
   if (kinds["workout"]?.length) lines.push(`TREINOS nos últimos 30 dias: ${kinds["workout"].length}.`);
   if (kinds["meal"]?.length) {
-    const last = kinds["meal"].slice(0, 6).map((e) => (e.payload as any)?.description).filter(Boolean).join("; ");
-    lines.push(`ALIMENTAÇÃO: ${kinds["meal"].length} refeições registradas em 30 dias. Últimas: ${last}.`);
+    const last = kinds["meal"].slice(0, 6).map((e) => {
+      const pl = (e.payload as any) ?? {};
+      const kcal = Number(pl.calories);
+      return pl.description ? `${pl.description}${kcal > 0 ? ` (~${Math.round(kcal)} kcal)` : ""}` : null;
+    }).filter(Boolean).join("; ");
+    const kcalVals = kinds["meal"].map((e) => Number((e.payload as any)?.calories)).filter((n) => n > 0);
+    const kcalInfo = kcalVals.length
+      ? ` Calorias estimadas registradas em ${kcalVals.length} refeições (média ~${Math.round(kcalVals.reduce((a, b) => a + b, 0) / kcalVals.length)} kcal/refeição — estimativas por foto, aproximadas).`
+      : "";
+    lines.push(`ALIMENTAÇÃO: ${kinds["meal"].length} refeições registradas em 30 dias. Últimas: ${last}.${kcalInfo}`);
+  }
+
+  // Hidratação (água) — total de hoje e média diária dos últimos 7 dias
+  if (kinds["water"]?.length) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const since7 = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+    const ml = (e: any) => Number((e.payload as any)?.ml) || 0;
+    const todayMl = kinds["water"].filter((e) => e.occurred_at.slice(0, 10) === todayStr).reduce((s, e) => s + ml(e), 0);
+    const last7 = kinds["water"].filter((e) => e.occurred_at.slice(0, 10) >= since7);
+    const days7 = new Set(last7.map((e) => e.occurred_at.slice(0, 10))).size || 1;
+    const avg7 = Math.round(last7.reduce((s, e) => s + ml(e), 0) / days7);
+    const goal = Number(p.water_goal_ml) || 0;
+    lines.push(
+      `HIDRATAÇÃO: hoje ${(todayMl / 1000).toFixed(1)}L${goal ? ` de uma meta de ${(goal / 1000).toFixed(1)}L` : ""}; ` +
+      `média de ~${(avg7 / 1000).toFixed(1)}L/dia nos últimos 7 dias.`
+    );
   }
   if (kinds["practice"]?.length) lines.push(`PRÁTICA ESPIRITUAL/MENTE: ${kinds["practice"].length} registros em 30 dias.`);
   if (kinds["gratitude"]?.length) {
