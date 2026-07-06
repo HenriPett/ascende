@@ -6,7 +6,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PILLARS } from "@/lib/pillars";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Swords } from "lucide-react";
 
 export default function Pilares() {
   const { user } = useAuth();
@@ -63,6 +63,22 @@ export default function Pilares() {
             </Card>
           );
         })}
+
+        {/* Batalhas: transversal aos pilares */}
+        <Card className="border-gold/30">
+          <Link to="/app/batalhas" className="flex items-center gap-4 p-4">
+            <div className="w-11 h-11 rounded-md grid place-items-center shrink-0 bg-gold/10">
+              <Swords className="w-5 h-5 text-gold" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold">Batalhas</p>
+              <p className="text-xs text-muted-foreground truncate">
+                As lutas que você escolheu enfrentar — sem julgamento, com método
+              </p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+          </Link>
+        </Card>
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import CaptureBar from "@/components/core/CaptureBar";
+import BattleCheckinCard from "@/components/core/BattleCheckin";
 import { toast } from "sonner";
 import { Sunrise, ChevronRight, CircleCheck, Circle } from "lucide-react";
 import { greet, todayISO } from "@/lib/format";
@@ -141,6 +142,7 @@ export default function Hoje() {
 
       <Briefing />
       <CaptureBar />
+      <BattleCheckinCard />
       <HabitsToday />
 
       <Link

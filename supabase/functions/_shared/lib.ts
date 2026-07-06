@@ -40,7 +40,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   const monthStart = new Date();
   monthStart.setDate(1);
 
-  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, { data: xp }] =
+  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, { data: xp }, { data: battles }, { data: bCheckins }] =
     await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       supabase.from("life_events").select("pillar,kind,occurred_at,payload")
@@ -50,6 +50,11 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
         .eq("user_id", userId).gte("occurred_at", monthStart.toISOString().slice(0, 10)),
       supabase.from("habits").select("id,name,pillar").eq("user_id", userId).eq("active", true),
       supabase.from("xp_log").select("points").eq("user_id", userId),
+      supabase.from("battles").select("id,name,triggers")
+        .eq("user_id", userId).eq("active", true).eq("visible_to_ai", true),
+      supabase.from("battle_checkins").select("battle_id,checkin_date,status,trigger_label")
+        .eq("user_id", userId).gte("checkin_date", since30.slice(0, 10))
+        .order("checkin_date", { ascending: false }),
     ]);
 
   const lines: string[] = [];
@@ -107,6 +112,28 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   const totalXp = (xp ?? []).reduce((s, r) => s + r.points, 0);
   lines.push(`PROGRESSO: ${totalXp} XP acumulado (nível ${Math.floor(Math.sqrt(totalXp / 50)) + 1}).`);
 
+  // Batalhas (somente as que a pessoa autorizou a IA a ver)
+  for (const b of battles ?? []) {
+    const cks = (bCheckins ?? []).filter((c) => c.battle_id === b.id);
+    if (!cks.length) {
+      lines.push(`BATALHA "${b.name}": recém-criada, sem check-ins ainda. Gatilhos mapeados: ${(b.triggers ?? []).join(", ") || "nenhum"}.`);
+      continue;
+    }
+    const cleanTotal = cks.filter((c) => c.status !== "relapsed").length;
+    const relapses = cks.filter((c) => c.status === "relapsed");
+    const resisted = cks.filter((c) => c.status === "resisted").length;
+    // streak atual: dias consecutivos sem recaída a partir do check-in mais recente
+    let streak = 0;
+    for (const c of cks) { if (c.status === "relapsed") break; streak++; }
+    const relTriggers = relapses.map((c) => c.trigger_label).filter(Boolean).slice(0, 5).join(", ");
+    lines.push(
+      `BATALHA "${b.name}" (30d): sequência atual ${streak} dias sem recaída, ${cleanTotal} dias limpos no total, ` +
+      `${resisted}x resistiu à vontade, ${relapses.length} recaídas` +
+      (relTriggers ? ` (gatilhos das recaídas: ${relTriggers})` : "") +
+      `. Últimos check-ins (recentes primeiro): ${cks.slice(0, 7).map((c) => c.status).join(", ")}.`
+    );
+  }
+
   return lines.join("\n");
 }
 
@@ -117,4 +144,8 @@ export const SAFETY_RULES = `
 • NUNCA recomende produtos de investimento específicos (CDB, Tesouro, ações, fundos, cripto etc.), corretoras ou projeções de rentabilidade — restrição regulatória. Explique conceitos em termos gerais apenas.
 • Se a pessoa relatar sintomas de doença, oriente a procurar um médico. Se relatar sofrimento emocional intenso ou pensamentos de se machucar, acolha com seriedade e oriente a buscar ajuda profissional imediatamente — no Brasil, o CVV atende 24h pelo telefone 188.
 • Sobre espiritualidade: acompanhe a prática que A PESSOA definiu, no vocabulário dela. Nunca sugira, compare ou julgue crenças.
-• Nunca envergonhe a pessoa por uma semana ruim. Recaída é o caso normal. Sempre ofereça um próximo passo pequeno e possível.`;
+• Nunca envergonhe a pessoa por uma semana ruim. Recaída é o caso normal. Sempre ofereça um próximo passo pequeno e possível.
+━━━ BATALHAS (lutas pessoais: pornografia, redes sociais, cigarro, apostas etc.) ━━━
+• Recaída se acolhe, nunca se julga. O dado importante da recaída é o gatilho — ajude a pessoa a enxergar o padrão (ex.: recaídas em noites de sono ruim, em dias de humor baixo, em madrugadas). Reforce que os dias limpos acumulados não se perdem.
+• Ao notar padrão severo em batalhas de álcool, drogas ou apostas (recaídas quase diárias, sinais de abstinência física, dívidas ou perdas relevantes), diga com clareza e carinho que isso merece acompanhamento profissional e aponte caminhos concretos no Brasil: CAPS (unidades públicas de saúde mental), Alcoólicos Anônimos, Narcóticos Anônimos, Jogadores Anônimos. O Ascende é apoio, não tratamento.
+• NUNCA trate comida como inimigo nem incentive "batalha contra comer". Se a pessoa enquadrar alimentação como guerra/restrição, redirecione com gentileza para hábitos positivos no pilar Alimentação (ex.: "fazer uma refeição de verdade") — guerra contra comida alimenta compulsão. Sinais de transtorno alimentar merecem indicação de profissional.`;
