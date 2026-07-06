@@ -11,6 +11,7 @@ import { Markdown } from "@/components/core/Markdown";
 import { Checkbox } from "@/components/ui/checkbox";
 import { pillarById } from "@/lib/pillars";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
+import { useDictation } from "@/hooks/useDictation";
 import { cn } from "@/lib/utils";
 
 interface Msg { id?: string; role: "user" | "assistant"; content: string; pending?: boolean }
@@ -76,18 +77,6 @@ function fileToText(file: File): Promise<string> {
   });
 }
 
-// Reconhecimento de voz do navegador (Chrome, Safari, Edge)
-type SpeechRecognitionLike = {
-  lang: string; continuous: boolean; interimResults: boolean;
-  onresult: ((e: any) => void) | null; onend: (() => void) | null; onerror: ((e: any) => void) | null;
-  start: () => void; stop: () => void;
-};
-function getSpeechRecognition(): SpeechRecognitionLike | null {
-  const w = window as any;
-  const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
-  return SR ? new SR() : null;
-}
-
 export default function Chat() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -95,13 +84,14 @@ export default function Chat() {
   const [sending, setSending] = useState(false);
   const [local, setLocal] = useState<Msg[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [listening, setListening] = useState(false);
   const [captured, setCaptured] = useState<ProposedEvent[] | null>(null);
   const [capturedChecked, setCapturedChecked] = useState<boolean[]>([]);
   const [savingCaptured, setSavingCaptured] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const recRef = useRef<SpeechRecognitionLike | null>(null);
+  const { listening, toggle: toggleMic, stop: stopMic } = useDictation(
+    (t) => setInput((v) => (v ? v + " " : "") + t)
+  );
 
   const { data: history, isLoading } = useQuery({
     queryKey: ["chat", user?.id],
@@ -119,9 +109,6 @@ export default function Chat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, sending, captured]);
-
-  // Para o microfone ao sair da tela
-  useEffect(() => () => { recRef.current?.stop(); }, []);
 
   // ── Anexos ───────────────────────────────────────────────────
   const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -158,42 +145,11 @@ export default function Chat() {
   const removeAttachment = (i: number) =>
     setAttachments((a) => a.filter((_, j) => j !== i));
 
-  // ── Voz ──────────────────────────────────────────────────────
-  const toggleMic = () => {
-    if (listening) {
-      recRef.current?.stop();
-      return;
-    }
-    const rec = getSpeechRecognition();
-    if (!rec) {
-      toast.error("Seu navegador não suporta ditado por voz. Funciona no Chrome, Edge e Safari.");
-      return;
-    }
-    rec.lang = "pt-BR";
-    rec.continuous = true;
-    rec.interimResults = false;
-    rec.onresult = (e: any) => {
-      let final = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript;
-      }
-      if (final) setInput((v) => (v ? v + " " : "") + final.trim());
-    };
-    rec.onend = () => { setListening(false); recRef.current = null; };
-    rec.onerror = (e: any) => {
-      setListening(false); recRef.current = null;
-      if (e?.error === "not-allowed") toast.error("Permita o acesso ao microfone para falar com o Conselheiro.");
-    };
-    recRef.current = rec;
-    setListening(true);
-    rec.start();
-  };
-
   // ── Envio ────────────────────────────────────────────────────
   const send = async (text?: string) => {
     const content = (text ?? input).trim();
     if ((!content && !attachments.length) || sending) return;
-    recRef.current?.stop();
+    stopMic();
     const sentAttachments = attachments;
     const displayContent = content ||
       `Enviei ${sentAttachments.length === 1 ? "um arquivo" : `${sentAttachments.length} arquivos`} para você analisar.`;

@@ -7,9 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Sparkles, Loader2, Check, X } from "lucide-react";
+import { Sparkles, Loader2, Check, X, Mic, MicOff } from "lucide-react";
 import { pillarById } from "@/lib/pillars";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
+import { useDictation } from "@/hooks/useDictation";
 
 const EXAMPLES = [
   "Gastei 47 no mercado e treinei pernas",
@@ -25,9 +26,13 @@ export default function CaptureBar() {
   const [saving, setSaving] = useState(false);
   const [proposed, setProposed] = useState<ProposedEvent[] | null>(null);
   const [checked, setChecked] = useState<boolean[]>([]);
+  const { listening, toggle: toggleMic, stop: stopMic } = useDictation(
+    (t) => setText((v) => (v ? v + " " : "") + t)
+  );
 
   const analyze = async () => {
     if (!text.trim()) return;
+    stopMic();
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("capture", { body: { text: text.trim() } });
@@ -78,7 +83,7 @@ export default function CaptureBar() {
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={`Ex.: "${EXAMPLES[new Date().getDate() % EXAMPLES.length]}"`}
+            placeholder={listening ? "Ouvindo... conte como foi o seu dia" : `Ex.: "${EXAMPLES[new Date().getDate() % EXAMPLES.length]}"`}
             rows={2}
             maxLength={2000}
             className="resize-none"
@@ -86,7 +91,15 @@ export default function CaptureBar() {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); analyze(); }
             }}
           />
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-1.5">
+            <Button
+              variant={listening ? "default" : "ghost"} size="icon"
+              className={listening ? "animate-pulse" : "text-muted-foreground"}
+              onClick={toggleMic} disabled={loading}
+              aria-label={listening ? "Parar de ouvir" : "Falar por voz"}
+            >
+              {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </Button>
             <Button onClick={analyze} disabled={loading || !text.trim()}>
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Registrar"}
             </Button>
