@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Download, LogOut, Loader2 } from "lucide-react";
+import { Download, LogOut, Loader2, Smartphone, Share } from "lucide-react";
 import { PILLARS, type PillarId } from "@/lib/pillars";
 
 export default function Ajustes() {
@@ -156,6 +156,37 @@ export default function Ajustes() {
       <Button className="w-full" onClick={save} disabled={saving}>
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar ajustes"}
       </Button>
+
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="font-display font-semibold">Instalar na tela inicial</h2>
+          <p className="text-xs text-muted-foreground">
+            O Ascende funciona como um app de verdade: ícone na tela inicial e abertura em
+            tela cheia, sem barra do navegador.
+          </p>
+        </div>
+        <div className="rounded-md border p-3 space-y-1.5">
+          <p className="text-sm font-semibold flex items-center gap-1.5">
+            <Smartphone className="w-4 h-4" /> iPhone / iPad
+          </p>
+          <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+            <li>Abra este site no <strong>Safari</strong> (não funciona pelo Chrome no iPhone).</li>
+            <li>Toque no botão <strong>Compartilhar</strong> <Share className="w-3.5 h-3.5 inline -mt-0.5" aria-label="ícone compartilhar" /> na barra inferior.</li>
+            <li>Role a lista e toque em <strong>"Adicionar à Tela de Início"</strong>.</li>
+            <li>Toque em <strong>Adicionar</strong>. O ícone do Ascende aparece junto dos seus apps.</li>
+          </ol>
+        </div>
+        <div className="rounded-md border p-3 space-y-1.5">
+          <p className="text-sm font-semibold flex items-center gap-1.5">
+            <Smartphone className="w-4 h-4" /> Android
+          </p>
+          <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+            <li>Abra este site no <strong>Chrome</strong>.</li>
+            <li>Toque no menu <strong>⋮</strong> (canto superior direito).</li>
+            <li>Toque em <strong>"Adicionar à tela inicial"</strong> (ou "Instalar app").</li>
+          </ol>
+        </div>
+      </Card>
 
       <Card className="p-4 space-y-3">
         <div>

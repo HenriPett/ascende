@@ -1,0 +1,15 @@
+{
+  "name": "Ascende — Suba de nível na vida real",
+  "short_name": "Ascende",
+  "description": "Finanças, corpo, alimentação e mente no mesmo lugar, com uma IA que conhece o quadro inteiro.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FAF8F3",
+  "theme_color": "#FAF8F3",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

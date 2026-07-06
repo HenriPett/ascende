@@ -34,7 +34,7 @@ export default function Onboarding() {
   const [budget, setBudget] = useState("");
 
   const togglePillar = (id: PillarId) =>
-    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length < 2 ? [...s, id] : s));
+    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   const needsSpirit = selected.includes("mente");
   const needsMoney = selected.includes("prosperidade");
@@ -101,10 +101,18 @@ export default function Onboarding() {
       <div>
         <h1 className="font-display text-2xl font-semibold">Por onde você quer começar?</h1>
         <p className="text-sm text-muted-foreground mt-1.5">
-          Escolha até <strong>2 pilares</strong>. Ninguém organiza a vida inteira num dia — os outros
-          você ativa depois, quando fizer sentido.
+          De <strong>1 pilar</strong> a <strong>todos os quatro</strong> — você decide o tamanho do
+          primeiro passo. Dá para ativar ou pausar qualquer um depois, em Ajustes.
         </p>
       </div>
+      <button
+        onClick={() =>
+          setSelected((s) => (s.length === PILLARS.length ? [] : PILLARS.map((p) => p.id)))
+        }
+        className="text-xs font-medium text-primary underline underline-offset-2"
+      >
+        {selected.length === PILLARS.length ? "Limpar seleção" : "Quero começar com todos os pilares"}
+      </button>
       <div className="grid gap-2.5">
         {PILLARS.map((p) => {
           const active = selected.includes(p.id);
