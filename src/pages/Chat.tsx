@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Send, Loader2, Sparkles } from "lucide-react";
+import { Markdown } from "@/components/core/Markdown";
 import { cn } from "@/lib/utils";
 
 interface Msg { id?: string; role: "user" | "assistant"; content: string; pending?: boolean }
@@ -98,11 +99,13 @@ export default function Chat() {
           <div key={m.id ?? `local-${i}`} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
             <div
               className={cn(
-                "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-line",
-                m.role === "user" ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-card border rounded-bl-sm"
+                "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm",
+                m.role === "user"
+                  ? "bg-primary text-primary-foreground rounded-br-sm leading-relaxed whitespace-pre-line"
+                  : "bg-card border rounded-bl-sm"
               )}
             >
-              {m.content}
+              {m.role === "user" ? m.content : <Markdown content={m.content} />}
             </div>
           </div>
         ))}

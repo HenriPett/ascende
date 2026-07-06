@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -23,7 +24,8 @@ const SEED_HABITS: Record<PillarId, string[]> = {
 export default function Onboarding() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { refresh } = useProfile();
+  const { profile, refresh } = useProfile();
+  const qc = useQueryClient();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
@@ -63,6 +65,21 @@ export default function Onboarding() {
       );
       if (habits.length) await supabase.from("habits").insert(habits);
 
+      // Atualiza o cache do perfil na hora, para o guard já ler onboarded=true
+      // (evita o redirecionamento de volta ao onboarding).
+      qc.setQueryData(["profile", user.id], (old: typeof profile) =>
+        old
+          ? {
+              ...old,
+              goal: goal.trim() || null,
+              pillars: selected,
+              spirituality_label: needsSpirit ? spirit.trim() || "Momento de silêncio" : null,
+              monthly_income: needsMoney && income ? Number(income) : null,
+              monthly_budget: needsMoney && budget ? Number(budget) : null,
+              onboarded: true,
+            }
+          : old
+      );
       refresh();
       toast.success("Tudo pronto. Bem-vindo(a) à subida!");
       navigate("/app", { replace: true });
