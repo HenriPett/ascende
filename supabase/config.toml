@@ -1,0 +1,10 @@
+project_id = "ascende"
+
+[functions.ai-chat]
+verify_jwt = true
+
+[functions.capture]
+verify_jwt = true
+
+[functions.briefing]
+verify_jwt = true

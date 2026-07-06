@@ -1,0 +1,132 @@
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
+
+export default function Auth() {
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    if (!authLoading && user) navigate("/app", { replace: true });
+  }, [user, authLoading, navigate]);
+
+  const signIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) {
+      toast.error(
+        error.message.includes("Invalid login")
+          ? "E-mail ou senha incorretos."
+          : "Não foi possível entrar. Tente de novo."
+      );
+      return;
+    }
+    navigate("/app", { replace: true });
+  };
+
+  const signUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 6) { toast.error("A senha precisa ter pelo menos 6 caracteres."); return; }
+    setLoading(true);
+    const { error, data } = await supabase.auth.signUp({
+      email, password,
+      options: { data: { name } },
+    });
+    setLoading(false);
+    if (error) {
+      toast.error(
+        error.message.includes("already registered")
+          ? "Este e-mail já tem conta. Use a aba Entrar."
+          : "Não foi possível criar a conta. Tente de novo."
+      );
+      return;
+    }
+    if (data.session) {
+      navigate("/onboarding", { replace: true });
+    } else {
+      toast.success("Conta criada! Confira seu e-mail para confirmar o cadastro e depois entre.");
+    }
+  };
+
+  return (
+    <div className="min-h-dvh grid place-items-center bg-background px-4">
+      <div className="w-full max-w-sm">
+        <Link to="/" className="flex items-center justify-center gap-2 mb-6">
+          <svg viewBox="0 0 64 64" className="w-9 h-9" aria-hidden>
+            <rect width="64" height="64" rx="16" fill="hsl(var(--primary))" />
+            <path d="M14 46 L32 16 L50 46" fill="none" stroke="hsl(var(--gold))" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="32" cy="16" r="4.5" fill="hsl(var(--gold))" />
+          </svg>
+          <span className="font-display font-semibold text-2xl">Ascende</span>
+        </Link>
+
+        <Card className="p-6">
+          <Tabs defaultValue="signin">
+            <TabsList className="grid grid-cols-2 w-full mb-4">
+              <TabsTrigger value="signin">Entrar</TabsTrigger>
+              <TabsTrigger value="signup">Criar conta</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="signin">
+              <form onSubmit={signIn} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="email-in">E-mail</Label>
+                  <Input id="email-in" type="email" required autoComplete="email"
+                    value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="pass-in">Senha</Label>
+                  <Input id="pass-in" type="password" required autoComplete="current-password"
+                    value={password} onChange={(e) => setPassword(e.target.value)} />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Entrar"}
+                </Button>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="signup">
+              <form onSubmit={signUp} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="name-up">Como quer ser chamado(a)?</Label>
+                  <Input id="name-up" required maxLength={60}
+                    value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="email-up">E-mail</Label>
+                  <Input id="email-up" type="email" required autoComplete="email"
+                    value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="pass-up">Senha (mínimo 6 caracteres)</Label>
+                  <Input id="pass-up" type="password" required autoComplete="new-password"
+                    value={password} onChange={(e) => setPassword(e.target.value)} />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar conta grátis"}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
+        </Card>
+        <p className="text-center text-xs text-muted-foreground mt-4">
+          Seus dados são privados e você pode exportá-los ou apagá-los quando quiser.
+        </p>
+      </div>
+    </div>
+  );
+}

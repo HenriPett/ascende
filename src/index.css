@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Ascende — design tokens ───────────────────────────────────
+   Conceito: "amanhecer na subida". Porcelana quente de fundo,
+   pinho profundo como tinta, ouro-amanhecer para progresso/XP.
+   Cada pilar tem sua cor própria. */
+
+@layer base {
+  :root {
+    --background: 40 33% 97%;          /* porcelana quente */
+    --foreground: 160 22% 13%;         /* pinho escuro */
+
+    --card: 40 40% 99%;
+    --card-foreground: 160 22% 13%;
+    --popover: 40 40% 99%;
+    --popover-foreground: 160 22% 13%;
+
+    --primary: 160 30% 21%;            /* verde pinho */
+    --primary-foreground: 40 33% 97%;
+
+    --secondary: 42 28% 91%;
+    --secondary-foreground: 160 22% 16%;
+
+    --muted: 42 24% 92%;
+    --muted-foreground: 160 10% 40%;
+
+    --accent: 42 30% 89%;
+    --accent-foreground: 160 22% 16%;
+
+    --destructive: 4 62% 46%;
+    --destructive-foreground: 40 33% 97%;
+
+    --success: 145 40% 34%;
+    --success-foreground: 40 33% 97%;
+    --warning: 36 80% 42%;
+    --warning-foreground: 40 33% 97%;
+
+    --gold: 41 62% 42%;                /* ouro-amanhecer: XP, nível */
+    --gold-foreground: 40 33% 97%;
+
+    /* Pilares */
+    --prosperidade: 41 62% 42%;        /* ouro */
+    --vitalidade: 12 58% 46%;          /* coral queimado */
+    --alimentacao: 100 32% 36%;        /* folha */
+    --mente: 258 30% 50%;              /* violeta */
+
+    --border: 42 20% 86%;
+    --input: 42 20% 84%;
+    --ring: 160 30% 21%;
+
+    --radius: 1rem;
+
+    --sidebar-background: 160 30% 12%;
+    --sidebar-foreground: 40 33% 92%;
+    --sidebar-primary: 41 62% 42%;
+    --sidebar-primary-foreground: 160 30% 12%;
+    --sidebar-accent: 160 24% 18%;
+    --sidebar-accent-foreground: 40 33% 92%;
+    --sidebar-border: 160 24% 18%;
+    --sidebar-ring: 41 62% 42%;
+  }
+
+  * { @apply border-border; }
+
+  html { -webkit-font-smoothing: antialiased; }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "ss01";
+  }
+
+  h1, h2, h3 { font-family: "Fraunces", Georgia, serif; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+}
+
+@layer utilities {
+  /* Linha de elevação: assinatura visual do Ascende */
+  .ascend-line {
+    background-image: linear-gradient(90deg,
+      hsl(var(--gold) / 0) 0%,
+      hsl(var(--gold)) 50%,
+      hsl(var(--gold) / 0) 100%);
+    height: 1px;
+  }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+}
