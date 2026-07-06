@@ -9,20 +9,7 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Sparkles, Loader2, Check, X } from "lucide-react";
 import { pillarById } from "@/lib/pillars";
-import { todayISO } from "@/lib/format";
-
-interface ProposedEvent {
-  kind: string;
-  pillar: string;
-  summary: string;
-  amount?: number;
-  tx_kind?: "income" | "expense";
-  category?: string;
-  hours?: number;
-  description?: string;
-  mood_label?: string;
-  mood_score?: number;
-}
+import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
 
 const EXAMPLES = [
   "Gastei 47 no mercado e treinei pernas",
@@ -65,36 +52,7 @@ export default function CaptureBar() {
     if (!selected.length) { setProposed(null); return; }
     setSaving(true);
     try {
-      for (const ev of selected) {
-        if (ev.kind === "transaction" && ev.amount && ev.amount > 0) {
-          // Transações vão para a tabela própria (o banco cria o evento na linha do tempo)
-          const { error } = await supabase.from("transactions").insert({
-            user_id: user.id,
-            kind: ev.tx_kind ?? "expense",
-            amount: ev.amount,
-            category: ev.category ?? "Outros",
-            description: ev.description ?? ev.summary,
-            occurred_at: todayISO(),
-          });
-          if (error) throw error;
-        } else {
-          const payload: Record<string, unknown> = {};
-          if (ev.hours) payload.hours = ev.hours;
-          if (ev.description) payload.description = ev.description;
-          if (ev.mood_label) payload.label = ev.mood_label;
-          if (ev.mood_score) payload.score = ev.mood_score;
-          if (ev.kind === "gratitude" && ev.description) payload.text = ev.description;
-          payload.summary = ev.summary;
-          const { error } = await supabase.from("life_events").insert({
-            user_id: user.id,
-            pillar: ev.pillar,
-            kind: ev.kind,
-            payload,
-            source: "chat_capture",
-          });
-          if (error) throw error;
-        }
-      }
+      await saveProposedEvents(user.id, selected);
       toast.success(
         selected.length === 1 ? "Registrado! +XP" : `${selected.length} registros feitos de uma vez. +XP`
       );

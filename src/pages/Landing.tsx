@@ -5,7 +5,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { PILLARS } from "@/lib/pillars";
 import {
   ArrowRight, Lock, Sparkles, MessageCircle, TrendingUp, Moon,
-  UtensilsCrossed, Check,
+  UtensilsCrossed, Check, Camera, LineChart, BookOpen, Mic, ScanLine, Paperclip,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +20,13 @@ const DEMOS = [
       { label: "Gasto de R$ 47 · Mercado", pillar: "prosperidade" },
       { label: "Treino de pernas", pillar: "vitalidade" },
       { label: "Sono: 6h", pillar: "vitalidade" },
+    ],
+  },
+  {
+    text: "Corri 5km hoje cedo e já bebi 2 litros de água",
+    events: [
+      { label: "Treino: corrida 5km (Pernas, Cardio)", pillar: "vitalidade" },
+      { label: "Água: 2L", pillar: "alimentacao" },
     ],
   },
   {
@@ -222,7 +229,7 @@ export default function Landing() {
               {
                 n: "1",
                 title: "Conte, não preencha",
-                desc: "\u201CGastei 47 no mercado, treinei e dormi mal.\u201D Uma frase por dia e a IA registra tudo nos lugares certos. Sem formulários, sem planilhas.",
+                desc: "\u201CGastei 47 no mercado, treinei e dormi mal.\u201D Uma frase — digitada, falada ou até uma foto do prato — e a IA registra tudo nos lugares certos. Sem formulários, sem planilhas.",
               },
               {
                 n: "2",
@@ -244,6 +251,56 @@ export default function Landing() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ─── Ferramentas que fazem o trabalho pesado ─── */}
+      <section className="container py-16 md:py-24 max-w-4xl">
+        <h2 className="font-display text-3xl md:text-4xl font-semibold text-center">
+          Registrar não pode ser um segundo emprego.
+        </h2>
+        <p className="text-center text-muted-foreground mt-3 mb-10 max-w-xl mx-auto">
+          Por isso o Ascende faz o trabalho chato por você — de foto, de voz ou de conversa.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[
+            {
+              icon: Camera,
+              title: "Foto do prato → calorias",
+              desc: "Tire uma foto da refeição e a IA estima calorias e macros na hora. Você ajusta, confirma, pronto.",
+            },
+            {
+              icon: ScanLine,
+              title: "Composição corporal por foto",
+              desc: "Uma foto de corpo inteiro gera uma estimativa honesta (em faixa) de gordura e massa magra. A foto não fica salva.",
+            },
+            {
+              icon: LineChart,
+              title: "Gráficos que contam sua história",
+              desc: "Evolução do peso com meta e tendência, finanças mês a mês, projeção do seu próprio padrão e o mapa do corpo treinado.",
+            },
+            {
+              icon: Mic,
+              title: "Fale, anexe, pergunte",
+              desc: "O Conselheiro aceita voz, fotos, PDFs e documentos. Mande a fatura do cartão e pergunte o que quiser.",
+            },
+            {
+              icon: BookOpen,
+              title: "Diário com a sua cara",
+              desc: "Um espaço para os pensamentos do dia, na cor que você escolher. Escrever também sobe a montanha.",
+            },
+            {
+              icon: Moon,
+              title: "Claro ou escuro",
+              desc: "Amanhecer ou noite na montanha — o tema acompanha o sistema ou o seu gosto.",
+            },
+          ].map((c) => (
+            <div key={c.title} className="rounded-xl border bg-card p-5">
+              <c.icon className="w-5 h-5 text-gold mb-3" />
+              <h3 className="font-semibold text-sm">{c.title}</h3>
+              <p className="text-sm text-muted-foreground mt-1">{c.desc}</p>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -293,9 +350,22 @@ export default function Landing() {
               <p className="mt-4 text-primary-foreground/80">
                 Pergunte "quanto posso gastar com lazer sem me apertar?" ou "monte um treino
                 que respeite meu sono desta semana". As respostas vêm dos seus números, dos seus
-                hábitos e do seu momento. E com limites claros: o Conselheiro não diagnostica,
-                não prescreve e não recomenda investimentos — ele organiza, conecta e aponta o próximo degrau.
+                hábitos e do seu momento. Fale por voz, anexe fotos e PDFs — e se você contar
+                que treinou costas ou gastou 30 no almoço, ele já separa os registros para você
+                confirmar. Com limites claros: o Conselheiro não diagnostica, não prescreve e não
+                recomenda investimentos — ele organiza, conecta e aponta o próximo degrau.
               </p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {[
+                  { icon: Mic, label: "Voz" },
+                  { icon: Paperclip, label: "Fotos e PDFs" },
+                  { icon: Sparkles, label: "Registra da conversa" },
+                ].map((b) => (
+                  <span key={b.label} className="inline-flex items-center gap-1.5 text-xs rounded-full border border-primary-foreground/20 bg-primary-foreground/10 px-3 py-1.5">
+                    <b.icon className="w-3.5 h-3.5" style={{ color: "hsl(41 70% 62%)" }} /> {b.label}
+                  </span>
+                ))}
+              </div>
             </div>
             <div className="space-y-2.5">
               {[
@@ -323,8 +393,9 @@ export default function Landing() {
         </h2>
         <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
           Dinheiro, corpo, fé e emoções no mesmo lugar exigem um compromisso à altura:
-          seus dados nunca viram produto, nunca são vendidos e você pode exportar tudo
-          em um clique — ou apagar tudo, de verdade, quando quiser.
+          seus dados nunca viram produto, nunca são vendidos, cada conta só enxerga o que
+          é dela — e você pode apagar tudo, de verdade, quando quiser. Fotos enviadas para
+          análise são processadas e descartadas, não armazenadas.
         </p>
       </section>
 
@@ -354,17 +425,20 @@ export default function Landing() {
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="q4">
-              <AccordionTrigger className="text-left">E a minha fé, entra como nesse app?</AccordionTrigger>
+              <AccordionTrigger className="text-left">E a minha fé, entra como nesse app? E se eu não tiver religião?</AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
-                Do seu jeito. Você define o nome da sua prática — oração, meditação, culto, silêncio — e o
-                Ascende acompanha esse compromisso no seu vocabulário, sem nunca sugerir ou comparar crenças.
+                Do seu jeito, nos dois casos. Quem tem uma prática define o nome dela — oração, meditação,
+                culto, silêncio — e o Ascende acompanha esse compromisso no seu vocabulário, sem nunca sugerir
+                ou comparar crenças. Quem não tem religião ativa o modo "Mente & Foco" nos ajustes: o pilar
+                vira desenvolvimento mental puro (diário, humor, foco), sem nenhum vocabulário espiritual.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="q5">
               <AccordionTrigger className="text-left">Meus dados estão seguros?</AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
                 Seus registros são seus. Cada conta só acessa os próprios dados, nada é vendido ou usado para
-                anúncios, e você exporta tudo em JSON — ou solicita a exclusão total — quando quiser.
+                anúncios, fotos analisadas pela IA não são armazenadas — e você pode solicitar a exclusão
+                total da conta quando quiser, sem cópias.
               </AccordionContent>
             </AccordionItem>
           </Accordion>

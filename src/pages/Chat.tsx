@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, FileText, Image as ImageIcon } from "lucide-react";
+import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, FileText, Image as ImageIcon, Check } from "lucide-react";
 import { Markdown } from "@/components/core/Markdown";
+import { Checkbox } from "@/components/ui/checkbox";
+import { pillarById } from "@/lib/pillars";
+import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
 import { cn } from "@/lib/utils";
 
 interface Msg { id?: string; role: "user" | "assistant"; content: string; pending?: boolean }
@@ -93,6 +96,9 @@ export default function Chat() {
   const [local, setLocal] = useState<Msg[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [listening, setListening] = useState(false);
+  const [captured, setCaptured] = useState<ProposedEvent[] | null>(null);
+  const [capturedChecked, setCapturedChecked] = useState<boolean[]>([]);
+  const [savingCaptured, setSavingCaptured] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const recRef = useRef<SpeechRecognitionLike | null>(null);
@@ -112,7 +118,7 @@ export default function Chat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, sending]);
+  }, [messages.length, sending, captured]);
 
   // Para o microfone ao sair da tela
   useEffect(() => () => { recRef.current?.stop(); }, []);
@@ -193,6 +199,7 @@ export default function Chat() {
       `Enviei ${sentAttachments.length === 1 ? "um arquivo" : `${sentAttachments.length} arquivos`} para você analisar.`;
     setInput("");
     setAttachments([]);
+    setCaptured(null);
     setSending(true);
     setLocal((l) => [...l, {
       role: "user",
@@ -207,6 +214,11 @@ export default function Chat() {
       });
       if (error || data?.error) throw new Error(data?.error ?? "erro");
       setLocal([]);
+      const events = (data?.captured ?? []) as ProposedEvent[];
+      if (events.length) {
+        setCaptured(events);
+        setCapturedChecked(events.map(() => true));
+      }
       qc.invalidateQueries({ queryKey: ["chat", user?.id] });
     } catch (e) {
       setLocal((l) => l.slice(0, -1));
@@ -217,6 +229,24 @@ export default function Chat() {
       setAttachments(sentAttachments);
     } finally {
       setSending(false);
+    }
+  };
+
+  // ── Confirmação dos registros detectados na conversa ─────────
+  const confirmCaptured = async () => {
+    if (!user || !captured) return;
+    const selected = captured.filter((_, i) => capturedChecked[i]);
+    if (!selected.length) { setCaptured(null); return; }
+    setSavingCaptured(true);
+    try {
+      await saveProposedEvents(user.id, selected);
+      toast.success(selected.length === 1 ? "Registrado! +XP" : `${selected.length} registros feitos. +XP`);
+      setCaptured(null);
+      qc.invalidateQueries();
+    } catch {
+      toast.error("Não consegui salvar. Tente de novo.");
+    } finally {
+      setSavingCaptured(false);
     }
   };
 
@@ -271,6 +301,42 @@ export default function Chat() {
           <div className="flex justify-start">
             <div className="bg-card border rounded-2xl rounded-bl-sm px-4 py-3">
               <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            </div>
+          </div>
+        )}
+
+        {/* Registros detectados na conversa — confirmar antes de gravar */}
+        {captured && !sending && (
+          <div className="rounded-xl border border-gold/40 bg-card p-3 space-y-2 animate-fade-up">
+            <p className="text-sm font-medium flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-gold" />
+              Percebi coisas para registrar. Confirma?
+            </p>
+            {captured.map((ev, i) => {
+              const meta = pillarById(ev.pillar);
+              return (
+                <label key={i} className="flex items-center gap-3 rounded-md border p-2.5 cursor-pointer">
+                  <Checkbox
+                    checked={capturedChecked[i]}
+                    onCheckedChange={(v) => setCapturedChecked((c) => c.map((x, j) => (j === i ? !!v : x)))}
+                  />
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ background: meta ? `hsl(var(${meta.colorVar}))` : "hsl(var(--muted-foreground))" }}
+                    aria-hidden
+                  />
+                  <span className="text-sm flex-1 min-w-0 break-words">{ev.summary}</span>
+                  <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">{meta?.name ?? ev.pillar}</span>
+                </label>
+              );
+            })}
+            <div className="flex gap-2 justify-end pt-0.5">
+              <Button variant="ghost" size="sm" onClick={() => setCaptured(null)} disabled={savingCaptured}>
+                <X className="w-4 h-4 mr-1" /> Agora não
+              </Button>
+              <Button size="sm" onClick={confirmCaptured} disabled={savingCaptured}>
+                {savingCaptured ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Registrar</>)}
+              </Button>
             </div>
           </div>
         )}

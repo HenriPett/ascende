@@ -1,7 +1,8 @@
 // ASCENDE — Conselheiro (chat de IA com visão de todos os pilares)
 import {
   corsHeaders, serviceClient, requireUser, buildSnapshot,
-  ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, SAFETY_RULES,
+  ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, MODEL_FAST, SAFETY_RULES,
+  CAPTURE_TOOL, CAPTURE_SYSTEM,
 } from "../_shared/lib.ts";
 
 const DAILY_LIMIT = 40;
@@ -100,6 +101,37 @@ Deno.serve(async (req) => {
         messages,
       }),
     });
+
+    // Em paralelo: extrai eventos registráveis da mensagem ("treinei costas",
+    // "gastei 30 no almoço", "bebi 2L de água"...). São PROPOSTAS — o app pede
+    // confirmação antes de gravar. Falha aqui nunca derruba a resposta do chat.
+    const capturePromise: Promise<unknown[]> = (async () => {
+      try {
+        const r = await fetch(ANTHROPIC_URL, {
+          method: "POST",
+          headers: {
+            "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
+            "anthropic-version": ANTHROPIC_VERSION,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: MODEL_FAST,
+            max_tokens: 1500,
+            system: CAPTURE_SYSTEM,
+            tools: [CAPTURE_TOOL],
+            tool_choice: { type: "tool", name: "registrar_eventos" },
+            messages: [{ role: "user", content: message }],
+          }),
+        });
+        if (!r.ok) return [];
+        const d = await r.json();
+        // deno-lint-ignore no-explicit-any
+        const tu = (d.content ?? []).find((b: any) => b.type === "tool_use");
+        return Array.isArray(tu?.input?.events) ? tu.input.events : [];
+      } catch {
+        return [];
+      }
+    })();
     if (!res.ok) {
       console.error("Anthropic error", res.status, await res.text());
       return json({ error: "O Conselheiro está indisponível agora. Tente de novo em instantes." }, 502);
@@ -112,7 +144,8 @@ Deno.serve(async (req) => {
       { user_id: user.id, role: "assistant", content: reply },
     ]);
 
-    return json({ reply });
+    const captured = await capturePromise;
+    return json({ reply, captured });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);

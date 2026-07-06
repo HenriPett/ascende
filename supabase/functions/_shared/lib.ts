@@ -221,3 +221,74 @@ export const SAFETY_RULES = `
 • Recaída se acolhe, nunca se julga. O dado importante da recaída é o gatilho — ajude a pessoa a enxergar o padrão (ex.: recaídas em noites de sono ruim, em dias de humor baixo, em madrugadas). Reforce que os dias limpos acumulados não se perdem.
 • Ao notar padrão severo em batalhas de álcool, drogas ou apostas (recaídas quase diárias, sinais de abstinência física, dívidas ou perdas relevantes), diga com clareza e carinho que isso merece acompanhamento profissional e aponte caminhos concretos no Brasil: CAPS (unidades públicas de saúde mental), Alcoólicos Anônimos, Narcóticos Anônimos, Jogadores Anônimos. O Ascende é apoio, não tratamento.
 • NUNCA trate comida como inimigo nem incentive "batalha contra comer". Se a pessoa enquadrar alimentação como guerra/restrição, redirecione com gentileza para hábitos positivos no pilar Alimentação (ex.: "fazer uma refeição de verdade") — guerra contra comida alimenta compulsão. Sinais de transtorno alimentar merecem indicação de profissional.`;
+/* ─── Captura conversacional (compartilhada entre `capture` e `ai-chat`) ───
+   Texto livre → eventos estruturados PROPOSTOS. O app sempre pede confirmação
+   do usuário antes de gravar — a IA nunca grava sozinha. */
+
+export const MUSCLE_GROUPS = ["Peito", "Costas", "Pernas", "Ombros", "Braços", "Core", "Cardio"];
+
+export const CAPTURE_TOOL = {
+  name: "registrar_eventos",
+  description: "Registra os eventos de vida extraídos do relato do usuário.",
+  input_schema: {
+    type: "object",
+    properties: {
+      events: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            kind: {
+              type: "string",
+              enum: ["transaction", "sleep", "workout", "meal", "water", "weight", "mood", "gratitude", "practice", "note"],
+              description: "Tipo do evento.",
+            },
+            pillar: {
+              type: "string",
+              enum: ["prosperidade", "vitalidade", "alimentacao", "mente"],
+              description:
+                "Pilar: transaction→prosperidade; sleep/workout→vitalidade; " +
+                "meal/water/weight→alimentacao; mood/gratitude/practice→mente.",
+            },
+            summary: { type: "string", description: "Resumo curto em português para o usuário confirmar. Ex.: 'Gasto de R$ 47 em Mercado' ou 'Treino de costas'." },
+            amount: { type: "number", description: "Valor em reais (apenas para transaction)." },
+            tx_kind: { type: "string", enum: ["income", "expense"], description: "Entrada ou saída (apenas para transaction)." },
+            category: { type: "string", description: "Categoria da transação. Ex.: Mercado, Transporte, Lazer, Salário." },
+            hours: { type: "number", description: "Horas de sono (apenas para sleep)." },
+            description: { type: "string", description: "Descrição livre (refeição, treino, nota...)." },
+            muscles: {
+              type: "array",
+              items: { type: "string", enum: MUSCLE_GROUPS },
+              description:
+                "APENAS para workout: grupos musculares trabalhados, SEMPRE inferidos do exercício. " +
+                "Ex.: corrida/caminhada/pedal → ['Pernas','Cardio']; supino/flexão → ['Peito','Braços']; " +
+                "puxada/remada → ['Costas','Braços']; agachamento/leg → ['Pernas']; natação → ['Costas','Ombros','Cardio']; " +
+                "abdominal/prancha → ['Core']. Se o usuário disser o grupo ('treinei costas'), use-o diretamente.",
+            },
+            ml: { type: "number", description: "Mililitros de água (apenas para water). Ex.: 'bebi 2L' → 2000." },
+            kg: { type: "number", description: "Peso corporal em kg (apenas para weight). Ex.: 'tô pesando 82' → 82." },
+            mood_label: { type: "string", description: "Palavra do próprio usuário para o humor. Ex.: ansioso, animado, cansado." },
+            mood_score: { type: "number", description: "Humor de 1 (péssimo) a 5 (ótimo), inferido do relato." },
+          },
+          required: ["kind", "pillar", "summary"],
+        },
+      },
+    },
+    required: ["events"],
+  },
+};
+
+export const CAPTURE_SYSTEM = `Você extrai eventos estruturados de relatos do dia a dia de brasileiros, para a plataforma Ascende.
+Regras:
+• Extraia TODOS os eventos presentes no texto — um relato pode alimentar vários pilares de uma vez.
+• Valores em reais: "47", "R$47", "quarenta e sete" → amount 47. Gastos são expense; salário/recebimentos são income.
+• Sono mencionado ("dormi 5h", "dormi mal" → estime 5 e cite no summary que foi estimado) vira evento sleep.
+• Menções a treino/exercício viram workout — SEMPRE preencha muscles inferindo os grupos do exercício (corrida → Pernas e Cardio; "treinei costas" → Costas). Inclua os grupos no summary. Ex.: "Treino de corrida (Pernas, Cardio)".
+• Água bebida ("tomei 2L de água", "bebi 500ml") vira water com ml.
+• Peso corporal ("me pesei, 78kg", "tô pesando 82") vira weight com kg.
+• Refeições viram meal. Oração/meditação/culto/leitura espiritual viram practice.
+• Estados emocionais ("tô ansioso", "dia ótimo") viram mood, usando a palavra do próprio usuário em mood_label.
+• Se algo não se encaixar em nenhum tipo, use note.
+• Se o texto não contiver nenhum evento registrável — perguntas, pedidos de conselho, conversa — retorne events: [].
+• Só extraia o que a pessoa RELATOU ter acontecido. Planos e intenções ("vou treinar amanhã") não são eventos. Nunca invente eventos.
+Use SEMPRE a ferramenta registrar_eventos.`;
