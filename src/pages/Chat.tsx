@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, FileText, Image as ImageIcon, Check, ClipboardList } from "lucide-react";
+import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, FileText, Image as ImageIcon, Check, ClipboardList, Eye, Wand2 } from "lucide-react";
 import { Markdown } from "@/components/core/Markdown";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { pillarById } from "@/lib/pillars";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
@@ -95,6 +98,8 @@ export default function Chat() {
   const [captured, setCaptured] = useState<ProposedEvent[] | null>(null);
   const [proposedPlan, setProposedPlan] = useState<ProposedPlan | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [planComment, setPlanComment] = useState("");
   const [capturedChecked, setCapturedChecked] = useState<boolean[]>([]);
   const [savingCaptured, setSavingCaptured] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -166,7 +171,6 @@ export default function Chat() {
     setInput("");
     setAttachments([]);
     setCaptured(null);
-    setProposedPlan(null);
     setSending(true);
     setLocal((l) => [...l, {
       role: "user",
@@ -228,6 +232,19 @@ export default function Chat() {
     }
   };
 
+  const PLAN_KIND_LABEL: Record<string, string> = {
+    alimentar: "Alimentar", treino: "Treino", financeiro: "Financeiro", rotina: "Rotina", outro: "Plano",
+  };
+
+  // Pede ajuste no plano: vira mensagem na conversa; a versão revisada substitui a proposta
+  const requestPlanAdjust = () => {
+    if (!proposedPlan || !planComment.trim()) return;
+    const msg = `Sobre o plano "${proposedPlan.title}": ${planComment.trim()}`;
+    setPlanOpen(false);
+    setPlanComment("");
+    send(msg);
+  };
+
   // ── Salvar plano proposto pelo Conselheiro ───────────────────
   const savePlan = async () => {
     if (!user || !proposedPlan) return;
@@ -243,6 +260,7 @@ export default function Chat() {
     if (error) { toast.error("Não consegui salvar o plano."); return; }
     toast.success("Plano salvo! Ele fica em Pilares > Meus planos, e o Conselheiro passa a acompanhá-lo.");
     setProposedPlan(null);
+    setPlanOpen(false);
     qc.invalidateQueries({ queryKey: ["plans"] });
   };
 
@@ -310,12 +328,15 @@ export default function Chat() {
               Plano pronto: {proposedPlan.title}
             </p>
             <p className="text-xs text-muted-foreground">
-              Quer guardar fora do chat? Ele fica em Pilares &gt; Meus planos e o Conselheiro
-              passa a acompanhar sua adesão a ele.
+              Veja o plano formatado, peça ajustes ("não gosto do exercício tal") ou salve.
+              Salvo, ele fica em Pilares &gt; Meus planos e o Conselheiro acompanha sua adesão.
             </p>
-            <div className="flex gap-2 justify-end pt-0.5">
+            <div className="flex flex-wrap gap-2 justify-end pt-0.5">
               <Button variant="ghost" size="sm" onClick={() => setProposedPlan(null)} disabled={savingPlan}>
                 <X className="w-4 h-4 mr-1" /> Agora não
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPlanOpen(true)} disabled={savingPlan}>
+                <Eye className="w-4 h-4 mr-1" /> Ver plano
               </Button>
               <Button size="sm" onClick={savePlan} disabled={savingPlan}>
                 {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Salvar plano</>)}
@@ -416,6 +437,40 @@ export default function Chat() {
         O Conselheiro não substitui médicos, psicólogos, nutricionistas ou consultores de investimento.
       </p>
       </div>
+
+      {/* Visualização do plano proposto + pedido de ajustes */}
+      <Dialog open={planOpen && !!proposedPlan} onOpenChange={setPlanOpen}>
+        <DialogContent className="max-w-lg max-h-[85dvh] flex flex-col">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="pr-6 break-words font-display">{proposedPlan?.title}</DialogTitle>
+            <DialogDescription>
+              {proposedPlan && `${PLAN_KIND_LABEL[proposedPlan.kind] ?? "Plano"} · ainda não salvo`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 min-h-0 overflow-y-auto text-sm pr-1">
+            {proposedPlan && <Markdown content={proposedPlan.content} doc />}
+          </div>
+
+          <div className="shrink-0 border-t pt-3 space-y-2">
+            <Textarea
+              value={planComment}
+              onChange={(e) => setPlanComment(e.target.value)}
+              placeholder='Quer mudar algo? Ex.: "não gosto de agachamento, troca por outro exercício"'
+              rows={2} maxLength={500}
+              className="resize-none text-sm"
+            />
+            <div className="flex flex-wrap gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={requestPlanAdjust} disabled={!planComment.trim() || sending}>
+                <Wand2 className="w-4 h-4 mr-1" /> Pedir ajuste
+              </Button>
+              <Button size="sm" onClick={savePlan} disabled={savingPlan}>
+                {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Salvar plano</>)}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
