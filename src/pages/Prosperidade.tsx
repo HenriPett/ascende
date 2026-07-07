@@ -18,7 +18,7 @@ import {
   XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine,
 } from "recharts";
 
-const CATEGORIES = ["Mercado", "Alimentação fora", "Transporte", "Moradia", "Saúde", "Lazer", "Educação", "Assinaturas", "Salário", "Extra", "Outros"];
+const CATEGORIES = ["Mercado", "Alimentação fora", "Transporte", "Moradia", "Saúde", "Lazer", "Educação", "Assinaturas", "Fatura", "Salário", "Extra", "Outros"];
 
 interface Tx { id: string; kind: "income" | "expense"; amount: number; category: string; description: string | null; occurred_at: string }
 
