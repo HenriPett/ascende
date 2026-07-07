@@ -18,6 +18,7 @@ import Mente from "@/pages/Mente";
 import Score from "@/pages/Score";
 import Batalhas from "@/pages/Batalhas";
 import Planos from "@/pages/Planos";
+import Legal from "@/pages/Legal";
 import Ajustes from "@/pages/Ajustes";
 import NotFound from "@/pages/NotFound";
 
@@ -56,6 +57,9 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/privacidade" element={<Legal doc="privacidade" />} />
+            <Route path="/termos" element={<Legal doc="termos" />} />
+            <Route path="/aviso-legal" element={<Legal doc="aviso-legal" />} />
             <Route
               path="/onboarding"
               element={<RequireAuth><Onboarding /></RequireAuth>}

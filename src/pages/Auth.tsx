@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import Logo from "@/components/core/Logo";
+import { Checkbox } from "@/components/ui/checkbox";
+import { LEGAL_VERSION } from "@/lib/legal";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -18,6 +20,7 @@ export default function Auth() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user) navigate("/app", { replace: true });
@@ -42,10 +45,21 @@ export default function Auth() {
   const signUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 8) { toast.error("A senha precisa ter pelo menos 8 caracteres."); return; }
+    if (!acceptedTerms) {
+      toast.error("Para criar a conta, é preciso ler e aceitar os Termos, a Política de Privacidade e o Aviso Legal.");
+      return;
+    }
     setLoading(true);
     const { error, data } = await supabase.auth.signUp({
       email, password,
-      options: { data: { name } },
+      options: {
+        data: {
+          name,
+          // Registro auditável do consentimento (LGPD): quando e qual versão foi aceita
+          accepted_terms_at: new Date().toISOString(),
+          accepted_terms_version: LEGAL_VERSION,
+        },
+      },
     });
     setLoading(false);
     if (error) {
@@ -112,7 +126,23 @@ export default function Auth() {
                   <Input id="pass-up" type="password" required autoComplete="new-password"
                     value={password} onChange={(e) => setPassword(e.target.value)} />
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
+                <label className="flex items-start gap-2.5 rounded-lg border p-3 cursor-pointer">
+                  <Checkbox
+                    checked={acceptedTerms}
+                    onCheckedChange={(v) => setAcceptedTerms(!!v)}
+                    className="mt-0.5"
+                    aria-label="Aceitar os documentos legais"
+                  />
+                  <span className="text-xs text-muted-foreground leading-relaxed">
+                    Li e aceito os{" "}
+                    <a href="/termos" target="_blank" rel="noreferrer" className="underline text-foreground">Termos de Uso</a>,{" "}
+                    a <a href="/privacidade" target="_blank" rel="noreferrer" className="underline text-foreground">Política de Privacidade</a>{" "}
+                    e o <a href="/aviso-legal" target="_blank" rel="noreferrer" className="underline text-foreground">Aviso Legal</a>,
+                    incluindo o tratamento dos dados sensíveis que eu optar por informar (saúde, fé, emoções)
+                    para personalizar minha experiência.
+                  </span>
+                </label>
+                <Button type="submit" className="w-full" disabled={loading || !acceptedTerms}>
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar conta grátis"}
                 </Button>
               </form>
