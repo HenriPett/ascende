@@ -27,7 +27,7 @@ const queryClient = new QueryClient({
 function Splash() {
   return (
     <div className="min-h-dvh grid place-items-center bg-background">
-      <div className="animate-pulse font-display text-xl text-muted-foreground">Ascende</div>
+      <div className="animate-pulse font-display text-xl text-muted-foreground">Ascend</div>
     </div>
   );
 }

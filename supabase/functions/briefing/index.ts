@@ -1,4 +1,4 @@
-// ASCENDE — Briefing do dia
+// ASCEND — Briefing do dia
 // Gera um resumo curto e acolhedor cruzando todos os pilares.
 // Cache: 1 por usuário por dia (tabela briefings).
 import {
@@ -6,7 +6,7 @@ import {
   ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, SAFETY_RULES,
 } from "../_shared/lib.ts";
 
-const SYSTEM = `Você escreve o briefing matinal do Ascende — plataforma brasileira de qualidade de vida.
+const SYSTEM = `Você escreve o briefing matinal do Ascend — plataforma brasileira de qualidade de vida.
 Com base no retrato da pessoa (dados reais), escreva de 3 a 5 frases curtas em português do Brasil:
 1. Como a vida dela está neste momento, cruzando pilares (finanças × sono × hábitos × humor) quando os dados permitirem.
 2. UMA coisa que merece atenção hoje, com o porquê nos dados.

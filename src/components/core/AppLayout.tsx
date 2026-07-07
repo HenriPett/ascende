@@ -2,6 +2,7 @@ import { NavLink, Outlet, Link } from "react-router-dom";
 import { Sun, Moon, MessageCircle, Mountain, BarChart3, Settings } from "lucide-react";
 import { useXp } from "@/hooks/useXp";
 import { useTheme } from "@/hooks/useTheme";
+import Logo from "@/components/core/Logo";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -53,17 +54,12 @@ function LevelBadge() {
 
 export default function AppLayout() {
   return (
-    <div className="min-h-dvh bg-background">
-      {/* Topo */}
-      <header className="sticky top-0 z-30 bg-background/90 backdrop-blur border-b">
+    <div className="min-h-dvh bg-background bg-ether">
+      {/* Topo — cristal */}
+      <header className="sticky top-0 z-30 glass border-x-0 border-t-0 rounded-none">
         <div className="container flex items-center justify-between h-14">
-          <Link to="/app" className="flex items-center gap-2">
-            <svg viewBox="0 0 64 64" className="w-7 h-7" aria-hidden>
-              <rect width="64" height="64" rx="16" fill="hsl(var(--primary))" />
-              <path d="M14 46 L32 16 L50 46" fill="none" stroke="hsl(var(--gold))" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="32" cy="16" r="4.5" fill="hsl(var(--gold))" />
-            </svg>
-            <span className="font-display font-semibold text-lg tracking-tight">Ascende</span>
+          <Link to="/app" aria-label="Ascend — início">
+            <Logo size="sm" />
           </Link>
 
           {/* Navegação desktop */}
@@ -74,7 +70,7 @@ export default function AppLayout() {
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors",
-                    isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    isActive ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   )
                 }
               >
@@ -90,23 +86,24 @@ export default function AppLayout() {
         </div>
       </header>
 
-      <main className="container pb-28 md:pb-10 pt-5">
+      <main className="container pb-32 md:pb-10 pt-5">
         <Outlet />
       </main>
 
-      {/* Navegação inferior mobile */}
+      {/* Navegação inferior mobile — pílula de cristal flutuante */}
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-card border-t safe-bottom"
+        className="md:hidden fixed bottom-3 inset-x-3 z-30 max-w-md mx-auto rounded-full glass shadow-lg shadow-black/10"
+        style={{ marginBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Principal"
       >
-        <div className="grid grid-cols-5 h-16">
+        <div className="grid grid-cols-5 h-16 px-1">
           {NAV.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to} to={to} end={end}
               className={({ isActive }) =>
                 cn(
-                  "flex flex-col items-center justify-center gap-0.5 text-[11px]",
-                  isActive ? "text-primary font-semibold" : "text-muted-foreground"
+                  "flex flex-col items-center justify-center gap-0.5 text-[10px] rounded-full my-1.5 transition-colors",
+                  isActive ? "bg-primary/15 text-primary font-semibold" : "text-muted-foreground"
                 )
               }
             >

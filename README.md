@@ -1,4 +1,4 @@
-# Ascende — Suba de nível na vida real
+# Ascend — Suba de nível na vida real
 
 Hub de qualidade de vida com IA: Prosperidade, Vitalidade, Alimentação e Mente & Espírito no mesmo lugar, com um Conselheiro que enxerga tudo isso ao mesmo tempo.
 
@@ -79,7 +79,7 @@ Troque `SEU_REFERENCE_ID` pelo Reference ID do Passo 3 e `sua-chave-da-anthropic
    npm run build
    ```
 3. Acesse [app.netlify.com/drop](https://app.netlify.com/drop) e **arraste a pasta `dist`** (criada pelo comando acima) para a página.
-4. Pronto — o Netlify te dá um link. Seu Ascende está no ar. 🎉
+4. Pronto — o Netlify te dá um link. Seu Ascend está no ar. 🎉
 
 **Jeito recomendado para o longo prazo (via Git):** suba esta pasta para um repositório no GitHub, conecte-o no Netlify (**Add new site → Import from Git**) e, em **Site settings → Environment variables**, cadastre `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. Assim cada atualização futura publica sozinha.
 

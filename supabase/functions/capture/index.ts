@@ -1,4 +1,4 @@
-// ASCENDE — Captura conversacional
+// ASCEND — Captura conversacional
 // Recebe texto livre ("gastei 47 no mercado, treinei, dormi 5h, tô ansioso")
 // e devolve eventos estruturados PROPOSTOS. O app mostra para o usuário
 // confirmar antes de gravar — a IA nunca grava sozinha.

@@ -175,7 +175,7 @@ export default function Ajustes() {
         <div>
           <h2 className="font-display font-semibold">Instalar na tela inicial</h2>
           <p className="text-xs text-muted-foreground">
-            O Ascende funciona como um app de verdade: ícone na tela inicial e abertura em
+            O Ascend funciona como um app de verdade: ícone na tela inicial e abertura em
             tela cheia, sem barra do navegador.
           </p>
         </div>
@@ -187,7 +187,7 @@ export default function Ajustes() {
             <li>Abra este site no <strong>Safari</strong> (não funciona pelo Chrome no iPhone).</li>
             <li>Toque no botão <strong>Compartilhar</strong> <Share className="w-3.5 h-3.5 inline -mt-0.5" aria-label="ícone compartilhar" /> na barra inferior.</li>
             <li>Role a lista e toque em <strong>"Adicionar à Tela de Início"</strong>.</li>
-            <li>Toque em <strong>Adicionar</strong>. O ícone do Ascende aparece junto dos seus apps.</li>
+            <li>Toque em <strong>Adicionar</strong>. O ícone do Ascend aparece junto dos seus apps.</li>
           </ol>
         </div>
         <div className="rounded-md border p-3 space-y-1.5">

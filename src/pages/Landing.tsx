@@ -7,7 +7,7 @@ import {
   ArrowRight, Lock, Sparkles, MessageCircle, TrendingUp, Moon,
   UtensilsCrossed, Check, Camera, LineChart, BookOpen, Mic, ScanLine, Paperclip,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import Logo from "@/components/core/Logo";
 
 /* ─────────────────────────────────────────────────────────────────
    Demo animado da captura: a frase é "digitada" e vira registros
@@ -74,7 +74,7 @@ function CaptureDemo() {
     <div className="rounded-2xl border bg-card shadow-xl shadow-primary/5 p-5 text-left max-w-md w-full mx-auto">
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-3">
         <Sparkles className="w-3.5 h-3.5 text-gold" />
-        Você conta — o Ascende registra
+        Você conta — o Ascend registra
       </div>
       <div className="rounded-lg border bg-background p-3 min-h-[72px] text-sm">
         {current.text.slice(0, chars)}
@@ -107,25 +107,11 @@ function CaptureDemo() {
   );
 }
 
-/* ─── Marca ─── */
-function Logo({ size = "md" }: { size?: "md" | "lg" }) {
-  return (
-    <div className="flex items-center gap-2">
-      <svg viewBox="0 0 64 64" className={size === "lg" ? "w-9 h-9" : "w-8 h-8"} aria-hidden>
-        <rect width="64" height="64" rx="16" fill="hsl(var(--primary))" />
-        <path d="M14 46 L32 16 L50 46" fill="none" stroke="hsl(var(--gold))" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="32" cy="16" r="4.5" fill="hsl(var(--gold))" />
-      </svg>
-      <span className={cn("font-display font-semibold", size === "lg" ? "text-2xl" : "text-xl")}>Ascende</span>
-    </div>
-  );
-}
-
 export default function Landing() {
   return (
-    <div className="min-h-dvh bg-background overflow-x-clip">
+    <div className="min-h-dvh bg-background bg-ether overflow-x-clip">
       {/* ─── Topo ─── */}
-      <header className="sticky top-0 z-40 bg-background/85 backdrop-blur border-b">
+      <header className="sticky top-0 z-40 glass border-x-0 border-t-0 rounded-none">
         <div className="container flex items-center justify-between h-16">
           <Logo />
           <div className="flex items-center gap-2">
@@ -158,7 +144,7 @@ export default function Landing() {
           </h1>
           <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto animate-fade-up">
             Sua dieta depende do seu orçamento. Seu gasto por impulso depende do seu sono.
-            Sua paz depende de tudo isso junto. O Ascende é o único lugar onde essas peças
+            Sua paz depende de tudo isso junto. O Ascend é o único lugar onde essas peças
             se encontram — com uma IA que conhece o quadro inteiro.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up">
@@ -198,7 +184,7 @@ export default function Landing() {
             {
               icon: Moon,
               title: "O elo entre sono e dinheiro",
-              desc: "Dormiu mal a semana toda? O Ascende percebe quando isso começa a aparecer nos seus gastos por impulso.",
+              desc: "Dormiu mal a semana toda? O Ascend percebe quando isso começa a aparecer nos seus gastos por impulso.",
             },
             {
               icon: TrendingUp,
@@ -260,7 +246,7 @@ export default function Landing() {
           Registrar não pode ser um segundo emprego.
         </h2>
         <p className="text-center text-muted-foreground mt-3 mb-10 max-w-xl mx-auto">
-          Por isso o Ascende faz o trabalho chato por você — de foto, de voz ou de conversa.
+          Por isso o Ascend faz o trabalho chato por você — de foto, de voz ou de conversa.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[
@@ -337,17 +323,17 @@ export default function Landing() {
       </section>
 
       {/* ─── Conselheiro ─── */}
-      <section className="border-y bg-primary text-primary-foreground">
+      <section className="border-y ether-night">
         <div className="container py-16 md:py-24 max-w-4xl">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
             <div>
-              <p className="text-xs font-semibold tracking-[0.25em] uppercase mb-4" style={{ color: "hsl(41 70% 62%)" }}>
+              <p className="text-xs font-semibold tracking-[0.25em] uppercase mb-4" style={{ color: "hsl(var(--gold))" }}>
                 O Conselheiro
               </p>
               <h2 className="font-display text-3xl md:text-4xl font-semibold leading-tight">
                 Uma IA que conhece a sua vida — não a média das vidas.
               </h2>
-              <p className="mt-4 text-primary-foreground/80">
+              <p className="mt-4 text-white/75">
                 Pergunte "quanto posso gastar com lazer sem me apertar?" ou "monte um treino
                 que respeite meu sono desta semana". As respostas vêm dos seus números, dos seus
                 hábitos e do seu momento. Fale por voz, anexe fotos e PDFs — e se você contar
@@ -361,8 +347,8 @@ export default function Landing() {
                   { icon: Paperclip, label: "Fotos e PDFs" },
                   { icon: Sparkles, label: "Registra da conversa" },
                 ].map((b) => (
-                  <span key={b.label} className="inline-flex items-center gap-1.5 text-xs rounded-full border border-primary-foreground/20 bg-primary-foreground/10 px-3 py-1.5">
-                    <b.icon className="w-3.5 h-3.5" style={{ color: "hsl(41 70% 62%)" }} /> {b.label}
+                  <span key={b.label} className="inline-flex items-center gap-1.5 text-xs rounded-full border border-white/15 bg-white/10 px-3 py-1.5">
+                    <b.icon className="w-3.5 h-3.5" style={{ color: "hsl(var(--gold))" }} /> {b.label}
                   </span>
                 ))}
               </div>
@@ -373,8 +359,8 @@ export default function Landing() {
                 "Como está minha vida esta semana?",
                 "O que meus dados dizem que eu deveria melhorar primeiro?",
               ].map((q) => (
-                <div key={q} className="flex items-start gap-2.5 rounded-xl bg-primary-foreground/10 border border-primary-foreground/15 p-4">
-                  <MessageCircle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "hsl(41 70% 62%)" }} />
+                <div key={q} className="flex items-start gap-2.5 rounded-xl bg-white/10 border border-white/15 p-4">
+                  <MessageCircle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "hsl(var(--gold))" }} />
                   <p className="text-sm">{q}</p>
                 </div>
               ))}
@@ -414,7 +400,7 @@ export default function Landing() {
               <AccordionTrigger className="text-left">Preciso organizar a vida inteira de uma vez?</AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
                 Não — e é melhor que não. Você escolhe por onde começar (de um pilar aos quatro) e ativa o
-                resto quando fizer sentido. O Ascende premia consistência, não ambição de primeiro dia.
+                resto quando fizer sentido. O Ascend premia consistência, não ambição de primeiro dia.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="q3">
@@ -428,7 +414,7 @@ export default function Landing() {
               <AccordionTrigger className="text-left">E a minha fé, entra como nesse app? E se eu não tiver religião?</AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
                 Do seu jeito, nos dois casos. Quem tem uma prática define o nome dela — oração, meditação,
-                culto, silêncio — e o Ascende acompanha esse compromisso no seu vocabulário, sem nunca sugerir
+                culto, silêncio — e o Ascend acompanha esse compromisso no seu vocabulário, sem nunca sugerir
                 ou comparar crenças. Quem não tem religião ativa o modo "Mente & Foco" nos ajustes: o pilar
                 vira desenvolvimento mental puro (diário, humor, foco), sem nenhum vocabulário espiritual.
               </AccordionContent>
@@ -463,11 +449,11 @@ export default function Landing() {
       <footer className="border-t">
         <div className="container py-8 text-center">
           <p className="text-xs text-muted-foreground max-w-2xl mx-auto">
-            O Ascende não substitui médicos, nutricionistas, psicólogos ou consultores de investimento,
+            O Ascend não substitui médicos, nutricionistas, psicólogos ou consultores de investimento,
             e não faz recomendações de produtos financeiros. Se você estiver passando por um momento
             difícil, o CVV atende 24h pelo telefone 188.
           </p>
-          <p className="text-xs text-muted-foreground mt-3">© {new Date().getFullYear()} Ascende</p>
+          <p className="text-xs text-muted-foreground mt-3">© {new Date().getFullYear()} Ascend</p>
         </div>
       </footer>
     </div>

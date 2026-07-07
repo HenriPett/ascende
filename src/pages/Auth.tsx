@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import Logo from "@/components/core/Logo";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -65,13 +66,8 @@ export default function Auth() {
   return (
     <div className="min-h-dvh grid place-items-center bg-background px-4">
       <div className="w-full max-w-sm">
-        <Link to="/" className="flex items-center justify-center gap-2 mb-6">
-          <svg viewBox="0 0 64 64" className="w-9 h-9" aria-hidden>
-            <rect width="64" height="64" rx="16" fill="hsl(var(--primary))" />
-            <path d="M14 46 L32 16 L50 46" fill="none" stroke="hsl(var(--gold))" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="32" cy="16" r="4.5" fill="hsl(var(--gold))" />
-          </svg>
-          <span className="font-display font-semibold text-2xl">Ascende</span>
+        <Link to="/" className="flex items-center justify-center mb-6">
+          <Logo size="lg" />
         </Link>
 
         <Card className="p-6">

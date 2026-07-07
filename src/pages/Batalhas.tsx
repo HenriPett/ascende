@@ -350,7 +350,7 @@ export default function Batalhas() {
 
       <p className="text-xs text-muted-foreground">
         Batalhas com álcool, drogas ou apostas merecem reforço profissional: CAPS, Alcoólicos Anônimos,
-        Narcóticos Anônimos e Jogadores Anônimos existem, funcionam e são gratuitos. O Ascende é seu
+        Narcóticos Anônimos e Jogadores Anônimos existem, funcionam e são gratuitos. O Ascend é seu
         apoio diário — não substitui tratamento.
       </p>
     </div>

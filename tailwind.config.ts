@@ -8,7 +8,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ["Outfit", "system-ui", "sans-serif"],
-        display: ["Fraunces", "Georgia", "serif"],
+        display: ["Sora", "Outfit", "system-ui", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",

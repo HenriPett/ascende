@@ -165,7 +165,7 @@ export default function Score() {
                 className="absolute inset-y-0 left-0 rounded-full"
                 style={{
                   width: `${progress * 100}%`,
-                  background: "linear-gradient(90deg, hsl(41 62% 42%), hsl(41 75% 60%))",
+                  background: "linear-gradient(90deg, hsl(42 88% 48%), hsl(46 96% 62%))",
                   transition: "width .6s ease",
                 }}
               />

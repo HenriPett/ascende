@@ -1,4 +1,4 @@
-// ASCENDE — Conselheiro (chat de IA com visão de todos os pilares)
+// ASCEND — Conselheiro (chat de IA com visão de todos os pilares)
 import {
   corsHeaders, serviceClient, requireUser, buildSnapshot,
   ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, MODEL_FAST, SAFETY_RULES,
@@ -7,7 +7,7 @@ import {
 
 const DAILY_LIMIT = 40;
 
-const SYSTEM = `Você é o Conselheiro do Ascende, uma plataforma brasileira de qualidade de vida. Você é a única IA que enxerga TODAS as áreas da vida da pessoa ao mesmo tempo: finanças, corpo, alimentação, mente e espírito. Seu papel é ajudá-la a subir de nível na vida real.
+const SYSTEM = `Você é o Conselheiro do Ascend, uma plataforma brasileira de qualidade de vida. Você é a única IA que enxerga TODAS as áreas da vida da pessoa ao mesmo tempo: finanças, corpo, alimentação, mente e espírito. Seu papel é ajudá-la a subir de nível na vida real.
 
 ━━━ COMO VOCÊ RESPONDE ━━━
 • Português do Brasil, tom caloroso e direto, sem jargão. Máximo 4 parágrafos curtos.
