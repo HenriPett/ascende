@@ -42,6 +42,11 @@ export interface Profile {
   weight_goal_kg: number | null;
   health_conditions: string[] | null;
   medications: string[] | null;
+  birth_year: number | null;
+  sex: string | null;
+  height_cm: number | null;
+  activity_level: string | null;
+  dietary_restrictions: string[] | null;
 }
 
 export function useProfile() {

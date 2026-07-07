@@ -17,6 +17,7 @@ import Alimentacao from "@/pages/Alimentacao";
 import Mente from "@/pages/Mente";
 import Score from "@/pages/Score";
 import Batalhas from "@/pages/Batalhas";
+import Planos from "@/pages/Planos";
 import Ajustes from "@/pages/Ajustes";
 import NotFound from "@/pages/NotFound";
 
@@ -77,6 +78,7 @@ export default function App() {
               <Route path="alimentacao" element={<Alimentacao />} />
               <Route path="mente" element={<Mente />} />
               <Route path="batalhas" element={<Batalhas />} />
+              <Route path="planos" element={<Planos />} />
               <Route path="score" element={<Score />} />
               <Route path="ajustes" element={<Ajustes />} />
             </Route>

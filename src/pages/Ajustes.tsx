@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "sonner";
-import { LogOut, Loader2, Smartphone, Share, Sun, Moon, Monitor } from "lucide-react";
+import { LogOut, Loader2, Smartphone, Share, Sun, Moon, Monitor, Plus, X } from "lucide-react";
 import { PILLARS, type PillarId } from "@/lib/pillars";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,12 @@ export default function Ajustes() {
   const [budget, setBudget] = useState("");
   const [spirit, setSpirit] = useState("");
   const [hasReligion, setHasReligion] = useState(true);
+  const [birthYear, setBirthYear] = useState("");
+  const [sex, setSex] = useState("nao_informar");
+  const [heightCm, setHeightCm] = useState("");
+  const [activity, setActivity] = useState("nao_informar");
+  const [restrictions, setRestrictions] = useState<string[]>([]);
+  const [restrictionInput, setRestrictionInput] = useState("");
   const [pillars, setPillars] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -43,6 +50,11 @@ export default function Ajustes() {
     setBudget(profile.monthly_budget != null ? String(profile.monthly_budget) : "");
     setSpirit(profile.spirituality_label ?? "");
     setHasReligion(profile.has_religion !== false);
+    setBirthYear(profile.birth_year ? String(profile.birth_year) : "");
+    setSex(profile.sex ?? "nao_informar");
+    setHeightCm(profile.height_cm ? String(profile.height_cm) : "");
+    setActivity(profile.activity_level ?? "nao_informar");
+    setRestrictions(profile.dietary_restrictions ?? []);
     setPillars(profile.pillars ?? []);
   }, [profile]);
 
@@ -59,6 +71,11 @@ export default function Ajustes() {
       monthly_budget: budget ? Number(budget) : null,
       spirituality_label: hasReligion ? (spirit.trim() || null) : null,
       has_religion: hasReligion,
+      birth_year: birthYear && Number(birthYear) > 1900 && Number(birthYear) <= new Date().getFullYear() ? Number(birthYear) : null,
+      sex: sex === "nao_informar" ? null : sex,
+      height_cm: heightCm && Number(heightCm.replace(",", ".")) > 80 ? Number(heightCm.replace(",", ".")) : null,
+      activity_level: activity === "nao_informar" ? null : activity,
+      dietary_restrictions: restrictions,
       pillars,
     }).eq("user_id", user.id);
     setSaving(false);
@@ -143,6 +160,94 @@ export default function Ajustes() {
               placeholder="oração, meditação, silêncio..." />
           </div>
         )}
+      </Card>
+
+      {/* Sobre você: a base dos planos personalizados */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="font-display font-semibold">Sobre você</h2>
+          <p className="text-xs text-muted-foreground">
+            O Conselheiro usa isso para montar planos de verdade (alimentar, treino, financeiro).
+            Sem esses dados, ele pede antes de gerar.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="space-y-1.5">
+            <Label htmlFor="birth-year">Ano de nascimento</Label>
+            <Input id="birth-year" inputMode="numeric" placeholder="1995" maxLength={4}
+              value={birthYear} onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, ""))} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Sexo</Label>
+            <Select value={sex} onValueChange={setSex}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nao_informar">Prefiro não dizer</SelectItem>
+                <SelectItem value="feminino">Feminino</SelectItem>
+                <SelectItem value="masculino">Masculino</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="height">Altura (cm)</Label>
+            <Input id="height" inputMode="numeric" placeholder="172"
+              value={heightCm} onChange={(e) => setHeightCm(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Nível de atividade</Label>
+            <Select value={activity} onValueChange={setActivity}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nao_informar">Não sei dizer</SelectItem>
+                <SelectItem value="sedentario">Sedentário</SelectItem>
+                <SelectItem value="leve">Leve (1 a 2x/semana)</SelectItem>
+                <SelectItem value="moderado">Moderado (3 a 4x/semana)</SelectItem>
+                <SelectItem value="intenso">Intenso (5x ou mais)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Restrições alimentares</Label>
+          {restrictions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {restrictions.map((r, i) => (
+                <span key={`${r}-${i}`} className="inline-flex items-center gap-1.5 text-xs rounded-full border bg-muted/60 px-2.5 py-1 max-w-full">
+                  <span className="truncate">{r}</span>
+                  <button type="button" onClick={() => setRestrictions((rs) => rs.filter((_, j) => j !== i))}
+                    aria-label={`Remover ${r}`} className="text-muted-foreground hover:text-foreground shrink-0">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Input maxLength={60} placeholder='Ex.: "vegetariano", "sem lactose"'
+              className="min-w-0 flex-1" value={restrictionInput}
+              onChange={(e) => setRestrictionInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const v = restrictionInput.trim();
+                  if (v && !restrictions.some((x) => x.toLowerCase() === v.toLowerCase()) && restrictions.length < 15) {
+                    setRestrictions((rs) => [...rs, v]); setRestrictionInput("");
+                  }
+                }
+              }} />
+            <Button type="button" size="icon" variant="secondary" className="shrink-0" aria-label="Adicionar restrição"
+              onClick={() => {
+                const v = restrictionInput.trim();
+                if (v && !restrictions.some((x) => x.toLowerCase() === v.toLowerCase()) && restrictions.length < 15) {
+                  setRestrictions((rs) => [...rs, v]); setRestrictionInput("");
+                }
+              }}>
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">Lembre de tocar em "Salvar ajustes" no fim da página.</p>
+        </div>
       </Card>
 
       <Card className="p-4 space-y-3">

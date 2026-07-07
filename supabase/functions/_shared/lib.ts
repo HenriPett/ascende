@@ -40,7 +40,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   const monthStart = new Date();
   monthStart.setDate(1);
 
-  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, { data: xp }, { data: battles }, { data: bCheckins }] =
+  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, { data: xp }, { data: battles }, { data: bCheckins }, { data: plans }] =
     await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       supabase.from("life_events").select("pillar,kind,occurred_at,payload")
@@ -55,6 +55,9 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       supabase.from("battle_checkins").select("battle_id,checkin_date,status,trigger_label")
         .eq("user_id", userId).gte("checkin_date", since30.slice(0, 10))
         .order("checkin_date", { ascending: false }),
+      supabase.from("plans").select("title,kind,content,created_at")
+        .eq("user_id", userId).eq("status", "ativo")
+        .order("created_at", { ascending: false }).limit(3),
     ]);
 
   const lines: string[] = [];
@@ -62,6 +65,24 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   lines.push(`Nome: ${p.name || "não informado"}.`);
   if (p.goal) lines.push(`Objetivo declarado: ${p.goal}.`);
   lines.push(`Pilares ativos: ${(p.pillars ?? []).join(", ") || "nenhum ainda"}.`);
+
+  // Dados pessoais (base de qualquer plano personalizado)
+  const personal: string[] = [];
+  const missing: string[] = [];
+  if (p.birth_year && Number(p.birth_year) > 1900) {
+    personal.push(`idade ~${new Date().getFullYear() - Number(p.birth_year)} anos`);
+  } else missing.push("idade (ano de nascimento)");
+  if (p.sex) personal.push(`sexo ${p.sex}`); else missing.push("sexo");
+  if (p.height_cm && Number(p.height_cm) > 80) {
+    personal.push(`altura ${Number(p.height_cm)} cm`);
+  } else missing.push("altura");
+  if (p.activity_level) personal.push(`nível de atividade ${p.activity_level}`);
+  else missing.push("nível de atividade");
+  const restrictions = Array.isArray(p.dietary_restrictions)
+    ? (p.dietary_restrictions as unknown[]).map(String).filter(Boolean)
+    : [];
+  if (restrictions.length) personal.push(`restrições alimentares: ${restrictions.join(", ")}`);
+  if (personal.length) lines.push(`Dados pessoais: ${personal.join("; ")}.`);
   if (p.has_religion === false) {
     lines.push(`IMPORTANTE: a pessoa NÃO tem prática religiosa. O pilar dela é "Mente & Foco" — desenvolvimento mental (foco, clareza, meditação laica, leitura). Nunca use vocabulário espiritual ou religioso com ela.`);
   } else if (p.spirituality_label) {
@@ -223,6 +244,30 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       (relTriggers ? ` (gatilhos das recaídas: ${relTriggers})` : "") +
       `. Últimos check-ins (recentes primeiro): ${cks.slice(0, 7).map((c) => c.status).join(", ")}.`
     );
+  }
+
+    if (!kinds["weight"]?.length) missing.push("peso atual (registrar na aba Alimentação)");
+
+  if (missing.length) {
+    lines.push(
+      `DADOS IMPORTANTES AINDA NÃO PREENCHIDOS: ${missing.join("; ")}. ` +
+      `Para planos definitivos (alimentar, treino, financeiro), siga o protocolo de planos do seu prompt: peça o que falta antes de gerar. ` +
+      `Onde preencher: idade, sexo, altura, atividade e restrições em Ajustes (seção "Sobre você"); peso na aba Alimentação; condições e medicamentos na Vitalidade.`
+    );
+  }
+
+  // Planos ativos (entregas anteriores do Conselheiro que a pessoa salvou)
+  const activePlans = (plans ?? []) as { title: string; kind: string; content: string; created_at: string }[];
+  if (activePlans.length) {
+    lines.push(`PLANOS ATIVOS SALVOS (acompanhe a adesão e mantenha coerência com eles):`);
+    activePlans.forEach((pl, i) => {
+      const when = String(pl.created_at).slice(0, 10);
+      if (i < 2) {
+        lines.push(`• "${pl.title}" (${pl.kind}, criado em ${when}): ${pl.content.slice(0, 600)}${pl.content.length > 600 ? "…" : ""}`);
+      } else {
+        lines.push(`• "${pl.title}" (${pl.kind}, criado em ${when}).`);
+      }
+    });
   }
 
   return lines.join("\n");

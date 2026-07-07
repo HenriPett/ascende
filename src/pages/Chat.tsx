@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, FileText, Image as ImageIcon, Check } from "lucide-react";
+import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, FileText, Image as ImageIcon, Check, ClipboardList } from "lucide-react";
 import { Markdown } from "@/components/core/Markdown";
 import { Checkbox } from "@/components/ui/checkbox";
 import { pillarById } from "@/lib/pillars";
@@ -16,6 +16,13 @@ import { useDictation } from "@/hooks/useDictation";
 import { cn } from "@/lib/utils";
 
 interface Msg { id?: string; role: "user" | "assistant"; content: string; pending?: boolean }
+
+interface ProposedPlan {
+  title: string;
+  kind: string;
+  pillar: string | null;
+  content: string;
+}
 
 interface Attachment {
   name: string;
@@ -86,6 +93,8 @@ export default function Chat() {
   const [local, setLocal] = useState<Msg[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [captured, setCaptured] = useState<ProposedEvent[] | null>(null);
+  const [proposedPlan, setProposedPlan] = useState<ProposedPlan | null>(null);
+  const [savingPlan, setSavingPlan] = useState(false);
   const [capturedChecked, setCapturedChecked] = useState<boolean[]>([]);
   const [savingCaptured, setSavingCaptured] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -109,7 +118,7 @@ export default function Chat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, sending, captured]);
+  }, [messages.length, sending, captured, proposedPlan]);
 
   // ── Anexos ───────────────────────────────────────────────────
   const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,6 +166,7 @@ export default function Chat() {
     setInput("");
     setAttachments([]);
     setCaptured(null);
+    setProposedPlan(null);
     setSending(true);
     setLocal((l) => [...l, {
       role: "user",
@@ -175,6 +185,9 @@ export default function Chat() {
       if (events.length) {
         setCaptured(events);
         setCapturedChecked(events.map(() => true));
+      }
+      if (data?.plan?.title && data?.plan?.content) {
+        setProposedPlan(data.plan as ProposedPlan);
       }
       qc.invalidateQueries({ queryKey: ["chat", user?.id] });
     } catch (e) {
@@ -208,6 +221,24 @@ export default function Chat() {
     } finally {
       setSavingCaptured(false);
     }
+  };
+
+  // ── Salvar plano proposto pelo Conselheiro ───────────────────
+  const savePlan = async () => {
+    if (!user || !proposedPlan) return;
+    setSavingPlan(true);
+    const { error } = await supabase.from("plans").insert({
+      user_id: user.id,
+      title: proposedPlan.title,
+      kind: proposedPlan.kind,
+      pillar: proposedPlan.pillar,
+      content: proposedPlan.content,
+    });
+    setSavingPlan(false);
+    if (error) { toast.error("Não consegui salvar o plano."); return; }
+    toast.success("Plano salvo! Ele fica em Pilares > Meus planos, e o Conselheiro passa a acompanhá-lo.");
+    setProposedPlan(null);
+    qc.invalidateQueries({ queryKey: ["plans"] });
   };
 
   return (
@@ -262,6 +293,28 @@ export default function Chat() {
           <div className="flex justify-start">
             <div className="bg-card border rounded-2xl rounded-bl-sm px-4 py-3">
               <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            </div>
+          </div>
+        )}
+
+        {/* Plano pronto para salvar fora do chat */}
+        {proposedPlan && !sending && (
+          <div className="rounded-xl border border-gold/40 bg-card p-3 space-y-2 animate-fade-up">
+            <p className="text-sm font-medium flex items-center gap-1.5">
+              <ClipboardList className="w-4 h-4 text-gold" />
+              Plano pronto: {proposedPlan.title}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Quer guardar fora do chat? Ele fica em Pilares &gt; Meus planos e o Conselheiro
+              passa a acompanhar sua adesão a ele.
+            </p>
+            <div className="flex gap-2 justify-end pt-0.5">
+              <Button variant="ghost" size="sm" onClick={() => setProposedPlan(null)} disabled={savingPlan}>
+                <X className="w-4 h-4 mr-1" /> Agora não
+              </Button>
+              <Button size="sm" onClick={savePlan} disabled={savingPlan}>
+                {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Salvar plano</>)}
+              </Button>
             </div>
           </div>
         )}

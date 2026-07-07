@@ -17,10 +17,42 @@ const SYSTEM = `Você é o Conselheiro do Ascend, uma plataforma brasileira de q
 • Termine com UM próximo passo pequeno e concreto.
 • Se faltar dado importante, diga o que registrar para você ajudar melhor.
 • ESTILO: escreva como uma pessoa escreve, não como IA. NUNCA use travessão ou meia-risca (— ou –) na resposta; no lugar, use vírgula, dois-pontos, parênteses ou comece outra frase. Evite também fórmulas prontas como "Vamos lá!", "Com certeza!" ou fechos genéricos.
+
+━━━ PROTOCOLO DE PLANOS DEFINITIVOS ━━━
+Plano definitivo = plano alimentar/dieta, plano de treino, orçamento/plano financeiro ou rotina estruturada que a pessoa vai seguir por dias ou semanas. Para esses, a regra muda: profundidade exige dados.
+
+DADOS OBRIGATÓRIOS por tipo (verifique no retrato e na conversa):
+• Plano alimentar: idade, sexo, altura, peso atual, objetivo (do retrato ou da conversa), nível de atividade, restrições alimentares e condições de saúde (se existirem, considere; se as listas estiverem vazias, confirme na conversa que não há).
+• Plano de treino: idade, nível de atividade, objetivo, condições de saúde/lesões, dias disponíveis por semana (pergunte se não souber).
+• Plano financeiro/orçamento: renda mensal, teto de gastos desejado, objetivo.
+
+REGRAS:
+1. Se QUALQUER dado obrigatório estiver ausente, NÃO gere o plano completo. Responda curto: diga em uma frase por que precisa dos dados, liste o que falta e onde preencher (idade, sexo, altura, atividade e restrições em Ajustes na seção "Sobre você"; peso na aba Alimentação; condições e medicamentos na Vitalidade; renda e teto em Ajustes). A pessoa também pode responder direto na conversa: aceite e use.
+2. Só gere o plano completo quando tiver tudo. Aí sim vá fundo: quantidades, horários, valores em reais, alternativas econômicas, adaptações às condições de saúde e medicamentos do retrato.
+3. Exceção: se a pessoa disser explicitamente para gerar mesmo sem os dados, gere uma versão provisória começando com a seção "Premissas que assumi" listando cada suposição.
+4. Ao entregar um plano completo (caso 2 ou 3), ALÉM do texto da resposta, chame a ferramenta registrar_plano com o plano em markdown. O app oferece à pessoa salvar o plano na área "Meus planos". Não diga que "salvou": diga que o plano está pronto para ser salvo.
+5. Perguntas pontuais ("quantas calorias tem ovo?", "treino de peito é bom 2x por semana?") NÃO são planos definitivos: responda normalmente, sem exigir dados.
 ${SAFETY_RULES}
 
 ━━━ RETRATO ATUAL DA PESSOA (dados reais da plataforma) ━━━
 `;
+
+const SAVE_PLAN_TOOL = {
+  name: "registrar_plano",
+  description:
+    "Registra um plano definitivo completo (alimentar, treino, financeiro, rotina) que você acabou de montar na resposta. " +
+    "Chame APENAS quando entregar um plano completo. O conteúdo deve ser o plano inteiro em markdown, autossuficiente (sem depender do resto da conversa).",
+  input_schema: {
+    type: "object",
+    properties: {
+      title: { type: "string", description: "Título curto do plano. Ex.: 'Plano alimentar para ganho de massa'." },
+      kind: { type: "string", enum: ["alimentar", "treino", "financeiro", "rotina", "outro"] },
+      pillar: { type: "string", enum: ["prosperidade", "vitalidade", "alimentacao", "mente"], description: "Pilar principal do plano." },
+      content_markdown: { type: "string", description: "O plano COMPLETO em markdown: seções, quantidades, horários, valores. Autossuficiente." },
+    },
+    required: ["title", "kind", "content_markdown"],
+  },
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -97,8 +129,10 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: MODEL_SMART,
-        max_tokens: 1200,
+        max_tokens: 3000,
         system: SYSTEM + snapshot,
+        tools: [SAVE_PLAN_TOOL],
+        tool_choice: { type: "auto" },
         messages,
       }),
     });
@@ -138,7 +172,23 @@ Deno.serve(async (req) => {
       return json({ error: "O Conselheiro está indisponível agora. Tente de novo em instantes." }, 502);
     }
     const data = await res.json();
-    const reply = (data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
+    // deno-lint-ignore no-explicit-any
+    const blocks = (data.content ?? []) as any[];
+    let reply = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+
+    // Plano proposto pelo modelo (o app pede confirmação antes de salvar)
+    let plan: { title: string; kind: string; pillar: string | null; content: string } | null = null;
+    const planBlock = blocks.find((b) => b.type === "tool_use" && b.name === "registrar_plano");
+    if (planBlock?.input?.title && planBlock?.input?.content_markdown) {
+      const inp = planBlock.input;
+      plan = {
+        title: String(inp.title).slice(0, 120),
+        kind: ["alimentar", "treino", "financeiro", "rotina", "outro"].includes(inp.kind) ? inp.kind : "outro",
+        pillar: ["prosperidade", "vitalidade", "alimentacao", "mente"].includes(inp.pillar) ? inp.pillar : null,
+        content: String(inp.content_markdown).slice(0, 20000),
+      };
+      if (!reply) reply = plan.content; // segurança: nunca responder vazio
+    }
 
     await supabase.from("chat_messages").insert([
       { user_id: user.id, role: "user", content: attNames.length ? `${message}\n📎 ${attNames.join(", ")}` : message },
@@ -146,7 +196,7 @@ Deno.serve(async (req) => {
     ]);
 
     const captured = await capturePromise;
-    return json({ reply, captured });
+    return json({ reply, captured, plan });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);
