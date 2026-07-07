@@ -11,6 +11,8 @@ export interface ProposedEvent {
   category?: string;
   hours?: number;
   description?: string;
+  meal_type?: string;
+  duration_min?: number;
   muscles?: string[];
   ml?: number;
   kg?: number;
@@ -37,6 +39,8 @@ export async function saveProposedEvents(userId: string, events: ProposedEvent[]
       if (ev.hours) payload.hours = ev.hours;
       if (ev.description) payload.description = ev.description;
       if (ev.muscles?.length) payload.muscles = ev.muscles;
+      if (ev.meal_type) payload.meal_type = ev.meal_type;
+      if (ev.duration_min && ev.duration_min > 0) payload.duration_min = Math.round(ev.duration_min);
       if (ev.ml && ev.ml > 0) payload.ml = Math.round(ev.ml);
       if (ev.kg && ev.kg > 20 && ev.kg < 400) payload.kg = ev.kg;
       if (ev.mood_label) payload.label = ev.mood_label;

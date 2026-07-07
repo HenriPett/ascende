@@ -31,6 +31,7 @@ export default function Vitalidade() {
   const [newHabit, setNewHabit] = useState("");
   const [newPillar, setNewPillar] = useState("vitalidade");
   const [sleepHours, setSleepHours] = useState("");
+  const [sleepType, setSleepType] = useState<"sleep" | "nap" | null>(null);
   const [workout, setWorkout] = useState("");
   const [muscles, setMuscles] = useState<string[]>([]);
   const [conditionInput, setConditionInput] = useState("");
@@ -81,17 +82,21 @@ export default function Vitalidade() {
     queryFn: async () => {
       const since = new Date(Date.now() - 27 * 864e5).toISOString().slice(0, 10);
       const since30 = new Date(Date.now() - 30 * 864e5).toISOString();
-      const [{ data: habits }, { data: logs }, { data: workouts }] = await Promise.all([
+      const [{ data: habits }, { data: logs }, { data: workouts }, { data: sleepToday }] = await Promise.all([
         supabase.from("habits").select("id,name,pillar").eq("user_id", user!.id).eq("active", true).order("created_at"),
         supabase.from("habit_logs").select("id,habit_id,log_date").eq("user_id", user!.id).gte("log_date", since),
         supabase.from("life_events").select("id,occurred_at,payload")
           .eq("user_id", user!.id).eq("kind", "workout").gte("occurred_at", since30)
           .order("occurred_at", { ascending: false }).limit(120),
+        supabase.from("life_events").select("id")
+          .eq("user_id", user!.id).eq("kind", "sleep")
+          .gte("occurred_at", new Date(new Date().setHours(0, 0, 0, 0)).toISOString()).limit(1),
       ]);
       return {
         habits: (habits ?? []) as Habit[],
         logs: (logs ?? []) as HLog[],
         workouts: (workouts ?? []) as WorkoutEvent[],
+        sleptTonight: (sleepToday ?? []).length > 0,
       };
     },
   });
@@ -125,16 +130,25 @@ export default function Vitalidade() {
     invalidate();
   };
 
+  // Tipo efetivo: o escolhido; sem escolha, noite — mas se a noite já foi registrada hoje, soneca
+  const effectiveSleepType: "sleep" | "nap" = sleepType ?? (data?.sleptTonight ? "nap" : "sleep");
+
   const logSleep = async () => {
     const h = Number(sleepHours.replace(",", "."));
-    if (!user || !h || h <= 0 || h > 24) { toast.error("Quantas horas você dormiu? Ex.: 7,5"); return; }
+    const isNap = effectiveSleepType === "nap";
+    const max = isNap ? 6 : 24;
+    if (!user || !h || h <= 0 || h > max) {
+      toast.error(isNap ? "Quanto durou a soneca? Ex.: 1 ou 0,5" : "Quantas horas você dormiu? Ex.: 7,5");
+      return;
+    }
     const { error } = await supabase.from("life_events").insert({
-      user_id: user.id, pillar: "vitalidade", kind: "sleep",
-      payload: { hours: h, summary: `Sono: ${h}h` }, source: "form",
+      user_id: user.id, pillar: "vitalidade", kind: isNap ? "nap" : "sleep",
+      payload: { hours: h, summary: isNap ? `Soneca: ${h}h` : `Sono: ${h}h` }, source: "form",
     });
     if (error) { toast.error("Não consegui salvar."); return; }
-    toast.success("Sono registrado. +5 XP");
+    toast.success(isNap ? "Soneca registrada. +2 XP" : "Sono registrado. +5 XP");
     setSleepHours("");
+    setSleepType(null);
     invalidate();
   };
 
@@ -201,9 +215,31 @@ export default function Vitalidade() {
       {/* Registro rápido: sono e treino */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         <Card className="p-4 space-y-2">
-          <p className="text-sm font-medium flex items-center gap-1.5"><Moon className="w-4 h-4" /> Sono da última noite</p>
+          <p className="text-sm font-medium flex items-center gap-1.5"><Moon className="w-4 h-4" /> Sono</p>
+          <div className="flex gap-1.5">
+            {([["sleep", "Noite"], ["nap", "Soneca"]] as const).map(([t, label]) => (
+              <button
+                key={t} type="button" onClick={() => setSleepType(t)}
+                className={cn(
+                  "text-xs rounded-full border px-3 py-1 transition-colors",
+                  effectiveSleepType === t ? "border-transparent text-white" : "text-muted-foreground hover:bg-muted/60"
+                )}
+                style={effectiveSleepType === t ? { background: "hsl(var(--vitalidade))" } : undefined}
+                aria-pressed={effectiveSleepType === t}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {data?.sleptTonight && effectiveSleepType === "nap" && sleepType === null && (
+            <p className="text-[11px] text-muted-foreground">
+              Sono da noite já registrado hoje, então sugeri soneca. Pode trocar acima.
+            </p>
+          )}
           <div className="flex gap-2">
-            <Input inputMode="decimal" placeholder="Horas — ex.: 7,5" value={sleepHours}
+            <Input inputMode="decimal"
+              placeholder={effectiveSleepType === "nap" ? "Duração em horas: 0,5 = 30 min" : "Horas na noite: ex. 7,5"}
+              value={sleepHours}
               onChange={(e) => setSleepHours(e.target.value)} />
             <Button onClick={logSleep} variant="secondary">Salvar</Button>
           </div>

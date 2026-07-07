@@ -137,7 +137,9 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   for (const e of events ?? []) (kinds[e.kind] ??= []).push(e);
 
   const sleeps = (kinds["sleep"] ?? []).map((e) => Number((e.payload as any)?.hours)).filter((n) => n > 0);
-  if (sleeps.length) lines.push(`SONO: média de ${(sleeps.reduce((a, b) => a + b, 0) / sleeps.length).toFixed(1)}h nos últimos ${sleeps.length} registros.`);
+  if (sleeps.length) lines.push(`SONO NOTURNO: média de ${(sleeps.reduce((a, b) => a + b, 0) / sleeps.length).toFixed(1)}h nos últimos ${sleeps.length} registros (sonecas contadas à parte).`);
+  const naps = (kinds["nap"] ?? []).map((e) => Number((e.payload as any)?.hours)).filter((n) => n > 0);
+  if (naps.length) lines.push(`SONECAS (30d): ${naps.length}, média de ${(naps.reduce((a, b) => a + b, 0) / naps.length).toFixed(1)}h cada.`);
 
   const moods = (kinds["mood"] ?? []).slice(0, 10).map((e) => (e.payload as any)?.label ?? (e.payload as any)?.score).filter(Boolean);
   if (moods.length) lines.push(`HUMOR (mais recentes primeiro): ${moods.join(", ")}.`);
@@ -148,8 +150,12 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       for (const m of ((e.payload as any)?.muscles ?? []) as string[]) mCount[m] = (mCount[m] ?? 0) + 1;
     }
     const dist = Object.entries(mCount).sort((a, b) => b[1] - a[1]).map(([m, n]) => `${m} ${n}x`).join(", ");
+    const durations = kinds["workout"].map((e) => Number((e.payload as any)?.duration_min)).filter((n) => n > 0);
+    const durInfo = durations.length
+      ? ` Duração informada em ${durations.length} treinos (média ${Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)} min).`
+      : "";
     lines.push(`TREINOS nos últimos 30 dias: ${kinds["workout"].length}.` +
-      (dist ? ` Grupos trabalhados: ${dist}.` : ""));
+      (dist ? ` Grupos trabalhados: ${dist}.` : "") + durInfo);
   }
 
   // Peso e composição corporal
@@ -198,7 +204,16 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     const kcalInfo = kcalVals.length
       ? ` Calorias estimadas registradas em ${kcalVals.length} refeições (média ~${Math.round(kcalVals.reduce((a, b) => a + b, 0) / kcalVals.length)} kcal/refeição — estimativas por foto, aproximadas).`
       : "";
-    lines.push(`ALIMENTAÇÃO: ${kinds["meal"].length} refeições registradas em 30 dias. Últimas: ${last}.${kcalInfo}`);
+    const typeCount: Record<string, number> = {};
+    const TYPE_LABEL: Record<string, string> = { cafe_da_manha: "café da manhã", almoco: "almoço", jantar: "jantar", lanche: "lanche" };
+    for (const e of kinds["meal"]) {
+      const t = String((e.payload as any)?.meal_type ?? "");
+      if (TYPE_LABEL[t]) typeCount[t] = (typeCount[t] ?? 0) + 1;
+    }
+    const typeInfo = Object.keys(typeCount).length
+      ? ` Distribuição conhecida: ${Object.entries(typeCount).map(([t, n]) => `${TYPE_LABEL[t]} ${n}x`).join(", ")} (lanches não são refeições principais — considere isso ao avaliar a rotina).`
+      : "";
+    lines.push(`ALIMENTAÇÃO: ${kinds["meal"].length} refeições registradas em 30 dias. Últimas: ${last}.${kcalInfo}${typeInfo}`);
   }
 
   // Hidratação (água) — total de hoje e média diária dos últimos 7 dias
@@ -304,21 +319,26 @@ export const CAPTURE_TOOL = {
           properties: {
             kind: {
               type: "string",
-              enum: ["transaction", "sleep", "workout", "meal", "water", "weight", "mood", "gratitude", "practice", "note"],
+              enum: ["transaction", "sleep", "nap", "workout", "meal", "water", "weight", "mood", "gratitude", "practice", "note"],
               description: "Tipo do evento.",
             },
             pillar: {
               type: "string",
               enum: ["prosperidade", "vitalidade", "alimentacao", "mente"],
               description:
-                "Pilar: transaction→prosperidade; sleep/workout→vitalidade; " +
+                "Pilar: transaction→prosperidade; sleep/nap/workout→vitalidade; " +
                 "meal/water/weight→alimentacao; mood/gratitude/practice→mente.",
             },
             summary: { type: "string", description: "Resumo curto em português para o usuário confirmar. Ex.: 'Gasto de R$ 47 em Mercado' ou 'Treino de costas'." },
             amount: { type: "number", description: "Valor em reais (apenas para transaction)." },
             tx_kind: { type: "string", enum: ["income", "expense"], description: "Entrada ou saída (apenas para transaction)." },
             category: { type: "string", description: "Categoria da transação. Ex.: Mercado, Transporte, Lazer, Salário." },
-            hours: { type: "number", description: "Horas de sono (apenas para sleep)." },
+            hours: { type: "number", description: "Horas dormidas (para sleep e nap). '40 minutos' vira 0.7." },
+            meal_type: {
+              type: "string", enum: ["cafe_da_manha", "almoco", "jantar", "lanche"],
+              description: "APENAS para meal: tipo da refeição, inferido do que a pessoa disse ('no almoço...', 'de manhã comi...', 'beliscei...'). Omita se não der para saber.",
+            },
+            duration_min: { type: "number", description: "APENAS para workout: duração em minutos, se mencionada ('corri 40 min' → 40)." },
             description: { type: "string", description: "Descrição livre (refeição, treino, nota...)." },
             muscles: {
               type: "array",
@@ -346,11 +366,12 @@ export const CAPTURE_SYSTEM = `Você extrai eventos estruturados de relatos do d
 Regras:
 • Extraia TODOS os eventos presentes no texto — um relato pode alimentar vários pilares de uma vez.
 • Valores em reais: "47", "R$47", "quarenta e sete" → amount 47. Gastos são expense; salário/recebimentos são income.
-• Sono mencionado ("dormi 5h", "dormi mal" → estime 5 e cite no summary que foi estimado) vira evento sleep.
+• Sono NOTURNO ("dormi 5h", "dormi mal" → estime 5 e cite no summary que foi estimado) vira sleep. Sonecas e cochilos ("tirei uma soneca", "cochilei 40 min", "dormi depois do almoço") viram nap com hours; NUNCA registre soneca como sleep — são coisas diferentes com pesos diferentes. Na dúvida entre noite e soneca, o horário e o contexto decidem (dormir "depois do almoço" é soneca).
 • Menções a treino/exercício viram workout — SEMPRE preencha muscles inferindo os grupos do exercício (corrida → Pernas e Cardio; "treinei costas" → Costas). Inclua os grupos no summary. Ex.: "Treino de corrida (Pernas, Cardio)".
+• Se a duração do treino for mencionada, preencha duration_min.
 • Água bebida ("tomei 2L de água", "bebi 500ml") vira water com ml.
 • Peso corporal ("me pesei, 78kg", "tô pesando 82") vira weight com kg.
-• Refeições viram meal. Oração/meditação/culto/leitura espiritual viram practice.
+• Refeições viram meal; quando o contexto disser qual (café da manhã, almoço, jantar, lanche/belisco), preencha meal_type e inclua no summary. Oração/meditação/culto/leitura espiritual viram practice.
 • Estados emocionais ("tô ansioso", "dia ótimo") viram mood, usando a palavra do próprio usuário em mood_label.
 • Se algo não se encaixar em nenhum tipo, use note.
 • Se o texto não contiver nenhum evento registrável — perguntas, pedidos de conselho, conversa — retorne events: [].
