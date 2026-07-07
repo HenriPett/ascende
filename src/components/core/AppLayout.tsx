@@ -99,13 +99,13 @@ export default function AppLayout() {
         className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-card border-t safe-bottom"
         aria-label="Principal"
       >
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-5 h-16">
           {NAV.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to} to={to} end={end}
               className={({ isActive }) =>
                 cn(
-                  "flex flex-col items-center gap-0.5 py-2.5 text-[11px]",
+                  "flex flex-col items-center justify-center gap-0.5 text-[11px]",
                   isActive ? "text-primary font-semibold" : "text-muted-foreground"
                 )
               }

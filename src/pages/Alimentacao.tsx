@@ -464,7 +464,7 @@ export default function Alimentacao() {
         </div>
 
         <input
-          ref={fileRef} type="file" accept="image/*" capture="environment"
+          ref={fileRef} type="file" accept="image/*"
           className="hidden" onChange={onPickPhoto}
         />
 
@@ -720,7 +720,7 @@ export default function Alimentacao() {
             </div>
           </div>
 
-          <input ref={bodyFileRef} type="file" accept="image/*" capture="environment"
+          <input ref={bodyFileRef} type="file" accept="image/*"
             className="hidden" onChange={onPickBodyPhoto} />
 
           {latestScan && !bodyEstimate && (

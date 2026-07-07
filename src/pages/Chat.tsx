@@ -207,15 +207,16 @@ export default function Chat() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto flex flex-col h-[calc(100dvh-9.5rem)] md:h-[calc(100dvh-7rem)]">
-      <div className="mb-3">
-        <h1 className="font-display text-2xl font-semibold">Conselheiro</h1>
-        <p className="text-sm text-muted-foreground">
+    <div className="fixed inset-x-0 top-14 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-10 bg-background md:static md:z-auto md:bg-transparent md:h-[calc(100dvh-7.5rem)]">
+      <div className="h-full w-full max-w-2xl mx-auto flex flex-col min-h-0 px-4 pt-3 md:px-0 md:pt-0">
+      <div className="mb-2 shrink-0">
+        <h1 className="font-display text-xl md:text-2xl font-semibold">Conselheiro</h1>
+        <p className="text-xs md:text-sm text-muted-foreground">
           A única IA que enxerga suas finanças, corpo, alimentação e mente ao mesmo tempo.
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-3 pb-3 pr-1">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-3 pb-3 pr-1">
         {isLoading && <Skeleton className="h-16 w-3/4" />}
 
         {!isLoading && messages.length === 0 && (
@@ -301,7 +302,7 @@ export default function Chat() {
 
       {/* Anexos pendentes */}
       {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 pt-2">
+        <div className="flex flex-wrap gap-1.5 pt-2 shrink-0">
           {attachments.map((a, i) => (
             <span key={i} className="inline-flex items-center gap-1.5 text-xs rounded-full border bg-card px-2.5 py-1 max-w-[220px]">
               {a.kind === "image" ? <ImageIcon className="w-3 h-3 shrink-0" /> : <FileText className="w-3 h-3 shrink-0" />}
@@ -315,7 +316,7 @@ export default function Chat() {
         </div>
       )}
 
-      <div className="flex gap-1.5 items-end pt-2 border-t">
+      <div className="flex gap-1.5 items-end pt-2 border-t shrink-0">
         <input
           ref={fileRef} type="file" multiple className="hidden"
           accept="image/*,.pdf,.txt,.md,.csv,.json"
@@ -349,9 +350,10 @@ export default function Chat() {
           <Send className="w-4 h-4" />
         </Button>
       </div>
-      <p className="text-[11px] text-muted-foreground pt-1.5">
+      <p className="text-[11px] text-muted-foreground pt-1.5 pb-2 md:pb-0 shrink-0">
         O Conselheiro não substitui médicos, psicólogos, nutricionistas ou consultores de investimento.
       </p>
+      </div>
     </div>
   );
 }

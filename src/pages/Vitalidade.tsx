@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Moon, Dumbbell, CircleCheck, Circle, BarChart3 } from "lucide-react";
+import { Plus, Trash2, Moon, Dumbbell, CircleCheck, Circle, BarChart3, HeartPulse, X } from "lucide-react";
 import { todayISO } from "@/lib/format";
 import { PILLARS } from "@/lib/pillars";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ const MUSCLES = ["Peito", "Costas", "Pernas", "Ombros", "Braços", "Core", "Card
 
 export default function Vitalidade() {
   const { user } = useAuth();
+  const { profile, refresh: refreshProfile } = useProfile();
   const qc = useQueryClient();
   const today = todayISO();
   const [newHabit, setNewHabit] = useState("");
@@ -31,6 +33,35 @@ export default function Vitalidade() {
   const [sleepHours, setSleepHours] = useState("");
   const [workout, setWorkout] = useState("");
   const [muscles, setMuscles] = useState<string[]>([]);
+  const [conditionInput, setConditionInput] = useState("");
+
+  // ── Condições de saúde (visíveis para o Conselheiro) ─────────
+  const conditions = profile?.health_conditions ?? [];
+
+  const saveConditions = async (next: string[]) => {
+    if (!user) return;
+    const { error } = await supabase.from("profiles")
+      .update({ health_conditions: next }).eq("user_id", user.id);
+    if (error) { toast.error("Não consegui salvar."); return; }
+    refreshProfile();
+  };
+
+  const addCondition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const c = conditionInput.trim().slice(0, 80);
+    if (!c) return;
+    if (conditions.length >= 20) { toast.error("Máximo de 20 itens — remova algum para adicionar outro."); return; }
+    if (conditions.some((x) => x.toLowerCase() === c.toLowerCase())) {
+      toast.info("Isso já está na sua lista."); return;
+    }
+    await saveConditions([...conditions, c]);
+    setConditionInput("");
+    toast.success("Anotado. O Conselheiro vai considerar isso nas sugestões.");
+  };
+
+  const removeCondition = async (idx: number) => {
+    await saveConditions(conditions.filter((_, i) => i !== idx));
+  };
 
   const { data } = useQuery({
     queryKey: ["vitalidade", user?.id],
@@ -292,6 +323,49 @@ export default function Vitalidade() {
           </Select>
           <Button type="submit" size="icon" className="shrink-0" aria-label="Criar hábito"><Plus className="w-4 h-4" /></Button>
         </form>
+      </Card>
+
+      {/* ── Saúde: condições para o Conselheiro considerar ──── */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="font-display font-semibold flex items-center gap-1.5">
+            <HeartPulse className="w-4 h-4" style={{ color: "hsl(var(--vitalidade))" }} />
+            Minha saúde
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Condições, alergias, lesões, medicamentos em uso — o que o Conselheiro precisa saber
+            para as sugestões de treino e alimentação respeitarem o seu corpo.
+            Ex.: "diabetes tipo 2", "alergia a amendoim", "hérnia de disco".
+          </p>
+        </div>
+
+        {conditions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {conditions.map((c, i) => (
+              <span key={`${c}-${i}`} className="inline-flex items-center gap-1.5 text-xs rounded-full border bg-muted/60 px-2.5 py-1 max-w-full">
+                <span className="truncate">{c}</span>
+                <button onClick={() => removeCondition(i)} aria-label={`Remover ${c}`}
+                  className="text-muted-foreground hover:text-foreground shrink-0">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <form onSubmit={addCondition} className="flex gap-2">
+          <Input maxLength={80} placeholder="Adicionar condição de saúde"
+            className="min-w-0 flex-1" value={conditionInput}
+            onChange={(e) => setConditionInput(e.target.value)} />
+          <Button type="submit" size="icon" className="shrink-0" aria-label="Adicionar condição">
+            <Plus className="w-4 h-4" />
+          </Button>
+        </form>
+
+        <p className="text-[11px] text-muted-foreground">
+          Isso adapta as sugestões, mas não substitui acompanhamento médico — decisões clínicas
+          ficam sempre com o seu profissional de saúde.
+        </p>
       </Card>
 
       {/* Heatmap 28 dias */}

@@ -40,6 +40,7 @@ export interface Profile {
   journal_color: string | null;
   has_religion: boolean | null;
   weight_goal_kg: number | null;
+  health_conditions: string[] | null;
 }
 
 export function useProfile() {

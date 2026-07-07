@@ -67,6 +67,16 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   } else if (p.spirituality_label) {
     lines.push(`Prática espiritual (vocabulário escolhido pela pessoa): ${p.spirituality_label}.`);
   }
+  const healthConds = Array.isArray(p.health_conditions)
+    ? (p.health_conditions as unknown[]).map(String).filter(Boolean)
+    : [];
+  if (healthConds.length) {
+    lines.push(
+      `SAÚDE — condições informadas pela própria pessoa: ${healthConds.join("; ")}. ` +
+      `Considere-as em TODA sugestão de alimentação, treino e rotina (adapte ou evite o que for inadequado à condição). ` +
+      `Você não diagnostica nem trata: mudanças de medicação, dieta clínica ou treino pós-lesão devem ser validadas com o profissional de saúde dela.`
+    );
+  }
   if (p.monthly_income) lines.push(`Renda mensal aproximada: ${BRL(Number(p.monthly_income))}.`);
   if (p.monthly_budget) lines.push(`Orçamento mensal desejado: ${BRL(Number(p.monthly_budget))}.`);
 
