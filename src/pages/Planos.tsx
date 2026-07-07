@@ -132,13 +132,26 @@ export default function Planos() {
       <Dialog open={!!open} onOpenChange={(v) => !v && setOpen(null)}>
         <DialogContent className="max-w-lg max-h-[85dvh] flex flex-col">
           <DialogHeader className="shrink-0">
-            <DialogTitle className="pr-6 break-words">{open?.title}</DialogTitle>
-            <DialogDescription>
-              {open && `${KIND_LABEL[open.kind] ?? "Plano"} · criado em ${new Date(open.created_at).toLocaleDateString("pt-BR")}`}
+            <DialogTitle className="pr-6 break-words font-display">{open?.title}</DialogTitle>
+            <DialogDescription asChild>
+              <div className="flex items-center gap-2 pt-0.5">
+                {open && (
+                  <span className="inline-flex items-center text-[11px] font-semibold rounded-full px-2.5 py-0.5"
+                    style={{
+                      background: `${(KIND_VAR[open.kind] ? `hsl(var(${KIND_VAR[open.kind]})` : "hsl(var(--gold)")} / 0.14)`,
+                      color: KIND_VAR[open.kind] ? `hsl(var(${KIND_VAR[open.kind]}))` : "hsl(var(--gold))",
+                    }}>
+                    {KIND_LABEL[open.kind] ?? "Plano"}
+                  </span>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {open && `criado em ${new Date(open.created_at).toLocaleDateString("pt-BR")}`}
+                </span>
+              </div>
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto text-sm pr-1">
-            {open && <Markdown content={open.content} />}
+            {open && <Markdown content={open.content} doc />}
           </div>
           {open && (
             <div className="flex flex-wrap gap-2 justify-end pt-2 border-t shrink-0">

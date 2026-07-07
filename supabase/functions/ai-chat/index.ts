@@ -18,6 +18,10 @@ const SYSTEM = `Você é o Conselheiro do Ascend, uma plataforma brasileira de q
 • Se faltar dado importante, diga o que registrar para você ajudar melhor.
 • ESTILO: escreva como uma pessoa escreve, não como IA. NUNCA use travessão ou meia-risca (— ou –) na resposta; no lugar, use vírgula, dois-pontos, parênteses ou comece outra frase. Evite também fórmulas prontas como "Vamos lá!", "Com certeza!" ou fechos genéricos.
 
+━━━ PONDERE ANTES DE RESPONDER ━━━
+Antes de qualquer resposta personalizada (recomendação, análise, decisão sobre a vida da pessoa), avalie em silêncio: "tenho as informações para uma resposta de QUALIDADE, específica para ESTA pessoa, ou vou entregar algo genérico?". Se faltarem dados essenciais, NÃO responda genericamente: faça até 3 perguntas objetivas, ou aponte o que registrar no app, e pare por aí. Uma resposta curta que pede o dado certo vale mais que uma resposta longa e rasa.
+Proporcionalidade: perguntas factuais ("quantas calorias tem um ovo?") e conversas leves respondem direto, sem burocracia. Quanto mais a resposta depende do contexto da pessoa e quanto maior o custo de errar (saúde, dinheiro, rotina), mais rigorosa a checagem antes de responder.
+
 ━━━ PROTOCOLO DE PLANOS DEFINITIVOS ━━━
 Plano definitivo = plano alimentar/dieta, plano de treino, orçamento/plano financeiro ou rotina estruturada que a pessoa vai seguir por dias ou semanas. Para esses, a regra muda: profundidade exige dados.
 
@@ -31,7 +35,17 @@ REGRAS:
 2. Só gere o plano completo quando tiver tudo. Aí sim vá fundo: quantidades, horários, valores em reais, alternativas econômicas, adaptações às condições de saúde e medicamentos do retrato.
 3. Exceção: se a pessoa disser explicitamente para gerar mesmo sem os dados, gere uma versão provisória começando com a seção "Premissas que assumi" listando cada suposição.
 4. Ao entregar um plano completo (caso 2 ou 3), ALÉM do texto da resposta, chame a ferramenta registrar_plano com o plano em markdown. O app oferece à pessoa salvar o plano na área "Meus planos". Não diga que "salvou": diga que o plano está pronto para ser salvo.
+   FORMATO OBRIGATÓRIO do content_markdown (padrão visual do app):
+   • Comece com "## Resumo": 3 a 6 bullets com objetivo e números-chave (calorias/macros diários, orçamento mensal, frequência semanal).
+   • Depois, seções "## ..." por tema; dentro, "### ..." para subdivisões (cada refeição, cada dia de treino, cada categoria de gasto).
+   • Itens com quantidades SEMPRE em bullets: "- Arroz branco: 150g (195 kcal)".
+   • Use tabelas markdown (| Coluna | Coluna |) para comparar valores: macros por refeição, treino por dia, orçamento por categoria.
+   • Separe grandes blocos com uma linha "---".
+   • Termine com "## Observações": adaptações às condições de saúde, avisos e quando revisar o plano.
 5. Perguntas pontuais ("quantas calorias tem ovo?", "treino de peito é bom 2x por semana?") NÃO são planos definitivos: responda normalmente, sem exigir dados.
+
+━━━ GUARDANDO DADOS QUE A PESSOA INFORMA NA CONVERSA ━━━
+Quando a pessoa informar dados de perfil na conversa (idade ou ano de nascimento, sexo, altura, nível de atividade, restrições alimentares, meta de peso), chame a ferramenta atualizar_perfil NA MESMA resposta, para o app guardar e você não precisar perguntar de novo. Se ela der a idade, calcule o ano de nascimento a partir do ano atual. Mencione em UMA frase na resposta que guardou esses dados no perfil dela. O peso ATUAL não vai no perfil: ele vira registro na linha do tempo (o app cuida disso automaticamente).
 ${SAFETY_RULES}
 
 ━━━ RETRATO ATUAL DA PESSOA (dados reais da plataforma) ━━━
@@ -51,6 +65,27 @@ const SAVE_PLAN_TOOL = {
       content_markdown: { type: "string", description: "O plano COMPLETO em markdown: seções, quantidades, horários, valores. Autossuficiente." },
     },
     required: ["title", "kind", "content_markdown"],
+  },
+};
+
+const UPDATE_PROFILE_TOOL = {
+  name: "atualizar_perfil",
+  description:
+    "Guarda no perfil da pessoa dados que ela informou explicitamente nesta conversa. " +
+    "Preencha APENAS os campos que ela informou agora. Nunca invente ou deduza sem a pessoa ter dito.",
+  input_schema: {
+    type: "object",
+    properties: {
+      birth_year: { type: "integer", description: "Ano de nascimento. Se a pessoa deu a idade, calcule: ano atual menos a idade." },
+      sex: { type: "string", enum: ["feminino", "masculino"] },
+      height_cm: { type: "number", description: "Altura em centímetros. '1,83m' vira 183." },
+      activity_level: { type: "string", enum: ["sedentario", "leve", "moderado", "intenso"] },
+      add_dietary_restrictions: {
+        type: "array", items: { type: "string" },
+        description: "Restrições alimentares mencionadas, para ADICIONAR às existentes. Ex.: ['sem lactose']. Se a pessoa disse que não tem nenhuma, não envie este campo.",
+      },
+      weight_goal_kg: { type: "number", description: "Meta de peso em kg, se a pessoa declarou uma." },
+    },
   },
 };
 
@@ -131,7 +166,7 @@ Deno.serve(async (req) => {
         model: MODEL_SMART,
         max_tokens: 3000,
         system: SYSTEM + snapshot,
-        tools: [SAVE_PLAN_TOOL],
+        tools: [SAVE_PLAN_TOOL, UPDATE_PROFILE_TOOL],
         tool_choice: { type: "auto" },
         messages,
       }),
@@ -190,13 +225,50 @@ Deno.serve(async (req) => {
       if (!reply) reply = plan.content; // segurança: nunca responder vazio
     }
 
+    // Dados de perfil informados na conversa: valida e grava
+    const profileUpdated: string[] = [];
+    const profBlock = blocks.find((b) => b.type === "tool_use" && b.name === "atualizar_perfil");
+    if (profBlock?.input && typeof profBlock.input === "object") {
+      const inp = profBlock.input as Record<string, unknown>;
+      const patch: Record<string, unknown> = {};
+      const yearNow = new Date().getFullYear();
+      const by = Number(inp.birth_year);
+      if (by > 1900 && by <= yearNow) { patch.birth_year = Math.round(by); profileUpdated.push("ano de nascimento"); }
+      if (inp.sex === "feminino" || inp.sex === "masculino") { patch.sex = inp.sex; profileUpdated.push("sexo"); }
+      const h = Number(inp.height_cm);
+      if (h > 80 && h < 250) { patch.height_cm = Math.round(h * 10) / 10; profileUpdated.push("altura"); }
+      if (["sedentario", "leve", "moderado", "intenso"].includes(String(inp.activity_level))) {
+        patch.activity_level = inp.activity_level; profileUpdated.push("nível de atividade");
+      }
+      const wg = Number(inp.weight_goal_kg);
+      if (wg > 20 && wg < 400) { patch.weight_goal_kg = wg; profileUpdated.push("meta de peso"); }
+      if (Array.isArray(inp.add_dietary_restrictions) && inp.add_dietary_restrictions.length) {
+        const { data: prof } = await supabase.from("profiles")
+          .select("dietary_restrictions").eq("user_id", user.id).maybeSingle();
+        const current: string[] = Array.isArray(prof?.dietary_restrictions)
+          ? (prof!.dietary_restrictions as unknown[]).map(String) : [];
+        const lower = new Set(current.map((r) => r.toLowerCase()));
+        const added = (inp.add_dietary_restrictions as unknown[])
+          .map((r) => String(r).trim().slice(0, 60))
+          .filter((r) => r && !lower.has(r.toLowerCase()));
+        if (added.length) {
+          patch.dietary_restrictions = [...current, ...added].slice(0, 15);
+          profileUpdated.push("restrições alimentares");
+        }
+      }
+      if (Object.keys(patch).length) {
+        const { error: upErr } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
+        if (upErr) { console.error("profile update", upErr); profileUpdated.length = 0; }
+      } else profileUpdated.length = 0;
+    }
+
     await supabase.from("chat_messages").insert([
       { user_id: user.id, role: "user", content: attNames.length ? `${message}\n📎 ${attNames.join(", ")}` : message },
       { user_id: user.id, role: "assistant", content: reply },
     ]);
 
     const captured = await capturePromise;
-    return json({ reply, captured, plan });
+    return json({ reply, captured, plan, profile_updated: profileUpdated });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);

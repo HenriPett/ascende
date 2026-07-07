@@ -189,6 +189,11 @@ export default function Chat() {
       if (data?.plan?.title && data?.plan?.content) {
         setProposedPlan(data.plan as ProposedPlan);
       }
+      const updated = (data?.profile_updated ?? []) as string[];
+      if (updated.length) {
+        toast.success(`Guardei no seu perfil: ${updated.join(", ")}.`);
+        qc.invalidateQueries({ queryKey: ["profile"] });
+      }
       qc.invalidateQueries({ queryKey: ["chat", user?.id] });
     } catch (e) {
       setLocal((l) => l.slice(0, -1));
