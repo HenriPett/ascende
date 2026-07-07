@@ -133,6 +133,13 @@
 
   img, video, svg { max-width: 100%; }
 
+  /* Celulares dão zoom automático ao focar campos com fonte < 16px —
+     e nem sempre desfazem, "desconfigurando" a tela até o zoom manual.
+     16px nos campos em telas pequenas elimina o zoom involuntário. */
+  @media (max-width: 767px) {
+    input, select, textarea { font-size: 16px !important; }
+  }
+
   h1, h2, h3 { letter-spacing: -0.02em; }
 
   @media (prefers-reduced-motion: reduce) {
