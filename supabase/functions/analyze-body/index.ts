@@ -4,7 +4,7 @@
 // O app mostra para o usuário confirmar antes de gravar — a IA nunca grava sozinha.
 // A foto NÃO é armazenada: é analisada e descartada.
 import {
-  corsHeaders, serviceClient, requireUser,
+  corsHeaders, serviceClient, requireUser, assertRateLimit,
   ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART,
 } from "../_shared/lib.ts";
 
@@ -70,7 +70,8 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = serviceClient();
-    await requireUser(req, supabase);
+    const user = await requireUser(req, supabase);
+    await assertRateLimit(supabase, user.id, "analyze-body", 8, 10);
 
     const { image, media_type, weight_kg } = await req.json();
     if (!image || typeof image !== "string" || image.length > MAX_B64) {

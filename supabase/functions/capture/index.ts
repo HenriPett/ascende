@@ -3,7 +3,7 @@
 // e devolve eventos estruturados PROPOSTOS. O app mostra para o usuário
 // confirmar antes de gravar — a IA nunca grava sozinha.
 import {
-  corsHeaders, serviceClient, requireUser,
+  corsHeaders, serviceClient, requireUser, assertRateLimit,
   ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_FAST,
   CAPTURE_TOOL, CAPTURE_SYSTEM,
 } from "../_shared/lib.ts";
@@ -17,7 +17,8 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = serviceClient();
-    await requireUser(req, supabase);
+    const user = await requireUser(req, supabase);
+    await assertRateLimit(supabase, user.id, "capture", 30, 5);
     const { text } = await req.json();
     if (!text || typeof text !== "string" || text.length > 2000) {
       return json({ error: "Texto inválido." }, 400);

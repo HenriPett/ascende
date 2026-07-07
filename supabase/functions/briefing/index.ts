@@ -2,7 +2,7 @@
 // Gera um resumo curto e acolhedor cruzando todos os pilares.
 // Cache: 1 por usuário por dia (tabela briefings).
 import {
-  corsHeaders, serviceClient, requireUser, buildSnapshot,
+  corsHeaders, serviceClient, requireUser, assertRateLimit, buildSnapshot,
   ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, SAFETY_RULES,
 } from "../_shared/lib.ts";
 
@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = serviceClient();
     const user = await requireUser(req, supabase);
+    await assertRateLimit(supabase, user.id, "briefing", 6, 60);
 
     const today = new Date().toISOString().slice(0, 10);
     const { data: cached } = await supabase.from("briefings")

@@ -3,7 +3,7 @@
 // macronutrientes. O app mostra para o usuário confirmar/ajustar antes de gravar —
 // a IA nunca grava sozinha. Estimativa é aproximada e informativa, nunca prescrição.
 import {
-  corsHeaders, serviceClient, requireUser,
+  corsHeaders, serviceClient, requireUser, assertRateLimit,
   ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART,
 } from "../_shared/lib.ts";
 
@@ -72,7 +72,8 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = serviceClient();
-    await requireUser(req, supabase);
+    const user = await requireUser(req, supabase);
+    await assertRateLimit(supabase, user.id, "analyze-meal", 20, 10);
 
     const { image, media_type, note } = await req.json();
     const hasImage = typeof image === "string" && image.length > 0;

@@ -1,6 +1,6 @@
 // ASCEND — Conselheiro (chat de IA com visão de todos os pilares)
 import {
-  corsHeaders, serviceClient, requireUser, buildSnapshot,
+  corsHeaders, serviceClient, requireUser, assertRateLimit, buildSnapshot,
   ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, MODEL_FAST, SAFETY_RULES,
   CAPTURE_TOOL, CAPTURE_SYSTEM,
 } from "../_shared/lib.ts";
@@ -98,6 +98,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = serviceClient();
     const user = await requireUser(req, supabase);
+    await assertRateLimit(supabase, user.id, "ai-chat", 20, 5);
     const { message, attachments } = await req.json();
     if (!message || typeof message !== "string" || message.length > 4000) {
       return json({ error: "Mensagem inválida." }, 400);

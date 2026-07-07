@@ -1,9 +1,13 @@
 // Módulo compartilhado das funções do Ascend
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+// Defina o secret APP_ORIGIN (ex.: https://seuapp.netlify.app) para restringir
+// quais sites podem chamar as funções pelo navegador. Sem ele, fica aberto (dev).
+const APP_ORIGIN = Deno.env.get("APP_ORIGIN");
+export const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": APP_ORIGIN || "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  ...(APP_ORIGIN ? { Vary: "Origin" } : {}),
 };
 
 export const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -27,6 +31,30 @@ export async function requireUser(req: Request, supabase: SupabaseClient) {
     status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
   return data.user;
+}
+
+/**
+ * Proteção de custo/abuso: no máximo `max` chamadas da função `fn` por usuário
+ * na janela de `windowMin` minutos. Estourou, lança 429 com mensagem amigável.
+ * Usa a tabela fn_calls (RLS sem policies: só o service role escreve/lê).
+ */
+export async function assertRateLimit(
+  supabase: SupabaseClient, userId: string, fn: string, max: number, windowMin: number,
+) {
+  const since = new Date(Date.now() - windowMin * 60_000).toISOString();
+  const { count, error } = await supabase.from("fn_calls")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId).eq("fn", fn).gte("called_at", since);
+  if (!error && (count ?? 0) >= max) {
+    throw new Response(JSON.stringify({
+      error: "Muitas solicitações em pouco tempo. Respire e tente de novo em alguns minutos.",
+    }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+  // Registra a chamada e faz uma limpeza barata do que passou de 1 dia
+  await supabase.from("fn_calls").insert({ user_id: userId, fn });
+  await supabase.from("fn_calls").delete()
+    .eq("user_id", userId).eq("fn", fn)
+    .lt("called_at", new Date(Date.now() - 864e5).toISOString());
 }
 
 const BRL = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
