@@ -54,12 +54,13 @@ const TOOL = {
 };
 
 const SYSTEM = `Você é um assistente de estimativa nutricional do Ascend, plataforma brasileira de qualidade de vida.
-Você recebe UMA foto de refeição e estima calorias e macronutrientes da porção visível.
+Você recebe UMA foto de refeição e/ou uma descrição em texto, e estima calorias e macronutrientes da porção.
 
 REGRAS:
 • A estimativa é uma APROXIMAÇÃO informativa para ajudar a pessoa a ter noção — nunca um número clínico exato. Prefira faixas mentais e um valor central razoável; não invente precisão que a foto não permite (por isso existe o campo confidence).
 • Considere porções típicas do Brasil (prato feito, marmita, pão francês, etc.).
-• Se a imagem NÃO for comida/bebida, retorne is_food:false e calories:0, sem inventar.
+• Se a imagem NÃO for comida/bebida (ou, sem imagem, se a descrição não for de comida/bebida), retorne is_food:false e calories:0, sem inventar.
+• Sem foto, estime pela descrição assumindo porções típicas brasileiras; a confiança tende a ser "baixa" ou "media".
 • Nunca julgue ou envergonhe a pessoa pela escolha alimentar. Nada de "isso é ruim/proibido". Comida não é inimigo. Apenas descreva e estime com neutralidade.
 • Você não é nutricionista clínico e não trata condições de saúde. Não prescreva dietas nem faça recomendações médicas.
 • Responda SEMPRE usando a ferramenta estimar_refeicao.`;
@@ -74,17 +75,21 @@ Deno.serve(async (req) => {
     await requireUser(req, supabase);
 
     const { image, media_type, note } = await req.json();
-    if (!image || typeof image !== "string") {
-      return json({ error: "Imagem ausente." }, 400);
+    const hasImage = typeof image === "string" && image.length > 0;
+    const noteText = typeof note === "string" ? note.trim().slice(0, 300) : "";
+    if (!hasImage && !noteText) {
+      return json({ error: "Envie uma foto ou descreva a refeição." }, 400);
     }
-    if (image.length > MAX_B64) {
+    if (hasImage && image.length > MAX_B64) {
       return json({ error: "Imagem muito grande. Tire a foto novamente." }, 413);
     }
     const mediaType = ALLOWED_MEDIA.includes(media_type) ? media_type : "image/jpeg";
 
-    const userText = note && typeof note === "string" && note.trim()
-      ? `Contexto do usuário sobre a refeição: "${note.trim().slice(0, 200)}". Estime a partir da foto.`
-      : "Estime as calorias e os macronutrientes desta refeição a partir da foto.";
+    const userText = hasImage
+      ? (noteText
+          ? `Contexto do usuário sobre a refeição: "${noteText}". Estime a partir da foto.`
+          : "Estime as calorias e os macronutrientes desta refeição a partir da foto.")
+      : `Sem foto. Estime calorias e macronutrientes a partir desta descrição da refeição: "${noteText}".`;
 
     const res = await fetch(ANTHROPIC_URL, {
       method: "POST",
@@ -101,10 +106,12 @@ Deno.serve(async (req) => {
         tool_choice: { type: "tool", name: "estimar_refeicao" },
         messages: [{
           role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
-            { type: "text", text: userText },
-          ],
+          content: hasImage
+            ? [
+                { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
+                { type: "text", text: userText },
+              ]
+            : userText,
         }],
       }),
     });

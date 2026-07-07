@@ -17,7 +17,7 @@ import {
 import { toast } from "sonner";
 import {
   Plus, Trash2, Sparkles, UtensilsCrossed, Camera, Loader2, Check, X,
-  Flame, Droplet, Settings2, Undo2, RefreshCw, Scale, Pencil, ScanLine, TrendingUp,
+  Flame, Droplet, Settings2, Undo2, Scale, Pencil, ScanLine, TrendingUp,
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar,
@@ -188,21 +188,27 @@ export default function Alimentacao() {
     qc.invalidateQueries({ queryKey: ["meals"] });
   };
 
-  // ── Fluxo da foto ────────────────────────────────────────────
-  const runAnalysis = async (photo: { data: string; media_type: string }, note: string) => {
+  // ── Fluxo da foto/descrição ──────────────────────────────────
+  const runAnalysis = async (photo: { data: string; media_type: string } | null, note: string) => {
     setAnalyzing(true);
     try {
       const { data, error } = await supabase.functions.invoke("analyze-meal", {
-        body: { image: photo.data, media_type: photo.media_type, note: note.trim() || undefined },
+        body: {
+          image: photo?.data,
+          media_type: photo?.media_type,
+          note: note.trim() || undefined,
+        },
       });
       if (error || data?.error) throw new Error(data?.error ?? "falha");
       if (!data?.is_food || !data?.estimate) {
-        toast.info("Não reconheci comida nessa foto. Tente enquadrar melhor o prato — ou descreva na observação.");
+        toast.info(photo
+          ? "Não reconheci comida nessa foto. Tente enquadrar melhor o prato ou descreva na observação."
+          : "Não entendi essa descrição como uma refeição. Tente algo como \"prato de arroz, feijão e frango grelhado\".");
         return;
       }
       setEstimate(data.estimate as Estimate);
     } catch {
-      toast.error("Não consegui analisar a foto agora. Verifique sua conexão e tente de novo.");
+      toast.error("Não consegui analisar agora. Verifique sua conexão e tente de novo.");
     } finally {
       setAnalyzing(false);
     }
@@ -212,18 +218,17 @@ export default function Alimentacao() {
     const file = e.target.files?.[0];
     e.target.value = ""; // permite escolher a mesma foto de novo
     if (!file) return;
-    setEstimate(null);
     try {
       const photo = await fileToResizedBase64(file);
       setPhotoData(photo);
-      await runAnalysis(photo, photoNote);
+      setEstimate(null); // foto nova invalida estimativa anterior
     } catch {
       toast.error("Não consegui abrir essa imagem. Tente outra foto.");
     }
   };
 
-  const reanalyze = async () => {
-    if (!photoData) return;
+  const analyzeMeal = async () => {
+    if (!photoData && !photoNote.trim()) return;
     setEstimate(null);
     await runAnalysis(photoData, photoNote);
   };
@@ -255,13 +260,13 @@ export default function Alimentacao() {
         fat_g: estimate.fat_g,
         items: estimate.items,
         note: note || undefined,
-        source: "photo",
+        source: photoData ? "photo" : "text",
       },
-      source: "photo",
+      source: photoData ? "photo" : "text",
     });
     setSavingPhoto(false);
     if (error) { toast.error("Não consegui salvar."); return; }
-    toast.success("Refeição registrada pela foto. +4 XP");
+    toast.success("Refeição registrada. +4 XP");
     resetPhoto();
     qc.invalidateQueries();
   };
@@ -456,11 +461,11 @@ export default function Alimentacao() {
         </div>
       </Card>
 
-      {/* Foto da refeição → calorias */}
+      {/* Foto ou descrição → calorias */}
       <Card className="p-4 space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Camera className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
-          Tire uma foto e eu estimo as calorias
+          Foto ou descrição, eu estimo as calorias
         </div>
 
         <input
@@ -468,30 +473,48 @@ export default function Alimentacao() {
           className="hidden" onChange={onPickPhoto}
         />
 
-        {/* Observação: ajuda a IA a acertar (ex.: "a carne é cupim") */}
+        {/* Descrição da refeição (obrigatória sem foto; com foto, refina a estimativa) */}
         <div className="space-y-1">
           <Textarea
             value={photoNote}
             onChange={(e) => setPhotoNote(e.target.value)}
-            placeholder={'Observação (opcional) — ex.: "a carne é cupim", "comi um sagu junto"'}
-            rows={2} maxLength={200}
+            placeholder={photoData
+              ? 'Observação (opcional): "a carne é cupim", "comi um sagu junto"...'
+              : 'Descreva a refeição: "prato de arroz, feijão, bife e salada" — ou adicione uma foto'}
+            rows={2} maxLength={300}
             className="resize-none text-sm"
             disabled={analyzing}
           />
           <p className="text-[11px] text-muted-foreground">
-            Detalhes assim deixam a estimativa mais certeira — e ficam salvos com a refeição.
+            {photoData
+              ? "Detalhes deixam a estimativa mais certeira e ficam salvos com a refeição."
+              : "Dá para estimar só pela descrição, mas a foto melhora a precisão."}
           </p>
         </div>
 
-        {!estimate && (
+        <div className="flex gap-2">
           <Button
-            variant="secondary" className="w-full"
+            variant="secondary" className="flex-1 min-w-0"
             onClick={() => fileRef.current?.click()} disabled={analyzing}
           >
-            {analyzing
-              ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analisando a foto...</>)
-              : (<><Camera className="w-4 h-4 mr-2" /> {photoData ? "Tirar outra foto" : "Tirar / escolher foto"}</>)}
+            <Camera className="w-4 h-4 mr-2 shrink-0" />
+            <span className="truncate">{photoData ? "Trocar foto" : "Adicionar foto"}</span>
           </Button>
+          <Button
+            className="flex-1 min-w-0"
+            onClick={analyzeMeal}
+            disabled={analyzing || (!photoData && !photoNote.trim())}
+          >
+            {analyzing
+              ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" /> Analisando...</>)
+              : (<><Sparkles className="w-4 h-4 mr-2 shrink-0" /> {estimate ? "Reanalisar" : "Analisar"}</>)}
+          </Button>
+        </div>
+
+        {photoData && !estimate && !analyzing && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+            <Check className="w-3.5 h-3.5 text-success" /> Foto pronta. Escreva uma observação se quiser e toque em Analisar.
+          </p>
         )}
 
         {estimate && (
@@ -532,20 +555,9 @@ export default function Alimentacao() {
               {estimate.note && <p className="text-xs text-muted-foreground italic">{estimate.note}</p>}
             </div>
 
-            {photoNote.trim() && (
-              <p className="text-xs text-muted-foreground">
-                Editou a observação? Toque em <span className="font-medium">Reanalisar</span> para refazer a estimativa.
-              </p>
-            )}
-
             <div className="flex flex-wrap gap-2 justify-end">
               <Button variant="ghost" onClick={resetPhoto} disabled={savingPhoto || analyzing}>
                 <X className="w-4 h-4 mr-1" /> Descartar
-              </Button>
-              <Button variant="outline" onClick={reanalyze} disabled={savingPhoto || analyzing}>
-                {analyzing
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : (<><RefreshCw className="w-4 h-4 mr-1" /> Reanalisar</>)}
               </Button>
               <Button onClick={confirmPhoto} disabled={savingPhoto || analyzing}>
                 {savingPhoto ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Registrar</>)}

@@ -41,6 +41,7 @@ export interface Profile {
   has_religion: boolean | null;
   weight_goal_kg: number | null;
   health_conditions: string[] | null;
+  medications: string[] | null;
 }
 
 export function useProfile() {

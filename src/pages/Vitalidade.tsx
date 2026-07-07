@@ -34,34 +34,46 @@ export default function Vitalidade() {
   const [workout, setWorkout] = useState("");
   const [muscles, setMuscles] = useState<string[]>([]);
   const [conditionInput, setConditionInput] = useState("");
+  const [medicationInput, setMedicationInput] = useState("");
 
-  // ── Condições de saúde (visíveis para o Conselheiro) ─────────
+  // ── Condições de saúde e medicamentos (visíveis para o Conselheiro) ──
   const conditions = profile?.health_conditions ?? [];
+  const medications = profile?.medications ?? [];
 
-  const saveConditions = async (next: string[]) => {
+  const saveHealth = async (patch: { health_conditions?: string[]; medications?: string[] }) => {
     if (!user) return;
-    const { error } = await supabase.from("profiles")
-      .update({ health_conditions: next }).eq("user_id", user.id);
+    const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar."); return; }
     refreshProfile();
   };
 
-  const addCondition = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const c = conditionInput.trim().slice(0, 80);
+  const addToList = async (
+    value: string, list: string[], key: "health_conditions" | "medications",
+    clear: () => void,
+  ) => {
+    const c = value.trim().slice(0, 80);
     if (!c) return;
-    if (conditions.length >= 20) { toast.error("Máximo de 20 itens — remova algum para adicionar outro."); return; }
-    if (conditions.some((x) => x.toLowerCase() === c.toLowerCase())) {
+    if (list.length >= 20) { toast.error("Máximo de 20 itens. Remova algum para adicionar outro."); return; }
+    if (list.some((x) => x.toLowerCase() === c.toLowerCase())) {
       toast.info("Isso já está na sua lista."); return;
     }
-    await saveConditions([...conditions, c]);
-    setConditionInput("");
+    await saveHealth({ [key]: [...list, c] });
+    clear();
     toast.success("Anotado. O Conselheiro vai considerar isso nas sugestões.");
   };
 
-  const removeCondition = async (idx: number) => {
-    await saveConditions(conditions.filter((_, i) => i !== idx));
+  const addCondition = (e: React.FormEvent) => {
+    e.preventDefault();
+    addToList(conditionInput, conditions, "health_conditions", () => setConditionInput(""));
   };
+  const addMedication = (e: React.FormEvent) => {
+    e.preventDefault();
+    addToList(medicationInput, medications, "medications", () => setMedicationInput(""));
+  };
+  const removeCondition = (idx: number) =>
+    saveHealth({ health_conditions: conditions.filter((_, i) => i !== idx) });
+  const removeMedication = (idx: number) =>
+    saveHealth({ medications: medications.filter((_, i) => i !== idx) });
 
   const { data } = useQuery({
     queryKey: ["vitalidade", user?.id],
@@ -333,8 +345,8 @@ export default function Vitalidade() {
             Minha saúde
           </h2>
           <p className="text-xs text-muted-foreground">
-            Condições, alergias, lesões, medicamentos em uso — o que o Conselheiro precisa saber
-            para as sugestões de treino e alimentação respeitarem o seu corpo.
+            Condições, alergias, lesões: o que o Conselheiro precisa saber para as sugestões
+            de treino e alimentação respeitarem o seu corpo.
             Ex.: "diabetes tipo 2", "alergia a amendoim", "hérnia de disco".
           </p>
         </div>
@@ -361,6 +373,40 @@ export default function Vitalidade() {
             <Plus className="w-4 h-4" />
           </Button>
         </form>
+
+        {/* Medicamentos em uso */}
+        <div className="pt-1 space-y-2.5">
+          <div>
+            <p className="text-sm font-medium">Medicamentos em uso</p>
+            <p className="text-xs text-muted-foreground">
+              Ex.: "metformina", "losartana", "vitamina D". O Conselheiro considera nas sugestões,
+              mas nunca vai mexer em dose ou uso: isso é sempre com quem prescreveu.
+            </p>
+          </div>
+
+          {medications.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {medications.map((m, i) => (
+                <span key={`${m}-${i}`} className="inline-flex items-center gap-1.5 text-xs rounded-full border bg-muted/60 px-2.5 py-1 max-w-full">
+                  <span className="truncate">{m}</span>
+                  <button onClick={() => removeMedication(i)} aria-label={`Remover ${m}`}
+                    className="text-muted-foreground hover:text-foreground shrink-0">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <form onSubmit={addMedication} className="flex gap-2">
+            <Input maxLength={80} placeholder="Adicionar medicamento"
+              className="min-w-0 flex-1" value={medicationInput}
+              onChange={(e) => setMedicationInput(e.target.value)} />
+            <Button type="submit" size="icon" className="shrink-0" aria-label="Adicionar medicamento">
+              <Plus className="w-4 h-4" />
+            </Button>
+          </form>
+        </div>
 
         <p className="text-[11px] text-muted-foreground">
           Isso adapta as sugestões, mas não substitui acompanhamento médico — decisões clínicas

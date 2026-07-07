@@ -7,7 +7,7 @@ import { useXp } from "@/hooks/useXp";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { PILLARS } from "@/lib/pillars";
-import { levelTitle, nextTitle } from "@/lib/xp";
+import { levelTitle, nextTitle, xpReasonLabel } from "@/lib/xp";
 import { monthStartISO } from "@/lib/format";
 import { Flame, TrendingUp, CalendarCheck } from "lucide-react";
 
@@ -55,7 +55,7 @@ export default function Score() {
         supabase.from("transactions").select("kind,amount").eq("user_id", user!.id).gte("occurred_at", monthStartISO()),
         supabase.from("habits").select("id").eq("user_id", user!.id).eq("active", true),
         supabase.from("habit_logs").select("log_date").eq("user_id", user!.id).gte("log_date", new Date(Date.now() - 13 * 864e5).toISOString().slice(0, 10)),
-        supabase.from("xp_log").select("points,created_at").eq("user_id", user!.id).gte("created_at", since7),
+        supabase.from("xp_log").select("points,reason,created_at").eq("user_id", user!.id).gte("created_at", since7).order("created_at", { ascending: false }).limit(60),
       ]);
       return { events: events ?? [], txs: txs ?? [], habitsCount: (habits ?? []).length, logs: logs ?? [], weekXp: weekXp ?? [] };
     },
@@ -63,6 +63,17 @@ export default function Score() {
 
   const xpWeek = (data?.weekXp ?? []).reduce((s, r) => s + r.points, 0);
   const activeDays = new Set((data?.weekXp ?? []).map((r) => String(r.created_at).slice(0, 10))).size;
+
+  // Feed: de onde veio o XP
+  const xpFeed = (data?.weekXp ?? []).slice(0, 8);
+  const timeAgo = (iso: string) => {
+    const mins = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (mins < 60) return `há ${mins} min`;
+    const h = Math.round(mins / 60);
+    if (h < 24) return `há ${h}h`;
+    const d = Math.round(h / 24);
+    return d === 1 ? "ontem" : `há ${d} dias`;
+  };
 
   // ─── Cálculo do score por pilar (0–100, transparente) ───
   const scores: Record<string, { value: number | null; why: string }> = {
@@ -196,6 +207,25 @@ export default function Score() {
           </div>
         </div>
       </Card>
+
+      {/* De onde veio seu XP */}
+      {xpFeed.length > 0 && (
+        <Card className="p-4">
+          <h2 className="font-display font-semibold mb-3">De onde veio seu XP (7 dias)</h2>
+          <div className="space-y-1.5">
+            {xpFeed.map((r, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span className="shrink-0 inline-flex items-center justify-center min-w-[3.25rem] text-xs font-bold rounded-full px-2 py-0.5"
+                  style={{ background: "hsl(var(--gold) / 0.15)", color: "hsl(var(--gold))" }}>
+                  +{r.points} XP
+                </span>
+                <span className="flex-1 min-w-0 truncate">{xpReasonLabel(r.reason)}</span>
+                <span className="text-xs text-muted-foreground shrink-0">{timeAgo(String(r.created_at))}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {overall !== null && (
         <Card className="p-4 flex items-center justify-between">

@@ -33,3 +33,22 @@ export function nextTitle(level: number): { title: string; atLevel: number } | n
   for (const [min, title] of TITLES) if (min > level) return { title, atLevel: min };
   return null;
 }
+
+/* XP por tipo de registro — espelha o gatilho award_xp_for_event no setup.sql.
+   Se mudar lá, mude aqui (usado nos toasts e no feed de ganhos). */
+export const XP_BY_KIND: Record<string, number> = {
+  habit_done: 10, workout: 8, practice: 8, mood: 5, sleep: 5,
+  meal: 4, water: 2, journal: 6, weight: 3, body: 4, gratitude: 5, transaction: 2,
+};
+export const XP_REASON_LABEL: Record<string, string> = {
+  habit_done: "Hábito concluído", workout: "Treino registrado", practice: "Prática registrada",
+  mood: "Humor registrado", sleep: "Sono registrado", meal: "Refeição registrada",
+  water: "Hidratação registrada", journal: "Entrada no diário", weight: "Peso registrado",
+  body: "Composição corporal registrada", gratitude: "Gratidão registrada", transaction: "Lançamento financeiro",
+};
+export const xpForKind = (kind: string) => XP_BY_KIND[kind] ?? 3;
+/** Converte reasons antigos ("Registro: meal") para rótulo legível. */
+export function xpReasonLabel(reason: string): string {
+  const m = reason.match(/^Registro: (\w+)$/);
+  return m ? (XP_REASON_LABEL[m[1]] ?? reason) : reason;
+}

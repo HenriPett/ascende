@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Sparkles, Loader2, Check, X, Mic, MicOff } from "lucide-react";
 import { pillarById } from "@/lib/pillars";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
+import { xpForKind } from "@/lib/xp";
 import { useDictation } from "@/hooks/useDictation";
 
 const EXAMPLES = [
@@ -58,8 +59,11 @@ export default function CaptureBar() {
     setSaving(true);
     try {
       await saveProposedEvents(user.id, selected);
+      const gained = selected.reduce((sum, ev) => sum + xpForKind(ev.kind), 0);
       toast.success(
-        selected.length === 1 ? "Registrado! +XP" : `${selected.length} registros feitos de uma vez. +XP`
+        selected.length === 1
+          ? `${selected[0].summary} · +${gained} XP`
+          : `${selected.length} registros feitos de uma vez · +${gained} XP`
       );
       setText("");
       setProposed(null);

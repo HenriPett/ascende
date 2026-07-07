@@ -11,6 +11,7 @@ import { Markdown } from "@/components/core/Markdown";
 import { Checkbox } from "@/components/ui/checkbox";
 import { pillarById } from "@/lib/pillars";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
+import { xpForKind } from "@/lib/xp";
 import { useDictation } from "@/hooks/useDictation";
 import { cn } from "@/lib/utils";
 
@@ -196,7 +197,10 @@ export default function Chat() {
     setSavingCaptured(true);
     try {
       await saveProposedEvents(user.id, selected);
-      toast.success(selected.length === 1 ? "Registrado! +XP" : `${selected.length} registros feitos. +XP`);
+      const gained = selected.reduce((sum, ev) => sum + xpForKind(ev.kind), 0);
+      toast.success(selected.length === 1
+        ? `${selected[0].summary} · +${gained} XP`
+        : `${selected.length} registros feitos · +${gained} XP`);
       setCaptured(null);
       qc.invalidateQueries();
     } catch {

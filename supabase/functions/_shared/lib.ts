@@ -77,6 +77,15 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       `Você não diagnostica nem trata: mudanças de medicação, dieta clínica ou treino pós-lesão devem ser validadas com o profissional de saúde dela.`
     );
   }
+  const meds = Array.isArray(p.medications)
+    ? (p.medications as unknown[]).map(String).filter(Boolean)
+    : [];
+  if (meds.length) {
+    lines.push(
+      `MEDICAMENTOS EM USO (informados pela pessoa): ${meds.join("; ")}. ` +
+      `Considere possíveis implicações práticas (horários, alimentação, treino), mas NUNCA sugira alterar dose, trocar, iniciar ou parar medicamento: isso é exclusivo do prescritor. Em dúvida sobre interações, orientar a conversar com médico ou farmacêutico.`
+    );
+  }
   if (p.monthly_income) lines.push(`Renda mensal aproximada: ${BRL(Number(p.monthly_income))}.`);
   if (p.monthly_budget) lines.push(`Orçamento mensal desejado: ${BRL(Number(p.monthly_budget))}.`);
 

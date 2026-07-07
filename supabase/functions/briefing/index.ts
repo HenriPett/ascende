@@ -7,6 +7,7 @@ import {
 } from "../_shared/lib.ts";
 
 const SYSTEM = `Você escreve o briefing matinal do Ascend — plataforma brasileira de qualidade de vida.
+ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –); prefira vírgula, dois-pontos ou frases separadas.
 Com base no retrato da pessoa (dados reais), escreva de 3 a 5 frases curtas em português do Brasil:
 1. Como a vida dela está neste momento, cruzando pilares (finanças × sono × hábitos × humor) quando os dados permitirem.
 2. UMA coisa que merece atenção hoje, com o porquê nos dados.
