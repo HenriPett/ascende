@@ -50,7 +50,7 @@ REGRAS:
 6. AJUSTES: se a pessoa comentar ou pedir mudanças em um plano recém-entregue ("não gosto de agachamento", "troca o frango do jantar", "diminui o valor de lazer"), acolha o comentário, refaça o que for preciso e chame registrar_plano DE NOVO com o plano COMPLETO revisado (mesmo título, salvo se a mudança justificar renomear). Nunca registre só a diferença: o plano registrado deve ser sempre autossuficiente. Na resposta em texto, resuma apenas o que mudou.
 
 ━━━ GUARDANDO DADOS QUE A PESSOA INFORMA NA CONVERSA ━━━
-Quando a pessoa informar dados de perfil na conversa (idade ou ano de nascimento, sexo, altura, nível de atividade, restrições alimentares, meta de peso), chame a ferramenta atualizar_perfil NA MESMA resposta, para o app guardar e você não precisar perguntar de novo. Se ela der a idade, calcule o ano de nascimento a partir do ano atual. Mencione em UMA frase na resposta que guardou esses dados no perfil dela. O peso ATUAL não vai no perfil: ele vira registro na linha do tempo (o app cuida disso automaticamente).
+Quando a pessoa informar dados de perfil na conversa (idade ou ano de nascimento, sexo, altura, nível de atividade, restrições alimentares, meta de peso, CONDIÇÕES DE SAÚDE que ela tenha, ou MEDICAMENTOS que ela use), chame a ferramenta atualizar_perfil NA MESMA resposta, para o app guardar e você não precisar perguntar de novo. Ex.: "sou diabético" → add_health_conditions: ["diabetes"]; "tomo losartana todo dia" → add_medications: ["losartana"]. Ao guardar condição ou medicamento, seja acolhedor e lembre em UMA frase que você considera isso nas sugestões mas não substitui o acompanhamento de quem prescreve; NUNCA sugira iniciar, parar ou mudar dose de medicamento. Se ela der a idade, calcule o ano de nascimento a partir do ano atual. Mencione em UMA frase na resposta que guardou esses dados no perfil dela. O peso ATUAL não vai no perfil: ele vira registro na linha do tempo (o app cuida disso automaticamente).
 ${SAFETY_RULES}
 
 ━━━ RETRATO ATUAL DA PESSOA (dados reais da plataforma) ━━━
@@ -93,6 +93,14 @@ const UPDATE_PROFILE_TOOL = {
       add_dietary_restrictions: {
         type: "array", items: { type: "string" },
         description: "Restrições alimentares mencionadas, para ADICIONAR às existentes. Ex.: ['sem lactose']. Se a pessoa disse que não tem nenhuma, não envie este campo.",
+      },
+      add_health_conditions: {
+        type: "array", items: { type: "string" },
+        description: "Condições de saúde, alergias ou lesões que a pessoa mencionou ter, para ADICIONAR às existentes. Ex.: ['diabetes tipo 2', 'hérnia de disco']. Só o que ela declarou explicitamente sobre si mesma.",
+      },
+      add_medications: {
+        type: "array", items: { type: "string" },
+        description: "Medicamentos que a pessoa disse USAR, para ADICIONAR aos existentes. Ex.: ['losartana', 'metformina']. Apenas uso relatado pela própria pessoa; nunca sugira, prescreva ou deduza medicação.",
       },
       weight_goal_kg: { type: "number", description: "Meta de peso em kg, se a pessoa declarou uma." },
       calorie_goal_kcal: { type: "number", description: "Meta calórica diária em kcal, se a pessoa declarou uma ('minha meta é 3000 kcal por dia')." },
@@ -326,20 +334,28 @@ Deno.serve(async (req) => {
       if (ww >= 1 && ww <= 14) { patch.weekly_workouts_goal = Math.round(ww); profileUpdated.push("meta de treinos por semana"); }
       const sg = Number(inp.sleep_goal_h);
       if (sg >= 4 && sg <= 12) { patch.sleep_goal_h = sg; profileUpdated.push("meta de sono"); }
-      if (Array.isArray(inp.add_dietary_restrictions) && inp.add_dietary_restrictions.length) {
+      // Listas que MESCLAM sem duplicar (restrições, condições, medicamentos)
+      const mergeList = async (
+        col: "dietary_restrictions" | "health_conditions" | "medications",
+        incoming: unknown, label: string, max: number,
+      ) => {
+        if (!Array.isArray(incoming) || !incoming.length) return;
         const { data: prof } = await supabase.from("profiles")
-          .select("dietary_restrictions").eq("user_id", user.id).maybeSingle();
-        const current: string[] = Array.isArray(prof?.dietary_restrictions)
-          ? (prof!.dietary_restrictions as unknown[]).map(String) : [];
+          .select(col).eq("user_id", user.id).maybeSingle();
+        const current: string[] = Array.isArray((prof as Record<string, unknown> | null)?.[col])
+          ? ((prof as Record<string, unknown>)[col] as unknown[]).map(String) : [];
         const lower = new Set(current.map((r) => r.toLowerCase()));
-        const added = (inp.add_dietary_restrictions as unknown[])
-          .map((r) => String(r).trim().slice(0, 60))
+        const added = (incoming as unknown[])
+          .map((r) => String(r).trim().slice(0, 80))
           .filter((r) => r && !lower.has(r.toLowerCase()));
         if (added.length) {
-          patch.dietary_restrictions = [...current, ...added].slice(0, 15);
-          profileUpdated.push("restrições alimentares");
+          patch[col] = [...current, ...added].slice(0, 20);
+          profileUpdated.push(label);
         }
-      }
+      };
+      await mergeList("dietary_restrictions", inp.add_dietary_restrictions, "restrições alimentares", 15);
+      await mergeList("health_conditions", inp.add_health_conditions, "condições de saúde", 20);
+      await mergeList("medications", inp.add_medications, "medicamentos", 20);
       if (Object.keys(patch).length) {
         const { error: upErr } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
         if (upErr) { console.error("profile update", upErr); profileUpdated.length = 0; }
