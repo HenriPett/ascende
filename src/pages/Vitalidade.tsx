@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import GoalInput from "@/components/core/GoalInput";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,13 +47,13 @@ export default function Vitalidade() {
     clear();
     refreshProfile();
   };
-  const saveSleepGoal = () => {
-    const h = Number(sleepGoalInput.replace(",", "."));
+  const saveSleepGoalRaw = (raw: string) => {
+    const h = Number(raw.replace(",", "."));
     if (!h || h < 4 || h > 12) { toast.error("Meta de sono inválida. Ex.: 8"); return; }
     saveVitalGoal({ sleep_goal_h: h }, "Meta de sono", () => setSleepGoalInput(""));
   };
-  const saveWorkoutsGoal = () => {
-    const n = Math.round(Number(workoutsGoalInput));
+  const saveWorkoutsGoalRaw = (raw: string) => {
+    const n = Math.round(Number(raw));
     if (!n || n < 1 || n > 14) { toast.error("Meta inválida. Ex.: 4 treinos/semana"); return; }
     saveVitalGoal({ weekly_workouts_goal: n }, "Meta de treinos", () => setWorkoutsGoalInput(""));
   };
@@ -264,12 +265,11 @@ export default function Vitalidade() {
               onChange={(e) => setSleepHours(e.target.value)} />
             <Button onClick={logSleep} variant="secondary">Salvar</Button>
           </div>
-          <div className="flex gap-2 items-center">
-            <Input inputMode="decimal" className="h-8 text-xs"
-              placeholder={profile?.sleep_goal_h ? `Meta: ${String(profile.sleep_goal_h).replace(".", ",")}h/noite` : "Meta de horas/noite"}
-              value={sleepGoalInput} onChange={(e) => setSleepGoalInput(e.target.value)} />
-            <Button size="sm" variant="ghost" className="h-8 text-xs shrink-0" onClick={saveSleepGoal}>Meta</Button>
-          </div>
+          <GoalInput
+            placeholder="Meta de horas/noite"
+            currentLabel={profile?.sleep_goal_h ? `Meta: ${String(profile.sleep_goal_h).replace(".", ",")}h/noite` : null}
+            onSubmit={saveSleepGoalRaw}
+          />
         </Card>
         <Card className="p-4 space-y-2">
           <p className="text-sm font-medium flex items-center gap-1.5"><Dumbbell className="w-4 h-4" /> Treino de hoje</p>
@@ -293,12 +293,12 @@ export default function Vitalidade() {
             ))}
           </div>
           <Button onClick={logWorkout} variant="secondary" className="w-full">Salvar treino</Button>
-          <div className="flex gap-2 items-center">
-            <Input inputMode="numeric" className="h-8 text-xs"
-              placeholder={profile?.weekly_workouts_goal ? `Meta: ${profile.weekly_workouts_goal} treinos/semana` : "Meta de treinos/semana"}
-              value={workoutsGoalInput} onChange={(e) => setWorkoutsGoalInput(e.target.value)} />
-            <Button size="sm" variant="ghost" className="h-8 text-xs shrink-0" onClick={saveWorkoutsGoal}>Meta</Button>
-          </div>
+          <GoalInput
+            inputMode="numeric"
+            placeholder="Meta de treinos/semana"
+            currentLabel={profile?.weekly_workouts_goal ? `Meta: ${profile.weekly_workouts_goal} treinos/semana` : null}
+            onSubmit={saveWorkoutsGoalRaw}
+          />
         </Card>
       </div>
 

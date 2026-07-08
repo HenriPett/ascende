@@ -215,8 +215,8 @@ export default function Score() {
           <div className="space-y-1.5">
             {xpFeed.map((r, i) => (
               <div key={i} className="flex items-center gap-2 text-sm">
-                <span className="shrink-0 inline-flex items-center justify-center min-w-[3.25rem] text-xs font-bold rounded-full px-2 py-0.5"
-                  style={{ background: "hsl(var(--gold) / 0.15)", color: "hsl(var(--gold))" }}>
+                <span className="shrink-0 inline-flex items-center justify-center min-w-[3.25rem] text-xs font-bold rounded-full px-2 py-0.5 text-gold-ink"
+                  style={{ background: "hsl(var(--gold) / 0.15)" }}>
                   +{r.points} XP
                 </span>
                 <span className="flex-1 min-w-0 truncate">{xpReasonLabel(r.reason)}</span>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -105,6 +106,17 @@ export default function Chat() {
   const [savingPlan, setSavingPlan] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [planComment, setPlanComment] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Ganchos contextuais: /app/conselheiro?q=... pré-preenche a pergunta (a pessoa decide enviar)
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q) {
+      setInput(q.slice(0, 500));
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [capturedChecked, setCapturedChecked] = useState<boolean[]>([]);
   const [savingCaptured, setSavingCaptured] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);

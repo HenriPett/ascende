@@ -193,6 +193,18 @@
   /* Brilho suave dourado — anel de nível, destaques */
   .gold-glow { filter: drop-shadow(0 0 10px hsl(var(--gold) / 0.45)); }
 
+  /* Dourado para TEXTO pequeno: mais escuro no claro (contraste AA), vivo no escuro */
+  .text-gold-ink { color: hsl(40 90% 34%); }
+  .dark .text-gold-ink { color: hsl(44 95% 62%); }
+
+  /* Celebração sutil quando uma meta do dia é batida (1x por dia) */
+  @keyframes goal-hit {
+    0% { box-shadow: 0 0 0 0 hsl(var(--gold) / 0.55); }
+    70% { box-shadow: 0 0 0 10px hsl(var(--gold) / 0); }
+    100% { box-shadow: 0 0 0 0 hsl(var(--gold) / 0); }
+  }
+  .goal-celebrate { animation: goal-hit 1.1s ease-out 2; border-radius: 9999px; }
+
   /* Linha de elevação: assinatura visual */
   .ascend-line {
     background-image: linear-gradient(90deg,

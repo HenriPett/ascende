@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import GoalInput from "@/components/core/GoalInput";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,9 +47,9 @@ export default function Prosperidade() {
   const [saving, setSaving] = useState(false);
   const [spendLimitInput, setSpendLimitInput] = useState("");
 
-  const saveSpendLimit = async () => {
+  const saveSpendLimitRaw = async (raw: string) => {
     if (!user) return;
-    const v = Number(spendLimitInput.replace(",", "."));
+    const v = Number(raw.replace(",", "."));
     if (!v || v <= 0) { toast.error("Informe um valor válido. Ex.: 80"); return; }
     const { error } = await supabase.from("profiles").update({ daily_spend_limit: v }).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar."); return; }
@@ -207,13 +209,19 @@ export default function Prosperidade() {
             </p>
           </>
         )}
-        <div className="flex gap-2">
-          <Input inputMode="decimal"
-            placeholder={spendLimit > 0 ? `Teto atual: ${brl(spendLimit)}/dia` : "Definir teto diário (R$)"}
-            value={spendLimitInput} onChange={(e) => setSpendLimitInput(e.target.value)} />
-          <Button variant="outline" onClick={saveSpendLimit}>Meta</Button>
-        </div>
+        <GoalInput
+          placeholder="Definir teto diário (R$)"
+          currentLabel={spendLimit > 0 ? `Teto: ${brl(spendLimit)}/dia` : null}
+          onSubmit={(raw) => saveSpendLimitRaw(raw)}
+        />
       </Card>
+
+      <p className="text-[11px] text-right -mt-2 px-1">
+        <Link className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          to={`/app/conselheiro?q=${encodeURIComponent("Analisa meus gastos recentes: onde estou gastando mais e o que dá para ajustar?")}`}>
+          Perguntar ao Conselheiro sobre meus gastos
+        </Link>
+      </p>
 
       {budgetPct !== null && (
         <Card className="p-4">

@@ -40,7 +40,7 @@ function LevelBadge() {
             strokeDasharray={`${progress * 94.2} 94.2`}
           />
         </svg>
-        <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gold">
+        <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gold-ink">
           {level}
         </span>
       </div>

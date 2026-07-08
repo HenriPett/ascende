@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import GoalInput from "@/components/core/GoalInput";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -309,9 +311,9 @@ export default function Alimentacao() {
     qc.invalidateQueries();
   };
 
-  const saveCalorieGoal = async () => {
+  const saveCalorieGoalRaw = async (raw: string) => {
     if (!user) return;
-    const kcal = Math.round(Number(calorieGoalInput.replace(/\D/g, "")));
+    const kcal = Math.round(Number(raw.replace(/\D/g, "")));
     if (!kcal || kcal < 800 || kcal > 8000) { toast.error("Meta inválida. Ex.: 3000"); return; }
     const { error } = await supabase.from("profiles").update({ calorie_goal_kcal: kcal }).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar a meta."); return; }
@@ -480,425 +482,463 @@ export default function Alimentacao() {
         </div>
       </Card>
 
-      {/* Foto ou descrição → calorias */}
-      <Card className="p-4 space-y-3">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Camera className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
-          Foto ou descrição, eu estimo as calorias
-        </div>
+      {/* Abas: menos scroll, mais intenção */}
+      <Tabs defaultValue="hoje" className="space-y-4">
+        <TabsList className="grid grid-cols-3 w-full">
+          <TabsTrigger value="hoje">Hoje</TabsTrigger>
+          <TabsTrigger value="corpo">Corpo</TabsTrigger>
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
+        </TabsList>
 
-        <input
-          ref={fileRef} type="file" accept="image/*"
-          className="hidden" onChange={onPickPhoto}
-        />
+        <TabsContent value="hoje" className="space-y-4 mt-0">
+        {/* ── Meta calórica do dia ─────────────────────────────── */}
+        <Card className="p-4 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium flex items-center gap-1.5">
+              <Flame className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
+              Meta do dia
+            </p>
+            <span className="text-sm text-muted-foreground">
+              <strong className="text-foreground">{kcalToday.toLocaleString("pt-BR")}</strong>
+              {kcalGoal > 0 && <> / {kcalGoal.toLocaleString("pt-BR")}</>} kcal
+            </span>
+          </div>
 
-        {/* Descrição da refeição (obrigatória sem foto; com foto, refina a estimativa) */}
-        <div className="space-y-1">
-          <Textarea
-            value={photoNote}
-            onChange={(e) => setPhotoNote(e.target.value)}
-            placeholder={photoData
-              ? 'Observação (opcional): "a carne é cupim", "comi um sagu junto"...'
-              : 'Descreva a refeição: "prato de arroz, feijão, bife e salada" — ou adicione uma foto'}
-            rows={2} maxLength={300}
-            className="resize-none text-sm"
-            disabled={analyzing}
+          {kcalGoal > 0 && (
+            <>
+              <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, (kcalToday / kcalGoal) * 100)}%`, background: "hsl(var(--alimentacao))" }} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {kcalToday < kcalGoal
+                  ? `Faltam ${(kcalGoal - kcalToday).toLocaleString("pt-BR")} kcal para a meta.`
+                  : "Meta do dia alcançada. 🎉"}
+              </p>
+            </>
+          )}
+
+          <GoalInput
+            inputMode="numeric"
+            placeholder="Definir meta diária (kcal)"
+            currentLabel={kcalGoal > 0 ? `Meta: ${kcalGoal.toLocaleString("pt-BR")} kcal/dia` : null}
+            onSubmit={(raw) => { setCalorieGoalInput(raw); saveCalorieGoalRaw(raw); }}
           />
-          <p className="text-[11px] text-muted-foreground">
-            {photoData
-              ? "Detalhes deixam a estimativa mais certeira e ficam salvos com a refeição."
-              : "Dá para estimar só pela descrição, mas a foto melhora a precisão."}
-          </p>
-        </div>
+          {kcalGoal === 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              Dica: peça um plano alimentar ao Conselheiro — ao salvar, a meta do plano é aplicada aqui automaticamente.
+            </p>
+          )}
+        </Card>
 
-        <div className="flex gap-2">
-          <Button
-            variant="secondary" className="flex-1 min-w-0"
-            onClick={() => fileRef.current?.click()} disabled={analyzing}
-          >
-            <Camera className="w-4 h-4 mr-2 shrink-0" />
-            <span className="truncate">{photoData ? "Trocar foto" : "Adicionar foto"}</span>
-          </Button>
-          <Button
-            className="flex-1 min-w-0"
-            onClick={analyzeMeal}
-            disabled={analyzing || (!photoData && !photoNote.trim())}
-          >
-            {analyzing
-              ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" /> Analisando...</>)
-              : (<><Sparkles className="w-4 h-4 mr-2 shrink-0" /> {estimate ? "Reanalisar" : "Analisar"}</>)}
-          </Button>
-        </div>
 
-        {photoData && !estimate && !analyzing && (
-          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-            <Check className="w-3.5 h-3.5 text-success" /> Foto pronta. Escreva uma observação se quiser e toque em Analisar.
-          </p>
-        )}
-
-        {estimate && (
-          <div className="space-y-3 animate-fade-up">
-            <div className="rounded-lg border p-3 space-y-2.5">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium break-words">{estimate.description}</p>
-                  {!!estimate.items.length && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{estimate.items.join(" · ")}</p>
-                  )}
-                </div>
-                <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap rounded-full bg-muted px-2 py-0.5">
-                  {confidenceLabel[estimate.confidence]}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Flame className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--alimentacao))" }} />
-                <Input
-                  inputMode="numeric"
-                  className="h-9 w-24 text-base font-semibold"
-                  value={String(estimate.calories)}
-                  onChange={(e) => setCalories(e.target.value)}
-                  aria-label="Calorias estimadas"
-                />
-                <span className="text-sm text-muted-foreground">kcal (ajuste se quiser)</span>
-              </div>
-
-              {(estimate.protein_g || estimate.carbs_g || estimate.fat_g) && (
-                <div className="flex gap-2 text-xs text-muted-foreground">
-                  {estimate.protein_g != null && <span className="rounded bg-muted px-2 py-1">Proteína {estimate.protein_g}g</span>}
-                  {estimate.carbs_g != null && <span className="rounded bg-muted px-2 py-1">Carbo {estimate.carbs_g}g</span>}
-                  {estimate.fat_g != null && <span className="rounded bg-muted px-2 py-1">Gordura {estimate.fat_g}g</span>}
-                </div>
-              )}
-
-              {estimate.note && <p className="text-xs text-muted-foreground italic">{estimate.note}</p>}
-            </div>
-
-            <div className="flex flex-wrap gap-2 justify-end">
-              <Button variant="ghost" onClick={resetPhoto} disabled={savingPhoto || analyzing}>
-                <X className="w-4 h-4 mr-1" /> Descartar
-              </Button>
-              <Button onClick={confirmPhoto} disabled={savingPhoto || analyzing}>
-                {savingPhoto ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Registrar</>)}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Card>
-
-      {/* Hidratação */}
-      <Card className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
+        {/* Foto ou descrição → calorias */}
+        <Card className="p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <Droplet className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
-            Hidratação de hoje
+            <Camera className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
+            Foto ou descrição, eu estimo as calorias
           </div>
-          <Button variant="ghost" size="sm" className="h-8 text-muted-foreground"
-            onClick={() => setSettingsOpen(true)}>
-            <Settings2 className="w-4 h-4 mr-1.5" /> Personalizar
-          </Button>
-        </div>
 
-        <div className="flex items-center gap-4">
-          <WaterRing pct={pct} />
-          <div className="min-w-0">
-            <p className="text-lg font-semibold">
-              {(totalMl / 1000).toFixed(totalMl % 1000 === 0 ? 0 : 2).replace(".", ",")} L
-              <span className="text-sm font-normal text-muted-foreground"> / {(goalMl / 1000).toString().replace(".", ",")} L</span>
+          <input
+            ref={fileRef} type="file" accept="image/*"
+            className="hidden" onChange={onPickPhoto}
+          />
+
+          {/* Descrição da refeição (obrigatória sem foto; com foto, refina a estimativa) */}
+          <div className="space-y-1">
+            <Textarea
+              value={photoNote}
+              onChange={(e) => setPhotoNote(e.target.value)}
+              placeholder={photoData
+                ? 'Observação (opcional): "a carne é cupim", "comi um sagu junto"...'
+                : 'Descreva a refeição: "prato de arroz, feijão, bife e salada" — ou adicione uma foto'}
+              rows={2} maxLength={300}
+              className="resize-none text-sm"
+              disabled={analyzing}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {photoData
+                ? "Detalhes deixam a estimativa mais certeira e ficam salvos com a refeição."
+                : "Dá para estimar só pela descrição, mas a foto melhora a precisão."}
             </p>
-            <p className="text-xs text-muted-foreground">
-              {pct >= 1 ? "Meta batida hoje. Mandou bem!" : `Faltam ${((goalMl - totalMl) / 1000).toFixed(2).replace(".", ",")} L`}
-            </p>
-            {!!(waterToday ?? []).length && (
-              <button onClick={undoWater} className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                <Undo2 className="w-3 h-3" /> desfazer último
-              </button>
-            )}
           </div>
-        </div>
 
-        <div className="flex flex-wrap gap-2">
-          {bottles.map((b, i) => (
-            <Button key={i} variant="secondary" size="sm" className="gap-1.5"
-              onClick={() => addWater(b.ml)}>
-              <Plus className="w-3.5 h-3.5" />
-              {b.label} <span className="text-muted-foreground">· {b.ml >= 1000 ? `${(b.ml / 1000).toString().replace(".", ",")}L` : `${b.ml}ml`}</span>
-            </Button>
-          ))}
-        </div>
-      </Card>
-
-      {/* ── Meta calórica do dia ─────────────────────────────── */}
-      <Card className="p-4 space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium flex items-center gap-1.5">
-            <Flame className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
-            Meta do dia
-          </p>
-          <span className="text-sm text-muted-foreground">
-            <strong className="text-foreground">{kcalToday.toLocaleString("pt-BR")}</strong>
-            {kcalGoal > 0 && <> / {kcalGoal.toLocaleString("pt-BR")}</>} kcal
-          </span>
-        </div>
-
-        {kcalGoal > 0 && (
-          <>
-            <div className="h-2.5 rounded-full bg-muted overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, (kcalToday / kcalGoal) * 100)}%`, background: "hsl(var(--alimentacao))" }} />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {kcalToday < kcalGoal
-                ? `Faltam ${(kcalGoal - kcalToday).toLocaleString("pt-BR")} kcal para a meta.`
-                : "Meta do dia alcançada. 🎉"}
-            </p>
-          </>
-        )}
-
-        <div className="flex gap-2">
-          <Input inputMode="numeric"
-            placeholder={kcalGoal > 0 ? `Meta atual: ${kcalGoal.toLocaleString("pt-BR")} kcal/dia` : "Definir meta diária (kcal)"}
-            value={calorieGoalInput} onChange={(e) => setCalorieGoalInput(e.target.value)} />
-          <Button variant="outline" onClick={saveCalorieGoal}>Meta</Button>
-        </div>
-        {kcalGoal === 0 && (
-          <p className="text-[11px] text-muted-foreground">
-            Dica: peça um plano alimentar ao Conselheiro — ao salvar, a meta do plano é aplicada aqui automaticamente.
-          </p>
-        )}
-      </Card>
-
-      {/* ── Evolução corporal ────────────────────────────────── */}
-      <Card className="p-4 space-y-4">
-        <div>
-          <h2 className="font-display font-semibold flex items-center gap-1.5">
-            <Scale className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
-            Evolução corporal
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Peso, tendência e composição. O número é só um dado — a direção importa mais que o dia.
-          </p>
-        </div>
-
-        {/* Registro de peso + meta */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div className="flex gap-2">
-            <Input inputMode="decimal" placeholder="Peso de hoje (kg)" value={weightInput}
-              onChange={(e) => setWeightInput(e.target.value)} />
-            <Button variant="secondary" onClick={logWeight} disabled={savingWeight}>
-              {savingWeight ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
+            <Button
+              variant="secondary" className="flex-1 min-w-0"
+              onClick={() => fileRef.current?.click()} disabled={analyzing}
+            >
+              <Camera className="w-4 h-4 mr-2 shrink-0" />
+              <span className="truncate">{photoData ? "Trocar foto" : "Adicionar foto"}</span>
+            </Button>
+            <Button
+              className="flex-1 min-w-0"
+              onClick={analyzeMeal}
+              disabled={analyzing || (!photoData && !photoNote.trim())}
+            >
+              {analyzing
+                ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" /> Analisando...</>)
+                : (<><Sparkles className="w-4 h-4 mr-2 shrink-0" /> {estimate ? "Reanalisar" : "Analisar"}</>)}
             </Button>
           </div>
-          <div className="flex gap-2">
-            <Input inputMode="decimal"
-              placeholder={weightGoal ? `Meta: ${String(weightGoal).replace(".", ",")} kg` : "Meta de peso (kg)"}
-              value={weightGoalInput} onChange={(e) => setWeightGoalInput(e.target.value)} />
-            <Button variant="outline" onClick={saveWeightGoal}>Meta</Button>
-          </div>
-        </div>
 
-        {/* Gráfico de peso */}
-        {weightSeries.length >= 2 ? (
-          <>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={weightSeries} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="dia" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                  <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
-                      borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
-                    }}
-                    formatter={(v: number) => [`${String(v).replace(".", ",")} kg`, "Peso"]}
-                  />
-                  {weightGoal && (
-                    <ReferenceLine y={weightGoal} stroke="hsl(var(--gold))" strokeDasharray="5 4"
-                      label={{ value: "meta", fontSize: 10, fill: "hsl(var(--gold))", position: "insideTopRight" }} />
-                  )}
-                  <Line type="monotone" dataKey="kg" stroke="hsl(var(--alimentacao))" strokeWidth={2}
-                    dot={{ r: 2.5, fill: "hsl(var(--alimentacao))" }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            {trendKgWeek !== null && (
-              <p className="text-xs text-muted-foreground flex items-start gap-1.5">
-                <TrendingUp className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                <span>
-                  Tendência: {Math.abs(trendKgWeek) < 0.05
-                    ? "peso estável nas últimas semanas."
-                    : `${trendKgWeek > 0 ? "ganhando" : "perdendo"} ~${Math.abs(trendKgWeek).toFixed(1).replace(".", ",")} kg/semana.`}
-                  {weightGoal && weightSeries.length > 0 && (() => {
-                    const cur = weightSeries[weightSeries.length - 1].kg;
-                    const diff = weightGoal - cur;
-                    if (Math.abs(diff) < 0.5) return " Você está na sua meta. 🎉";
-                    const rightDirection = (diff > 0 && trendKgWeek > 0.05) || (diff < 0 && trendKgWeek < -0.05);
-                    return rightDirection
-                      ? ` Faltam ${Math.abs(diff).toFixed(1).replace(".", ",")} kg — a direção está certa, mantenha o padrão.`
-                      : ` Faltam ${Math.abs(diff).toFixed(1).replace(".", ",")} kg para a meta. Quer um plano que caiba na sua rotina e no seu bolso? Pergunte ao Conselheiro.`;
-                  })()}
-                </span>
-              </p>
-            )}
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground text-center py-2">
-            Registre seu peso pelo menos duas vezes para o gráfico aparecer.
-          </p>
-        )}
-
-        {/* Calorias por dia */}
-        {caloriesByDay.length >= 2 && (
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1.5">Calorias estimadas por dia (14 dias)</p>
-            <div className="h-32">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={caloriesByDay} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
-                  <XAxis dataKey="dia" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    cursor={{ fill: "hsl(var(--muted) / 0.5)" }}
-                    contentStyle={{
-                      background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
-                      borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
-                    }}
-                    formatter={(v: number) => [`${v} kcal`, "Total"]}
-                  />
-                  <Bar dataKey="kcal" fill="hsl(var(--alimentacao) / 0.7)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Soma das estimativas por foto — dias sem registro não aparecem.
-            </p>
-          </div>
-        )}
-
-        {/* Composição corporal por foto */}
-        <div className="rounded-lg border p-3 space-y-2.5">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="text-sm font-medium flex items-center gap-1.5">
-                <ScanLine className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
-                Composição corporal por foto
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Estimativa visual do % de gordura e massa magra. É uma aproximação com margem
-                larga — para precisão, bioimpedância ou DEXA com um profissional. A foto não fica salva.
-              </p>
-            </div>
-          </div>
-
-          <input ref={bodyFileRef} type="file" accept="image/*"
-            className="hidden" onChange={onPickBodyPhoto} />
-
-          {latestScan && !bodyEstimate && (
-            <p className="text-xs rounded-md bg-muted px-2.5 py-1.5">
-              Última estimativa ({new Date(latestScan.occurred_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}):
-              ~{latestScan.payload?.body_fat_pct}% de gordura
-              {latestScan.payload?.lean_mass_kg ? ` · ~${String(latestScan.payload.lean_mass_kg).replace(".", ",")} kg de massa magra` : ""}
+          {photoData && !estimate && !analyzing && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5 text-success" /> Foto pronta. Escreva uma observação se quiser e toque em Analisar.
             </p>
           )}
 
-          {!bodyEstimate && (
-            <Button variant="secondary" className="w-full"
-              onClick={() => bodyFileRef.current?.click()} disabled={bodyAnalyzing}>
-              {bodyAnalyzing
-                ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analisando...</>)
-                : (<><Camera className="w-4 h-4 mr-2" /> Enviar foto de corpo inteiro</>)}
-            </Button>
-          )}
+          {estimate && (
+            <div className="space-y-3 animate-fade-up">
+              <div className="rounded-lg border p-3 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium break-words">{estimate.description}</p>
+                    {!!estimate.items.length && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{estimate.items.join(" · ")}</p>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap rounded-full bg-muted px-2 py-0.5">
+                    {confidenceLabel[estimate.confidence]}
+                  </span>
+                </div>
 
-          {bodyEstimate && (
-            <div className="space-y-2.5 animate-fade-up">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-md bg-muted px-3 py-2">
-                  <p className="text-[11px] text-muted-foreground">Gordura corporal (faixa)</p>
-                  <p className="text-sm font-semibold">{bodyEstimate.body_fat_range}</p>
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--alimentacao))" }} />
+                  <Input
+                    inputMode="numeric"
+                    className="h-9 w-24 text-base font-semibold"
+                    value={String(estimate.calories)}
+                    onChange={(e) => setCalories(e.target.value)}
+                    aria-label="Calorias estimadas"
+                  />
+                  <span className="text-sm text-muted-foreground">kcal (ajuste se quiser)</span>
                 </div>
-                <div className="rounded-md bg-muted px-3 py-2">
-                  <p className="text-[11px] text-muted-foreground">Massa magra estimada</p>
-                  <p className="text-sm font-semibold">
-                    {bodyEstimate.lean_mass_kg
-                      ? `~${String(bodyEstimate.lean_mass_kg).replace(".", ",")} kg`
-                      : "registre seu peso p/ calcular"}
-                  </p>
-                </div>
+
+                {(estimate.protein_g || estimate.carbs_g || estimate.fat_g) && (
+                  <div className="flex gap-2 text-xs text-muted-foreground">
+                    {estimate.protein_g != null && <span className="rounded bg-muted px-2 py-1">Proteína {estimate.protein_g}g</span>}
+                    {estimate.carbs_g != null && <span className="rounded bg-muted px-2 py-1">Carbo {estimate.carbs_g}g</span>}
+                    {estimate.fat_g != null && <span className="rounded bg-muted px-2 py-1">Gordura {estimate.fat_g}g</span>}
+                  </div>
+                )}
+
+                {estimate.note && <p className="text-xs text-muted-foreground italic">{estimate.note}</p>}
               </div>
-              {bodyEstimate.note && <p className="text-xs text-muted-foreground italic">{bodyEstimate.note}</p>}
-              <div className="flex gap-2 justify-end">
-                <Button variant="ghost" size="sm" onClick={() => setBodyEstimate(null)} disabled={savingBody}>
+
+              <div className="flex flex-wrap gap-2 justify-end">
+                <Button variant="ghost" onClick={resetPhoto} disabled={savingPhoto || analyzing}>
                   <X className="w-4 h-4 mr-1" /> Descartar
                 </Button>
-                <Button size="sm" onClick={confirmBody} disabled={savingBody}>
-                  {savingBody ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Registrar</>)}
+                <Button onClick={confirmPhoto} disabled={savingPhoto || analyzing}>
+                  {savingPhoto ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Registrar</>)}
                 </Button>
               </div>
             </div>
           )}
-        </div>
-      </Card>
+        </Card>
 
-      {/* Registro rápido em texto */}
-      <Card className="p-4">
-        <form onSubmit={addText} className="flex gap-2">
-          <Input maxLength={140} placeholder="Ou descreva: almoço — frango, arroz e salada"
-            value={meal} onChange={(e) => setMeal(e.target.value)} />
-          <Button type="submit" size="icon" aria-label="Registrar refeição"><Plus className="w-4 h-4" /></Button>
-        </form>
-      </Card>
 
-      {/* Histórico 14 dias */}
-      <Card className="p-4">
-        <h2 className="font-display font-semibold mb-3">Últimos 14 dias</h2>
-        {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
-        {!isLoading && !(meals ?? []).length && (
-          <div className="text-center py-6">
-            <UtensilsCrossed className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">
-              Nenhuma refeição registrada ainda.<br />Tire uma foto acima, descreva em texto — ou conte na tela Hoje: "almocei frango com arroz".
+        {/* Registro rápido em texto */}
+        <Card className="p-4">
+          <form onSubmit={addText} className="flex gap-2">
+            <Input maxLength={140} placeholder="Ou descreva: almoço — frango, arroz e salada"
+              value={meal} onChange={(e) => setMeal(e.target.value)} />
+            <Button type="submit" size="icon" aria-label="Registrar refeição"><Plus className="w-4 h-4" /></Button>
+          </form>
+        </Card>
+
+
+        {/* Hidratação */}
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Droplet className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
+              Hidratação de hoje
+            </div>
+            <Button variant="ghost" size="sm" className="h-8 text-muted-foreground"
+              onClick={() => setSettingsOpen(true)}>
+              <Settings2 className="w-4 h-4 mr-1.5" /> Personalizar
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <WaterRing pct={pct} />
+            <div className="min-w-0">
+              <p className="text-lg font-semibold">
+                {(totalMl / 1000).toFixed(totalMl % 1000 === 0 ? 0 : 2).replace(".", ",")} L
+                <span className="text-sm font-normal text-muted-foreground"> / {(goalMl / 1000).toString().replace(".", ",")} L</span>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {pct >= 1 ? "Meta batida hoje. Mandou bem!" : `Faltam ${((goalMl - totalMl) / 1000).toFixed(2).replace(".", ",")} L`}
+              </p>
+              {!!(waterToday ?? []).length && (
+                <button onClick={undoWater} className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  <Undo2 className="w-3 h-3" /> desfazer último
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {bottles.map((b, i) => (
+              <Button key={i} variant="secondary" size="sm" className="gap-1.5"
+                onClick={() => addWater(b.ml)}>
+                <Plus className="w-3.5 h-3.5" />
+                {b.label} <span className="text-muted-foreground">· {b.ml >= 1000 ? `${(b.ml / 1000).toString().replace(".", ",")}L` : `${b.ml}ml`}</span>
+              </Button>
+            ))}
+          </div>
+        </Card>
+
+
+        </TabsContent>
+
+        <TabsContent value="corpo" className="space-y-4 mt-0">
+        {/* ── Evolução corporal ────────────────────────────────── */}
+        <Card className="p-4 space-y-4">
+          <div>
+            <h2 className="font-display font-semibold flex items-center gap-1.5">
+              <Scale className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
+              Evolução corporal
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Peso, tendência e composição. O número é só um dado — a direção importa mais que o dia.
             </p>
           </div>
-        )}
-        <div className="space-y-4">
-          {Object.entries(byDay).map(([day, items]) => (
-            <div key={day}>
-              <p className="text-xs font-semibold text-muted-foreground mb-1.5">
-                {new Date(day + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" })}
-              </p>
-              <div className="space-y-1">
-                {items.map((m) => (
-                  <div key={m.id} className="flex items-center gap-2 rounded-md border p-2.5">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm break-words">
-                        {m.payload?.description ?? m.payload?.summary ?? "Refeição"}
-                      </span>
-                      {m.payload?.note && (
-                        <span className="block text-xs text-muted-foreground italic break-words">obs: {m.payload.note}</span>
-                      )}
-                    </div>
-                    {Number(m.payload?.calories) > 0 && (
-                      <span className="shrink-0 inline-flex items-center gap-1 text-xs text-muted-foreground rounded-full bg-muted px-2 py-0.5">
-                        <Flame className="w-3 h-3" /> {Math.round(Number(m.payload!.calories))} kcal
-                      </span>
+
+          {/* Registro de peso + meta */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="flex gap-2">
+              <Input inputMode="decimal" placeholder="Peso de hoje (kg)" value={weightInput}
+                onChange={(e) => setWeightInput(e.target.value)} />
+              <Button variant="secondary" onClick={logWeight} disabled={savingWeight}>
+                {savingWeight ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Input inputMode="decimal"
+                placeholder={weightGoal ? `Meta: ${String(weightGoal).replace(".", ",")} kg` : "Meta de peso (kg)"}
+                value={weightGoalInput} onChange={(e) => setWeightGoalInput(e.target.value)} />
+              <Button variant="outline" onClick={saveWeightGoal}>Meta</Button>
+            </div>
+          </div>
+
+          {/* Gráfico de peso */}
+          {weightSeries.length >= 2 ? (
+            <>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={weightSeries} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="dia" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                    <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
+                        borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
+                      }}
+                      formatter={(v: number) => [`${String(v).replace(".", ",")} kg`, "Peso"]}
+                    />
+                    {weightGoal && (
+                      <ReferenceLine y={weightGoal} stroke="hsl(var(--gold))" strokeDasharray="5 4"
+                        label={{ value: "meta", fontSize: 10, fill: "hsl(var(--gold))", position: "insideTopRight" }} />
                     )}
-                    <Button variant="ghost" size="icon" className="w-7 h-7 shrink-0 text-muted-foreground"
-                      onClick={() => setEditingMeal(m)} aria-label="Editar calorias">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="w-7 h-7 shrink-0 text-muted-foreground"
-                      onClick={() => remove(m.id)} aria-label="Excluir refeição">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                ))}
+                    <Line type="monotone" dataKey="kg" stroke="hsl(var(--alimentacao))" strokeWidth={2}
+                      dot={{ r: 2.5, fill: "hsl(var(--alimentacao))" }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {trendKgWeek !== null && (
+                <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>
+                    Tendência: {Math.abs(trendKgWeek) < 0.05
+                      ? "peso estável nas últimas semanas."
+                      : `${trendKgWeek > 0 ? "ganhando" : "perdendo"} ~${Math.abs(trendKgWeek).toFixed(1).replace(".", ",")} kg/semana.`}
+                    {weightGoal && weightSeries.length > 0 && (() => {
+                      const cur = weightSeries[weightSeries.length - 1].kg;
+                      const diff = weightGoal - cur;
+                      if (Math.abs(diff) < 0.5) return " Você está na sua meta. 🎉";
+                      const rightDirection = (diff > 0 && trendKgWeek > 0.05) || (diff < 0 && trendKgWeek < -0.05);
+                      return rightDirection
+                        ? ` Faltam ${Math.abs(diff).toFixed(1).replace(".", ",")} kg — a direção está certa, mantenha o padrão.`
+                        : ` Faltam ${Math.abs(diff).toFixed(1).replace(".", ",")} kg para a meta. Quer um plano que caiba na sua rotina e no seu bolso? Pergunte ao Conselheiro.`;
+                    })()}
+                  </span>
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-2">
+              Registre seu peso pelo menos duas vezes para o gráfico aparecer.
+            </p>
+          )}
+
+          <p className="text-[11px] text-right -mt-2">
+          <Link className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            to={`/app/conselheiro?q=${encodeURIComponent("Analisa a tendência do meu peso nos últimos meses e me diz o que ela sugere.")}`}>
+            Perguntar ao Conselheiro sobre essa tendência
+          </Link>
+        </p>
+
+        {/* Calorias por dia */}
+          {caloriesByDay.length >= 2 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1.5">Calorias estimadas por dia (14 dias)</p>
+              <div className="h-32">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={caloriesByDay} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+                    <XAxis dataKey="dia" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      cursor={{ fill: "hsl(var(--muted) / 0.5)" }}
+                      contentStyle={{
+                        background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
+                        borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
+                      }}
+                      formatter={(v: number) => [`${v} kcal`, "Total"]}
+                    />
+                    <Bar dataKey="kcal" fill="hsl(var(--alimentacao) / 0.7)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Soma das estimativas por foto — dias sem registro não aparecem.
+              </p>
+            </div>
+          )}
+
+          <p className="text-[11px] text-right -mt-2">
+          <Link className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            to={`/app/conselheiro?q=${encodeURIComponent("Como estão minhas calorias diárias em relação à minha meta nas últimas semanas?")}`}>
+            Perguntar ao Conselheiro sobre minhas calorias
+          </Link>
+        </p>
+
+        {/* Composição corporal por foto */}
+          <div className="rounded-lg border p-3 space-y-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium flex items-center gap-1.5">
+                  <ScanLine className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
+                  Composição corporal por foto
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Estimativa visual do % de gordura e massa magra. É uma aproximação com margem
+                  larga — para precisão, bioimpedância ou DEXA com um profissional. A foto não fica salva.
+                </p>
               </div>
             </div>
-          ))}
-        </div>
-      </Card>
+
+            <input ref={bodyFileRef} type="file" accept="image/*"
+              className="hidden" onChange={onPickBodyPhoto} />
+
+            {latestScan && !bodyEstimate && (
+              <p className="text-xs rounded-md bg-muted px-2.5 py-1.5">
+                Última estimativa ({new Date(latestScan.occurred_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}):
+                ~{latestScan.payload?.body_fat_pct}% de gordura
+                {latestScan.payload?.lean_mass_kg ? ` · ~${String(latestScan.payload.lean_mass_kg).replace(".", ",")} kg de massa magra` : ""}
+              </p>
+            )}
+
+            {!bodyEstimate && (
+              <Button variant="secondary" className="w-full"
+                onClick={() => bodyFileRef.current?.click()} disabled={bodyAnalyzing}>
+                {bodyAnalyzing
+                  ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analisando...</>)
+                  : (<><Camera className="w-4 h-4 mr-2" /> Enviar foto de corpo inteiro</>)}
+              </Button>
+            )}
+
+            {bodyEstimate && (
+              <div className="space-y-2.5 animate-fade-up">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-md bg-muted px-3 py-2">
+                    <p className="text-[11px] text-muted-foreground">Gordura corporal (faixa)</p>
+                    <p className="text-sm font-semibold">{bodyEstimate.body_fat_range}</p>
+                  </div>
+                  <div className="rounded-md bg-muted px-3 py-2">
+                    <p className="text-[11px] text-muted-foreground">Massa magra estimada</p>
+                    <p className="text-sm font-semibold">
+                      {bodyEstimate.lean_mass_kg
+                        ? `~${String(bodyEstimate.lean_mass_kg).replace(".", ",")} kg`
+                        : "registre seu peso p/ calcular"}
+                    </p>
+                  </div>
+                </div>
+                {bodyEstimate.note && <p className="text-xs text-muted-foreground italic">{bodyEstimate.note}</p>}
+                <div className="flex gap-2 justify-end">
+                  <Button variant="ghost" size="sm" onClick={() => setBodyEstimate(null)} disabled={savingBody}>
+                    <X className="w-4 h-4 mr-1" /> Descartar
+                  </Button>
+                  <Button size="sm" onClick={confirmBody} disabled={savingBody}>
+                    {savingBody ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Registrar</>)}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+
+
+        </TabsContent>
+
+        <TabsContent value="historico" className="space-y-4 mt-0">
+        {/* Histórico 14 dias */}
+        <Card className="p-4">
+          <h2 className="font-display font-semibold mb-3">Últimos 14 dias</h2>
+          {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
+          {!isLoading && !(meals ?? []).length && (
+            <div className="text-center py-6">
+              <UtensilsCrossed className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Nenhuma refeição registrada ainda.<br />Tire uma foto acima, descreva em texto — ou conte na tela Hoje: "almocei frango com arroz".
+              </p>
+            </div>
+          )}
+          <div className="space-y-4">
+            {Object.entries(byDay).map(([day, items]) => (
+              <div key={day}>
+                <p className="text-xs font-semibold text-muted-foreground mb-1.5">
+                  {new Date(day + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" })}
+                </p>
+                <div className="space-y-1">
+                  {items.map((m) => (
+                    <div key={m.id} className="flex items-center gap-2 rounded-md border p-2.5">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm break-words">
+                          {m.payload?.description ?? m.payload?.summary ?? "Refeição"}
+                        </span>
+                        {m.payload?.note && (
+                          <span className="block text-xs text-muted-foreground italic break-words">obs: {m.payload.note}</span>
+                        )}
+                      </div>
+                      {Number(m.payload?.calories) > 0 && (
+                        <span className="shrink-0 inline-flex items-center gap-1 text-xs text-muted-foreground rounded-full bg-muted px-2 py-0.5">
+                          <Flame className="w-3 h-3" /> {Math.round(Number(m.payload!.calories))} kcal
+                        </span>
+                      )}
+                      <Button variant="ghost" size="icon" className="w-7 h-7 shrink-0 text-muted-foreground"
+                        onClick={() => setEditingMeal(m)} aria-label="Editar calorias">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="w-7 h-7 shrink-0 text-muted-foreground"
+                        onClick={() => remove(m.id)} aria-label="Excluir refeição">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+
+        </TabsContent>
+      </Tabs>
 
       <WaterSettingsDialog
         open={settingsOpen} onOpenChange={setSettingsOpen}

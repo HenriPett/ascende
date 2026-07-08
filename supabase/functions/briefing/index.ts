@@ -6,6 +6,27 @@ import {
   ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, SAFETY_RULES,
 } from "../_shared/lib.ts";
 
+// Domingo (fuso de São Paulo) = retrospectiva da semana em vez do briefing do dia
+function isSundayInSaoPaulo(): boolean {
+  const wd = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" })
+    .format(new Date());
+  return wd === "Sun";
+}
+
+const RETRO_SYSTEM = `Você escreve a retrospectiva de domingo do Ascend — plataforma brasileira de qualidade de vida.
+ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –); prefira vírgula, dois-pontos ou frases separadas.
+Com base no retrato da pessoa (dados reais), escreva de 4 a 6 frases curtas em português do Brasil olhando para a SEMANA que passou:
+1. O resumo honesto da semana, cruzando pilares quando os dados permitirem (o que andou, o que travou).
+2. UMA vitória concreta da semana para reconhecer (meta batida, sequência, bom padrão), com o dado.
+3. UMA coisa para ajustar na semana que começa, com o porquê nos dados.
+4. Feche com uma frase de partida para a nova semana, curta e sem clichê.
+Tom: caloroso, direto, sem falso entusiasmo, sem envergonhar. Sem listas, sem títulos, sem emoji — apenas o texto corrido.
+Se houver poucos dados, dê boas-vindas e diga (em 1 frase) o que registrar para a próxima retrospectiva valer a pena.
+${SAFETY_RULES}
+
+━━━ RETRATO ATUAL DA PESSOA ━━━
+`;
+
 const SYSTEM = `Você escreve o briefing matinal do Ascend — plataforma brasileira de qualidade de vida.
 ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –); prefira vírgula, dois-pontos ou frases separadas.
 Com base no retrato da pessoa (dados reais), escreva de 3 a 5 frases curtas em português do Brasil:
@@ -46,7 +67,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: MODEL_SMART,
         max_tokens: 400,
-        system: SYSTEM + snapshot,
+        system: (isSundayInSaoPaulo() ? RETRO_SYSTEM : SYSTEM) + snapshot,
         messages: [{ role: "user", content: `Escreva o briefing de hoje (${today}).` }],
       }),
     });

@@ -7,6 +7,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { PILLARS, type PillarId } from "@/lib/pillars";
@@ -34,6 +35,10 @@ export default function Onboarding() {
   const [spirit, setSpirit] = useState("");
   const [income, setIncome] = useState("");
   const [budget, setBudget] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+  const [sex, setSex] = useState("nao_informar");
+  const [heightCm, setHeightCm] = useState("");
+  const [activity, setActivity] = useState("nao_informar");
 
   const togglePillar = (id: PillarId) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -51,6 +56,10 @@ export default function Onboarding() {
         spirituality_label: needsSpirit ? (spirit.trim() || "Momento de silêncio") : null,
         monthly_income: needsMoney && income ? Number(income) : null,
         monthly_budget: needsMoney && budget ? Number(budget) : null,
+        birth_year: birthYear && Number(birthYear) > 1900 && Number(birthYear) <= new Date().getFullYear() ? Number(birthYear) : null,
+        sex: sex === "nao_informar" ? null : sex,
+        height_cm: heightCm && Number(heightCm.replace(",", ".")) > 80 ? Number(heightCm.replace(",", ".")) : null,
+        activity_level: activity === "nao_informar" ? null : activity,
         onboarded: true,
       }).eq("user_id", user.id);
       if (error) throw error;
@@ -214,18 +223,76 @@ export default function Onboarding() {
 
       <div className="flex gap-2">
         <Button variant="ghost" onClick={() => setStep(1)}><ArrowLeft className="w-4 h-4" /></Button>
+        <Button className="flex-1" onClick={() => setStep(3)}>
+          Continuar
+        </Button>
+      </div>
+    </div>,
+
+    // 3 — sobre você (opcional): a base dos planos personalizados
+    <div key="about" className="space-y-4">
+      <div>
+        <h1 className="font-display text-2xl font-semibold">Quer respostas sob medida?</h1>
+        <p className="text-sm text-muted-foreground mt-1.5">
+          30 segundos. Com isso, o Conselheiro monta planos de verdade (alimentar, treino)
+          sem precisar te perguntar depois. Dá para pular e preencher em Ajustes.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        <div className="space-y-1.5">
+          <Label htmlFor="ob-birth">Ano de nascimento</Label>
+          <Input id="ob-birth" inputMode="numeric" maxLength={4} placeholder="1995"
+            value={birthYear} onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, ""))} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Sexo</Label>
+          <Select value={sex} onValueChange={setSex}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="nao_informar">Prefiro não dizer</SelectItem>
+              <SelectItem value="feminino">Feminino</SelectItem>
+              <SelectItem value="masculino">Masculino</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ob-height">Altura (cm)</Label>
+          <Input id="ob-height" inputMode="numeric" placeholder="172"
+            value={heightCm} onChange={(e) => setHeightCm(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Atividade física</Label>
+          <Select value={activity} onValueChange={setActivity}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="nao_informar">Não sei dizer</SelectItem>
+              <SelectItem value="sedentario">Sedentário</SelectItem>
+              <SelectItem value="leve">Leve (1 a 2x/semana)</SelectItem>
+              <SelectItem value="moderado">Moderado (3 a 4x/semana)</SelectItem>
+              <SelectItem value="intenso">Intenso (5x ou mais)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <Button variant="ghost" onClick={() => setStep(2)}><ArrowLeft className="w-4 h-4" /></Button>
         <Button className="flex-1" onClick={finish} disabled={saving}>
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Começar minha subida"}
         </Button>
       </div>
+      <button className="w-full text-xs text-muted-foreground underline" onClick={finish} disabled={saving}>
+        Pular por enquanto — o Conselheiro pedirá quando precisar
+      </button>
     </div>,
   ];
 
   return (
     <div className="min-h-dvh grid place-items-center bg-background px-4 py-8">
       <Card className="w-full max-w-md p-6">
-        <div className="flex gap-1.5 mb-6" aria-label={`Passo ${step + 1} de 3`}>
-          {[0, 1, 2].map((i) => (
+        <div className="flex gap-1.5 mb-6" aria-label={`Passo ${step + 1} de 4`}>
+          {[0, 1, 2, 3].map((i) => (
             <div key={i} className={cn("h-1 flex-1 rounded-full", i <= step ? "bg-gold" : "bg-muted")} />
           ))}
         </div>
