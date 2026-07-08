@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = serviceClient();
     const user = await requireUser(req, supabase);
-    await assertRateLimit(supabase, user.id, "analyze-body", 8, 10);
+    await assertRateLimit(supabase, user.id, "analyze-body", 20, 10);
 
     const { image, media_type, weight_kg } = await req.json();
     if (!image || typeof image !== "string" || image.length > MAX_B64) {

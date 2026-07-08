@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = serviceClient();
     const user = await requireUser(req, supabase);
-    await assertRateLimit(supabase, user.id, "analyze-meal", 20, 10);
+    await assertRateLimit(supabase, user.id, "analyze-meal", 40, 10);
 
     const { image, media_type, note } = await req.json();
     const hasImage = typeof image === "string" && image.length > 0;

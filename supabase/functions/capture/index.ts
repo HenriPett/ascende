@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = serviceClient();
     const user = await requireUser(req, supabase);
-    await assertRateLimit(supabase, user.id, "capture", 30, 5);
+    await assertRateLimit(supabase, user.id, "capture", 80, 5);
     const { text } = await req.json();
     if (!text || typeof text !== "string" || text.length > 2000) {
       return json({ error: "Texto inválido." }, 400);

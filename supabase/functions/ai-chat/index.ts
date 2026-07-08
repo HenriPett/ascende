@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = serviceClient();
     const user = await requireUser(req, supabase);
-    await assertRateLimit(supabase, user.id, "ai-chat", 20, 5);
+    await assertRateLimit(supabase, user.id, "ai-chat", 60, 5);
     const { message, attachments } = await req.json();
     if (!message || typeof message !== "string" || message.length > 4000) {
       return json({ error: "Mensagem inválida." }, 400);

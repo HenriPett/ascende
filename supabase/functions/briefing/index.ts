@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = serviceClient();
     const user = await requireUser(req, supabase);
-    await assertRateLimit(supabase, user.id, "briefing", 6, 60);
+    await assertRateLimit(supabase, user.id, "briefing", 20, 60);
 
     const today = new Date().toISOString().slice(0, 10);
     const { data: cached } = await supabase.from("briefings")
