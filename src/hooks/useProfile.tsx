@@ -47,6 +47,8 @@ export interface Profile {
   height_cm: number | null;
   activity_level: string | null;
   dietary_restrictions: string[] | null;
+  calorie_goal_kcal: number | null;
+  protein_goal_g: number | null;
 }
 
 export function useProfile() {

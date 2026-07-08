@@ -8,10 +8,149 @@ import { Skeleton } from "@/components/ui/skeleton";
 import CaptureBar from "@/components/core/CaptureBar";
 import BattleCheckinCard from "@/components/core/BattleCheckin";
 import { toast } from "sonner";
-import { Sunrise, ChevronRight, CircleCheck, Circle } from "lucide-react";
+import { Sunrise, ChevronRight, CircleCheck, Circle, Flame, Droplet, Dumbbell, Moon, Smile, BookOpen } from "lucide-react";
+import { DEFAULT_WATER_GOAL_ML } from "@/hooks/useProfile";
 import { greet, todayISO } from "@/lib/format";
 import { pillarById } from "@/lib/pillars";
 import { cn } from "@/lib/utils";
+
+/** Painel do dia: consumido vs. meta (calorias, água, proteína) + pilares tocados. */
+function DayProgress() {
+  const { user } = useAuth();
+  const { profile } = useProfile();
+
+  const { data } = useQuery({
+    queryKey: ["day-progress", user?.id, todayISO()],
+    enabled: !!user,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+      const { data } = await supabase.from("life_events")
+        .select("kind,payload")
+        .eq("user_id", user!.id)
+        .gte("occurred_at", dayStart.toISOString())
+        .limit(300);
+      return (data ?? []) as { kind: string; payload: Record<string, unknown> }[];
+    },
+  });
+
+  const events = data ?? [];
+  const num = (v: unknown) => Number(v) || 0;
+  const kcal = Math.round(events.filter((e) => e.kind === "meal").reduce((s, e) => s + num(e.payload?.calories), 0));
+  const prot = Math.round(events.filter((e) => e.kind === "meal").reduce((s, e) => s + num(e.payload?.protein_g), 0));
+  const water = events.filter((e) => e.kind === "water").reduce((s, e) => s + num(e.payload?.ml), 0);
+
+  const kcalGoal = Number(profile?.calorie_goal_kcal) || 0;
+  const protGoal = Number(profile?.protein_goal_g) || 0;
+  const waterGoal = Number(profile?.water_goal_ml) || DEFAULT_WATER_GOAL_ML;
+
+  const has = (k: string) => events.some((e) => e.kind === k);
+  const pillarsTouched = [
+    { label: "Treino", done: has("workout"), icon: Dumbbell, to: "/app/vitalidade", colorVar: "--vitalidade" },
+    { label: "Sono", done: has("sleep") || has("nap"), icon: Moon, to: "/app/vitalidade", colorVar: "--vitalidade" },
+    { label: "Humor", done: has("mood"), icon: Smile, to: "/app/mente", colorVar: "--mente" },
+    { label: "Mente", done: has("practice") || has("journal") || has("gratitude"), icon: BookOpen, to: "/app/mente", colorVar: "--mente" },
+  ];
+
+  const Bar = ({ value, goal, color }: { value: number; goal: number; color: string }) => (
+    <div className="h-2 rounded-full bg-muted overflow-hidden">
+      <div
+        className="h-full rounded-full transition-all duration-500"
+        style={{ width: `${Math.min(100, (value / goal) * 100)}%`, background: color }}
+      />
+    </div>
+  );
+
+  const fmt = (n: number) => n.toLocaleString("pt-BR");
+
+  return (
+    <Card className="p-4 space-y-3.5">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display font-semibold">Seu dia em números</h2>
+        <span className="text-[11px] text-muted-foreground">
+          {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" })}
+        </span>
+      </div>
+
+      {/* Calorias */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-sm">
+          <span className="flex items-center gap-1.5 font-medium">
+            <Flame className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} /> Calorias
+          </span>
+          {kcalGoal > 0 ? (
+            <span className="text-muted-foreground">
+              <strong className="text-foreground">{fmt(kcal)}</strong> / {fmt(kcalGoal)} kcal
+            </span>
+          ) : (
+            <span className="text-muted-foreground">{fmt(kcal)} kcal</span>
+          )}
+        </div>
+        {kcalGoal > 0 ? (
+          <>
+            <Bar value={kcal} goal={kcalGoal} color="hsl(var(--alimentacao))" />
+            <p className="text-[11px] text-muted-foreground">
+              {kcal < kcalGoal
+                ? `Faltam ${fmt(kcalGoal - kcal)} kcal para a meta do dia.`
+                : kcal - kcalGoal <= Math.max(100, kcalGoal * 0.05)
+                  ? "Meta do dia alcançada. 🎉"
+                  : `Meta alcançada (${fmt(kcal - kcalGoal)} kcal acima).`}
+            </p>
+          </>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">
+            Sem meta diária definida.{" "}
+            <Link to="/app/alimentacao" className="underline text-foreground">Definir meta</Link>
+            {" "}ou peça um plano alimentar ao Conselheiro — a meta do plano é aplicada aqui.
+          </p>
+        )}
+      </div>
+
+      {/* Proteína (só com meta) */}
+      {protGoal > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium">Proteína</span>
+            <span className="text-muted-foreground">
+              <strong className="text-foreground">{fmt(prot)}</strong> / {fmt(protGoal)} g
+            </span>
+          </div>
+          <Bar value={prot} goal={protGoal} color="hsl(var(--vitalidade))" />
+        </div>
+      )}
+
+      {/* Água */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-sm">
+          <span className="flex items-center gap-1.5 font-medium">
+            <Droplet className="w-4 h-4" style={{ color: "hsl(205 70% 55%)" }} /> Água
+          </span>
+          <span className="text-muted-foreground">
+            <strong className="text-foreground">{(water / 1000).toFixed(1).replace(".", ",")}</strong> / {(waterGoal / 1000).toFixed(1).replace(".", ",")} L
+          </span>
+        </div>
+        <Bar value={water} goal={waterGoal} color="hsl(205 70% 55%)" />
+      </div>
+
+      {/* Pilares tocados hoje */}
+      <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+        {pillarsTouched.map((pt) => (
+          <Link
+            key={pt.label} to={pt.to}
+            className={cn(
+              "flex flex-col items-center gap-1 rounded-lg border py-2 text-[11px] transition-colors",
+              pt.done ? "border-transparent" : "text-muted-foreground hover:bg-muted/60"
+            )}
+            style={pt.done ? { background: `hsl(var(${pt.colorVar}) / 0.12)`, color: `hsl(var(${pt.colorVar}))` } : undefined}
+          >
+            <pt.icon className="w-4 h-4" />
+            {pt.label} {pt.done && "✓"}
+          </Link>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 function Briefing() {
   const { data, isLoading, isError } = useQuery({
@@ -141,6 +280,7 @@ export default function Hoje() {
       </div>
 
       <Briefing />
+      <DayProgress />
       <CaptureBar />
       <BattleCheckinCard />
       <HabitsToday />

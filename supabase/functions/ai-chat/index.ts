@@ -1,6 +1,6 @@
 // ASCEND — Conselheiro (chat de IA com visão de todos os pilares)
 import {
-  corsHeaders, serviceClient, requireUser, assertRateLimit, buildSnapshot,
+  corsHeaders, corsFor, serviceClient, requireUser, assertRateLimit, buildSnapshot,
   ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, MODEL_FAST, SAFETY_RULES,
   CAPTURE_TOOL, CAPTURE_SYSTEM,
 } from "../_shared/lib.ts";
@@ -42,6 +42,7 @@ REGRAS:
    • Use tabelas markdown (| Coluna | Coluna |) para comparar valores: macros por refeição, treino por dia, orçamento por categoria.
    • Separe grandes blocos com uma linha "---".
    • Termine com "## Observações": adaptações às condições de saúde, avisos e quando revisar o plano.
+   • Se o plano definir meta calórica diária (e de proteína), preencha daily_calories_kcal e daily_protein_g na ferramenta: ao salvar o plano, o app aplica essas metas e a pessoa acompanha o progresso do dia na tela Hoje.
 5. Perguntas pontuais ("quantas calorias tem ovo?", "treino de peito é bom 2x por semana?") NÃO são planos definitivos: responda normalmente, sem exigir dados.
 6. AJUSTES: se a pessoa comentar ou pedir mudanças em um plano recém-entregue ("não gosto de agachamento", "troca o frango do jantar", "diminui o valor de lazer"), acolha o comentário, refaça o que for preciso e chame registrar_plano DE NOVO com o plano COMPLETO revisado (mesmo título, salvo se a mudança justificar renomear). Nunca registre só a diferença: o plano registrado deve ser sempre autossuficiente. Na resposta em texto, resuma apenas o que mudou.
 
@@ -64,6 +65,8 @@ const SAVE_PLAN_TOOL = {
       kind: { type: "string", enum: ["alimentar", "treino", "financeiro", "rotina", "outro"] },
       pillar: { type: "string", enum: ["prosperidade", "vitalidade", "alimentacao", "mente"], description: "Pilar principal do plano." },
       content_markdown: { type: "string", description: "O plano COMPLETO em markdown: seções, quantidades, horários, valores. Autossuficiente." },
+      daily_calories_kcal: { type: "number", description: "Se o plano (em geral alimentar) define uma META CALÓRICA DIÁRIA, informe-a. O app aplica como meta acompanhada na tela Hoje." },
+      daily_protein_g: { type: "number", description: "Se o plano define meta diária de proteína em gramas, informe-a." },
     },
     required: ["title", "kind", "content_markdown"],
   },
@@ -86,14 +89,17 @@ const UPDATE_PROFILE_TOOL = {
         description: "Restrições alimentares mencionadas, para ADICIONAR às existentes. Ex.: ['sem lactose']. Se a pessoa disse que não tem nenhuma, não envie este campo.",
       },
       weight_goal_kg: { type: "number", description: "Meta de peso em kg, se a pessoa declarou uma." },
+      calorie_goal_kcal: { type: "number", description: "Meta calórica diária em kcal, se a pessoa declarou uma ('minha meta é 3000 kcal por dia')." },
+      protein_goal_g: { type: "number", description: "Meta diária de proteína em gramas, se a pessoa declarou uma." },
     },
   },
 };
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const cors = corsFor(req);
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
   try {
     const supabase = serviceClient();
@@ -214,15 +220,19 @@ Deno.serve(async (req) => {
     let reply = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
 
     // Plano proposto pelo modelo (o app pede confirmação antes de salvar)
-    let plan: { title: string; kind: string; pillar: string | null; content: string } | null = null;
+    let plan: { title: string; kind: string; pillar: string | null; content: string; daily_calories_kcal: number | null; daily_protein_g: number | null } | null = null;
     const planBlock = blocks.find((b) => b.type === "tool_use" && b.name === "registrar_plano");
     if (planBlock?.input?.title && planBlock?.input?.content_markdown) {
       const inp = planBlock.input;
+      const dk = Number(inp.daily_calories_kcal);
+      const dp = Number(inp.daily_protein_g);
       plan = {
         title: String(inp.title).slice(0, 120),
         kind: ["alimentar", "treino", "financeiro", "rotina", "outro"].includes(inp.kind) ? inp.kind : "outro",
         pillar: ["prosperidade", "vitalidade", "alimentacao", "mente"].includes(inp.pillar) ? inp.pillar : null,
         content: String(inp.content_markdown).slice(0, 20000),
+        daily_calories_kcal: dk >= 800 && dk <= 8000 ? Math.round(dk) : null,
+        daily_protein_g: dp >= 20 && dp <= 400 ? Math.round(dp) : null,
       };
       if (!reply) reply = plan.content; // segurança: nunca responder vazio
     }
@@ -244,6 +254,10 @@ Deno.serve(async (req) => {
       }
       const wg = Number(inp.weight_goal_kg);
       if (wg > 20 && wg < 400) { patch.weight_goal_kg = wg; profileUpdated.push("meta de peso"); }
+      const cg = Number(inp.calorie_goal_kcal);
+      if (cg >= 800 && cg <= 8000) { patch.calorie_goal_kcal = Math.round(cg); profileUpdated.push("meta calórica diária"); }
+      const pg = Number(inp.protein_goal_g);
+      if (pg >= 20 && pg <= 400) { patch.protein_goal_g = Math.round(pg); profileUpdated.push("meta de proteína"); }
       if (Array.isArray(inp.add_dietary_restrictions) && inp.add_dietary_restrictions.length) {
         const { data: prof } = await supabase.from("profiles")
           .select("dietary_restrictions").eq("user_id", user.id).maybeSingle();

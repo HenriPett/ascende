@@ -110,6 +110,7 @@ export default function Alimentacao() {
   // ── Peso e composição corporal ───────────────────────────────
   const [weightInput, setWeightInput] = useState("");
   const [weightGoalInput, setWeightGoalInput] = useState("");
+  const [calorieGoalInput, setCalorieGoalInput] = useState("");
   const [savingWeight, setSavingWeight] = useState(false);
   const bodyFileRef = useRef<HTMLInputElement>(null);
   const [bodyAnalyzing, setBodyAnalyzing] = useState(false);
@@ -308,6 +309,17 @@ export default function Alimentacao() {
     qc.invalidateQueries();
   };
 
+  const saveCalorieGoal = async () => {
+    if (!user) return;
+    const kcal = Math.round(Number(calorieGoalInput.replace(/\D/g, "")));
+    if (!kcal || kcal < 800 || kcal > 8000) { toast.error("Meta inválida. Ex.: 3000"); return; }
+    const { error } = await supabase.from("profiles").update({ calorie_goal_kcal: kcal }).eq("user_id", user.id);
+    if (error) { toast.error("Não consegui salvar a meta."); return; }
+    toast.success("Meta calórica diária salva. Acompanhe na tela Hoje.");
+    setCalorieGoalInput("");
+    refreshProfile();
+  };
+
   const saveWeightGoal = async () => {
     if (!user) return;
     const kg = Number(weightGoalInput.replace(",", "."));
@@ -424,6 +436,13 @@ export default function Alimentacao() {
   })();
 
   const latestScan = (bodyScans ?? [])[0];
+
+  // Progresso calórico de HOJE
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const kcalToday = Math.round((meals ?? [])
+    .filter((m) => m.occurred_at.slice(0, 10) === todayIso)
+    .reduce((sum, m) => sum + (Number(m.payload?.calories) || 0), 0));
+  const kcalGoal = Number(profile?.calorie_goal_kcal) || 0;
 
   // Agrupa refeições por dia
   const byDay: Record<string, MealEvent[]> = {};
@@ -607,6 +626,46 @@ export default function Alimentacao() {
             </Button>
           ))}
         </div>
+      </Card>
+
+      {/* ── Meta calórica do dia ─────────────────────────────── */}
+      <Card className="p-4 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-medium flex items-center gap-1.5">
+            <Flame className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
+            Meta do dia
+          </p>
+          <span className="text-sm text-muted-foreground">
+            <strong className="text-foreground">{kcalToday.toLocaleString("pt-BR")}</strong>
+            {kcalGoal > 0 && <> / {kcalGoal.toLocaleString("pt-BR")}</>} kcal
+          </span>
+        </div>
+
+        {kcalGoal > 0 && (
+          <>
+            <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, (kcalToday / kcalGoal) * 100)}%`, background: "hsl(var(--alimentacao))" }} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {kcalToday < kcalGoal
+                ? `Faltam ${(kcalGoal - kcalToday).toLocaleString("pt-BR")} kcal para a meta.`
+                : "Meta do dia alcançada. 🎉"}
+            </p>
+          </>
+        )}
+
+        <div className="flex gap-2">
+          <Input inputMode="numeric"
+            placeholder={kcalGoal > 0 ? `Meta atual: ${kcalGoal.toLocaleString("pt-BR")} kcal/dia` : "Definir meta diária (kcal)"}
+            value={calorieGoalInput} onChange={(e) => setCalorieGoalInput(e.target.value)} />
+          <Button variant="outline" onClick={saveCalorieGoal}>Meta</Button>
+        </div>
+        {kcalGoal === 0 && (
+          <p className="text-[11px] text-muted-foreground">
+            Dica: peça um plano alimentar ao Conselheiro — ao salvar, a meta do plano é aplicada aqui automaticamente.
+          </p>
+        )}
       </Card>
 
       {/* ── Evolução corporal ────────────────────────────────── */}

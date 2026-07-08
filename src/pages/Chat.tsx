@@ -25,6 +25,8 @@ interface ProposedPlan {
   kind: string;
   pillar: string | null;
   content: string;
+  daily_calories_kcal?: number | null;
+  daily_protein_g?: number | null;
 }
 
 interface Attachment {
@@ -258,6 +260,22 @@ export default function Chat() {
     });
     setSavingPlan(false);
     if (error) { toast.error("Não consegui salvar o plano."); return; }
+
+    // Metas diárias definidas pelo plano viram metas vivas do app
+    const patch: Record<string, number> = {};
+    if (proposedPlan.daily_calories_kcal) patch.calorie_goal_kcal = proposedPlan.daily_calories_kcal;
+    if (proposedPlan.daily_protein_g) patch.protein_goal_g = proposedPlan.daily_protein_g;
+    if (Object.keys(patch).length) {
+      const { error: gErr } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
+      if (!gErr) {
+        toast.success(
+          `Meta diária aplicada: ${proposedPlan.daily_calories_kcal ? `${proposedPlan.daily_calories_kcal.toLocaleString("pt-BR")} kcal` : ""}` +
+          `${proposedPlan.daily_calories_kcal && proposedPlan.daily_protein_g ? " e " : ""}` +
+          `${proposedPlan.daily_protein_g ? `${proposedPlan.daily_protein_g} g de proteína` : ""}. Acompanhe na tela Hoje.`
+        );
+      }
+    }
+
     toast.success("Plano salvo! Ele fica em Pilares > Meus planos, e o Conselheiro passa a acompanhá-lo.");
     setProposedPlan(null);
     setPlanOpen(false);

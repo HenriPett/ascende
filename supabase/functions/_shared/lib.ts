@@ -1,14 +1,33 @@
 // Módulo compartilhado das funções do Ascend
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Defina o secret APP_ORIGIN (ex.: https://seuapp.netlify.app) para restringir
-// quais sites podem chamar as funções pelo navegador. Sem ele, fica aberto (dev).
-const APP_ORIGIN = Deno.env.get("APP_ORIGIN");
-export const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": APP_ORIGIN || "*",
+// Defina o secret APP_ORIGIN para restringir quais sites chamam as funções pelo
+// navegador. Aceita várias origens separadas por vírgula (ex.: produção + domínio
+// próprio). Barras finais e espaços são normalizados automaticamente — o header
+// Origin do navegador nunca tem barra no final. Sem o secret, fica aberto (dev).
+const ALLOWED_ORIGINS = (Deno.env.get("APP_ORIGIN") ?? "")
+  .split(",")
+  .map((o) => o.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
+
+const BASE_CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  ...(APP_ORIGIN ? { Vary: "Origin" } : {}),
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
 };
+
+/** Headers de CORS para ESTA requisição: reflete a origem se estiver na lista. */
+export function corsFor(req: Request): Record<string, string> {
+  if (!ALLOWED_ORIGINS.length) return { "Access-Control-Allow-Origin": "*", ...BASE_CORS };
+  const origin = (req.headers.get("origin") ?? "").replace(/\/+$/, "");
+  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return { "Access-Control-Allow-Origin": allow, ...BASE_CORS, Vary: "Origin" };
+}
+
+// Compatibilidade: headers estáticos (primeira origem da lista) para helpers sem acesso ao req.
+export const corsHeaders: Record<string, string> = ALLOWED_ORIGINS.length
+  ? { "Access-Control-Allow-Origin": ALLOWED_ORIGINS[0], ...BASE_CORS, Vary: "Origin" }
+  : { "Access-Control-Allow-Origin": "*", ...BASE_CORS };
 
 export const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 export const ANTHROPIC_VERSION = "2023-06-01";
@@ -28,7 +47,7 @@ export async function requireUser(req: Request, supabase: SupabaseClient) {
   const token = auth.replace("Bearer ", "");
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) throw new Response(JSON.stringify({ error: "Não autenticado" }), {
-    status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status: 401, headers: { ...corsFor(req), "Content-Type": "application/json" },
   });
   return data.user;
 }
@@ -242,6 +261,27 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       ? ` Distribuição conhecida: ${Object.entries(typeCount).map(([t, n]) => `${TYPE_LABEL[t]} ${n}x`).join(", ")} (lanches não são refeições principais — considere isso ao avaliar a rotina).`
       : "";
     lines.push(`ALIMENTAÇÃO: ${kinds["meal"].length} refeições registradas em 30 dias. Últimas: ${last}.${kcalInfo}${typeInfo}`);
+
+    // Meta calórica do dia (o Conselheiro deve saber quanto falta HOJE)
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const kcalToday = kinds["meal"]
+      .filter((e) => e.occurred_at.slice(0, 10) === todayIso)
+      .reduce((sum, e) => sum + (Number((e.payload as any)?.calories) || 0), 0);
+    const kcalGoal = Number(p.calorie_goal_kcal) || 0;
+    if (kcalGoal > 0) {
+      const diff = kcalGoal - kcalToday;
+      lines.push(`META CALÓRICA DIÁRIA: ${kcalGoal} kcal. Hoje: ${Math.round(kcalToday)} kcal consumidas` +
+        (diff > 0 ? `, faltam ${Math.round(diff)} kcal.` : `, meta do dia alcançada${diff < 0 ? ` (${Math.round(-diff)} kcal acima)` : ""}.`));
+    } else if (kcalToday > 0) {
+      lines.push(`CALORIAS HOJE: ${Math.round(kcalToday)} kcal registradas (sem meta diária definida — a pessoa pode definir na aba Alimentação ou você pode salvar via atualizar_perfil se ela declarar uma).`);
+    }
+    const protGoal = Number(p.protein_goal_g) || 0;
+    if (protGoal > 0) {
+      const protToday = kinds["meal"]
+        .filter((e) => e.occurred_at.slice(0, 10) === todayIso)
+        .reduce((sum, e) => sum + (Number((e.payload as any)?.protein_g) || 0), 0);
+      lines.push(`META DE PROTEÍNA DIÁRIA: ${protGoal} g. Hoje: ${Math.round(protToday)} g.`);
+    }
   }
 
   // Hidratação (água) — total de hoje e média diária dos últimos 7 dias
@@ -362,6 +402,10 @@ export const CAPTURE_TOOL = {
             tx_kind: { type: "string", enum: ["income", "expense"], description: "Entrada ou saída (apenas para transaction)." },
             category: { type: "string", description: "Categoria da transação. Ex.: Mercado, Transporte, Lazer, Salário." },
             hours: { type: "number", description: "Horas dormidas (para sleep e nap). '40 minutos' vira 0.7." },
+            calories: { type: "number", description: "APENAS para meal: estimativa de calorias da refeição descrita. SEMPRE estime, assumindo porções típicas brasileiras." },
+            protein_g: { type: "number", description: "APENAS para meal: proteína estimada em gramas, quando possível." },
+            carbs_g: { type: "number", description: "APENAS para meal: carboidratos estimados em gramas, quando possível." },
+            fat_g: { type: "number", description: "APENAS para meal: gorduras estimadas em gramas, quando possível." },
             meal_type: {
               type: "string", enum: ["cafe_da_manha", "almoco", "jantar", "lanche"],
               description: "APENAS para meal: tipo da refeição, inferido do que a pessoa disse ('no almoço...', 'de manhã comi...', 'beliscei...'). Omita se não der para saber.",
@@ -399,7 +443,7 @@ Regras:
 • Se a duração do treino for mencionada, preencha duration_min.
 • Água bebida ("tomei 2L de água", "bebi 500ml") vira water com ml.
 • Peso corporal ("me pesei, 78kg", "tô pesando 82") vira weight com kg.
-• Refeições viram meal; quando o contexto disser qual (café da manhã, almoço, jantar, lanche/belisco), preencha meal_type e inclua no summary. Oração/meditação/culto/leitura espiritual viram practice.
+• Refeições viram meal e SEMPRE recebem calories estimadas a partir da descrição (porções típicas brasileiras; melhor uma estimativa honesta do que nenhuma), preenchendo também protein_g/carbs_g/fat_g quando possível. Inclua as kcal no summary: "Almoço: arroz, feijão e frango (~650 kcal)". Quando o contexto disser qual refeição é (café da manhã, almoço, jantar, lanche/belisco), preencha meal_type e inclua no summary. Oração/meditação/culto/leitura espiritual viram practice.
 • Estados emocionais ("tô ansioso", "dia ótimo") viram mood, usando a palavra do próprio usuário em mood_label.
 • Se algo não se encaixar em nenhum tipo, use note.
 • Se o texto não contiver nenhum evento registrável — perguntas, pedidos de conselho, conversa — retorne events: [].
