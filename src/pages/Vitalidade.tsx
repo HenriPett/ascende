@@ -35,6 +35,27 @@ export default function Vitalidade() {
   const [workout, setWorkout] = useState("");
   const [muscles, setMuscles] = useState<string[]>([]);
   const [conditionInput, setConditionInput] = useState("");
+  const [sleepGoalInput, setSleepGoalInput] = useState("");
+  const [workoutsGoalInput, setWorkoutsGoalInput] = useState("");
+
+  const saveVitalGoal = async (patch: Record<string, number>, label: string, clear: () => void) => {
+    if (!user) return;
+    const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
+    if (error) { toast.error("Não consegui salvar a meta."); return; }
+    toast.success(`${label} salva. Acompanhe na tela Hoje.`);
+    clear();
+    refreshProfile();
+  };
+  const saveSleepGoal = () => {
+    const h = Number(sleepGoalInput.replace(",", "."));
+    if (!h || h < 4 || h > 12) { toast.error("Meta de sono inválida. Ex.: 8"); return; }
+    saveVitalGoal({ sleep_goal_h: h }, "Meta de sono", () => setSleepGoalInput(""));
+  };
+  const saveWorkoutsGoal = () => {
+    const n = Math.round(Number(workoutsGoalInput));
+    if (!n || n < 1 || n > 14) { toast.error("Meta inválida. Ex.: 4 treinos/semana"); return; }
+    saveVitalGoal({ weekly_workouts_goal: n }, "Meta de treinos", () => setWorkoutsGoalInput(""));
+  };
   const [medicationInput, setMedicationInput] = useState("");
 
   // ── Condições de saúde e medicamentos (visíveis para o Conselheiro) ──
@@ -243,6 +264,12 @@ export default function Vitalidade() {
               onChange={(e) => setSleepHours(e.target.value)} />
             <Button onClick={logSleep} variant="secondary">Salvar</Button>
           </div>
+          <div className="flex gap-2 items-center">
+            <Input inputMode="decimal" className="h-8 text-xs"
+              placeholder={profile?.sleep_goal_h ? `Meta: ${String(profile.sleep_goal_h).replace(".", ",")}h/noite` : "Meta de horas/noite"}
+              value={sleepGoalInput} onChange={(e) => setSleepGoalInput(e.target.value)} />
+            <Button size="sm" variant="ghost" className="h-8 text-xs shrink-0" onClick={saveSleepGoal}>Meta</Button>
+          </div>
         </Card>
         <Card className="p-4 space-y-2">
           <p className="text-sm font-medium flex items-center gap-1.5"><Dumbbell className="w-4 h-4" /> Treino de hoje</p>
@@ -266,6 +293,12 @@ export default function Vitalidade() {
             ))}
           </div>
           <Button onClick={logWorkout} variant="secondary" className="w-full">Salvar treino</Button>
+          <div className="flex gap-2 items-center">
+            <Input inputMode="numeric" className="h-8 text-xs"
+              placeholder={profile?.weekly_workouts_goal ? `Meta: ${profile.weekly_workouts_goal} treinos/semana` : "Meta de treinos/semana"}
+              value={workoutsGoalInput} onChange={(e) => setWorkoutsGoalInput(e.target.value)} />
+            <Button size="sm" variant="ghost" className="h-8 text-xs shrink-0" onClick={saveWorkoutsGoal}>Meta</Button>
+          </div>
         </Card>
       </div>
 

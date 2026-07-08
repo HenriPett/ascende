@@ -49,6 +49,9 @@ export interface Profile {
   dietary_restrictions: string[] | null;
   calorie_goal_kcal: number | null;
   protein_goal_g: number | null;
+  daily_spend_limit: number | null;
+  weekly_workouts_goal: number | null;
+  sleep_goal_h: number | null;
 }
 
 export function useProfile() {

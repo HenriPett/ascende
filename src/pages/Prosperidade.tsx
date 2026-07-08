@@ -18,7 +18,7 @@ import {
   XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine,
 } from "recharts";
 
-const CATEGORIES = ["Mercado", "Alimentação fora", "Transporte", "Moradia", "Saúde", "Lazer", "Educação", "Assinaturas", "Fatura", "Salário", "Extra", "Outros"];
+const CATEGORIES = ["Mercado", "Alimentação fora", "Transporte", "Moradia", "Saúde", "Lazer", "Educação", "Assinaturas", "Salário", "Extra", "Outros"];
 
 interface Tx { id: string; kind: "income" | "expense"; amount: number; category: string; description: string | null; occurred_at: string }
 
@@ -35,7 +35,7 @@ const brlShort = (v: number) =>
 
 export default function Prosperidade() {
   const { user } = useAuth();
-  const { profile } = useProfile();
+  const { profile, refresh: refreshProfile } = useProfile();
   const qc = useQueryClient();
 
   const [kind, setKind] = useState<"expense" | "income">("expense");
@@ -43,6 +43,18 @@ export default function Prosperidade() {
   const [category, setCategory] = useState("Mercado");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  const [spendLimitInput, setSpendLimitInput] = useState("");
+
+  const saveSpendLimit = async () => {
+    if (!user) return;
+    const v = Number(spendLimitInput.replace(",", "."));
+    if (!v || v <= 0) { toast.error("Informe um valor válido. Ex.: 80"); return; }
+    const { error } = await supabase.from("profiles").update({ daily_spend_limit: v }).eq("user_id", user.id);
+    if (error) { toast.error("Não consegui salvar."); return; }
+    toast.success("Teto de gasto diário salvo. Acompanhe na tela Hoje.");
+    setSpendLimitInput("");
+    refreshProfile();
+  };
 
   // Últimos 6 meses (para gráficos) — a lista continua mostrando só o mês atual
   const { data: txs, isLoading } = useQuery({
@@ -60,6 +72,10 @@ export default function Prosperidade() {
   });
 
   const monthTxs = (txs ?? []).filter((t) => t.occurred_at >= monthStartISO());
+  const spendLimit = Number(profile?.daily_spend_limit) || 0;
+  const spentToday = (txs ?? [])
+    .filter((t) => t.kind === "expense" && t.occurred_at === todayISO())
+    .reduce((s, t) => s + Number(t.amount), 0);
   const income = monthTxs.filter((t) => t.kind === "income").reduce((s, t) => s + Number(t.amount), 0);
   const expense = monthTxs.filter((t) => t.kind === "expense").reduce((s, t) => s + Number(t.amount), 0);
   const budget = Number(profile?.monthly_budget ?? 0);
@@ -168,6 +184,36 @@ export default function Prosperidade() {
           <p className="font-semibold text-[13px] sm:text-base tracking-tight">{brl(income - expense)}</p>
         </Card>
       </div>
+
+      {/* Teto de gasto do dia */}
+      <Card className="p-4 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-medium">Teto de gasto do dia</p>
+          <span className="text-sm text-muted-foreground">
+            <strong className="text-foreground">{brl(spentToday)}</strong>
+            {spendLimit > 0 && <> / {brl(spendLimit)}</>}
+          </span>
+        </div>
+        {spendLimit > 0 && (
+          <>
+            <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, (spentToday / spendLimit) * 100)}%`, background: "hsl(var(--prosperidade))" }} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {spentToday <= spendLimit
+                ? `${brl(spendLimit - spentToday)} disponíveis hoje.`
+                : `${brl(spentToday - spendLimit)} acima do teto de hoje.`}
+            </p>
+          </>
+        )}
+        <div className="flex gap-2">
+          <Input inputMode="decimal"
+            placeholder={spendLimit > 0 ? `Teto atual: ${brl(spendLimit)}/dia` : "Definir teto diário (R$)"}
+            value={spendLimitInput} onChange={(e) => setSpendLimitInput(e.target.value)} />
+          <Button variant="outline" onClick={saveSpendLimit}>Meta</Button>
+        </div>
+      </Card>
 
       {budgetPct !== null && (
         <Card className="p-4">

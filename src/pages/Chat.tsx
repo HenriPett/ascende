@@ -27,6 +27,9 @@ interface ProposedPlan {
   content: string;
   daily_calories_kcal?: number | null;
   daily_protein_g?: number | null;
+  weekly_workouts?: number | null;
+  sleep_hours_target?: number | null;
+  daily_spend_limit?: number | null;
 }
 
 interface Attachment {
@@ -261,18 +264,19 @@ export default function Chat() {
     setSavingPlan(false);
     if (error) { toast.error("Não consegui salvar o plano."); return; }
 
-    // Metas diárias definidas pelo plano viram metas vivas do app
+    // Metas definidas pelo plano viram metas vivas do app (espelhadas na tela Hoje)
     const patch: Record<string, number> = {};
-    if (proposedPlan.daily_calories_kcal) patch.calorie_goal_kcal = proposedPlan.daily_calories_kcal;
-    if (proposedPlan.daily_protein_g) patch.protein_goal_g = proposedPlan.daily_protein_g;
+    const applied: string[] = [];
+    if (proposedPlan.daily_calories_kcal) { patch.calorie_goal_kcal = proposedPlan.daily_calories_kcal; applied.push(`${proposedPlan.daily_calories_kcal.toLocaleString("pt-BR")} kcal/dia`); }
+    if (proposedPlan.daily_protein_g) { patch.protein_goal_g = proposedPlan.daily_protein_g; applied.push(`${proposedPlan.daily_protein_g} g de proteína/dia`); }
+    if (proposedPlan.weekly_workouts) { patch.weekly_workouts_goal = proposedPlan.weekly_workouts; applied.push(`${proposedPlan.weekly_workouts} treinos/semana`); }
+    if (proposedPlan.sleep_hours_target) { patch.sleep_goal_h = proposedPlan.sleep_hours_target; applied.push(`${String(proposedPlan.sleep_hours_target).replace(".", ",")}h de sono/noite`); }
+    if (proposedPlan.daily_spend_limit) { patch.daily_spend_limit = proposedPlan.daily_spend_limit; applied.push(`teto de ${proposedPlan.daily_spend_limit.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}/dia`); }
     if (Object.keys(patch).length) {
       const { error: gErr } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
       if (!gErr) {
-        toast.success(
-          `Meta diária aplicada: ${proposedPlan.daily_calories_kcal ? `${proposedPlan.daily_calories_kcal.toLocaleString("pt-BR")} kcal` : ""}` +
-          `${proposedPlan.daily_calories_kcal && proposedPlan.daily_protein_g ? " e " : ""}` +
-          `${proposedPlan.daily_protein_g ? `${proposedPlan.daily_protein_g} g de proteína` : ""}. Acompanhe na tela Hoje.`
-        );
+        toast.success(`Metas do plano aplicadas: ${applied.join(", ")}. Acompanhe na tela Hoje.`, { duration: 6000 });
+        qc.invalidateQueries({ queryKey: ["profile"] });
       }
     }
 

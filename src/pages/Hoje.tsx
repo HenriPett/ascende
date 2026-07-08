@@ -25,16 +25,27 @@ function DayProgress() {
     refetchInterval: 60_000,
     queryFn: async () => {
       const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-      const { data } = await supabase.from("life_events")
-        .select("kind,payload")
-        .eq("user_id", user!.id)
-        .gte("occurred_at", dayStart.toISOString())
-        .limit(300);
-      return (data ?? []) as { kind: string; payload: Record<string, unknown> }[];
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // segunda-feira
+      weekStart.setHours(0, 0, 0, 0);
+      const [{ data: events }, { data: weekWorkouts }, { data: txs }] = await Promise.all([
+        supabase.from("life_events").select("kind,payload")
+          .eq("user_id", user!.id).gte("occurred_at", dayStart.toISOString()).limit(300),
+        supabase.from("life_events").select("id")
+          .eq("user_id", user!.id).eq("kind", "workout")
+          .gte("occurred_at", weekStart.toISOString()).limit(50),
+        supabase.from("transactions").select("kind,amount")
+          .eq("user_id", user!.id).gte("occurred_at", todayISO()).limit(200),
+      ]);
+      return {
+        events: (events ?? []) as { kind: string; payload: Record<string, unknown> }[],
+        workoutsWeek: (weekWorkouts ?? []).length,
+        spentToday: (txs ?? []).filter((t) => t.kind === "expense").reduce((s, t) => s + Number(t.amount), 0),
+      };
     },
   });
 
-  const events = data ?? [];
+  const events = data?.events ?? [];
   const num = (v: unknown) => Number(v) || 0;
   const kcal = Math.round(events.filter((e) => e.kind === "meal").reduce((s, e) => s + num(e.payload?.calories), 0));
   const prot = Math.round(events.filter((e) => e.kind === "meal").reduce((s, e) => s + num(e.payload?.protein_g), 0));
@@ -43,6 +54,16 @@ function DayProgress() {
   const kcalGoal = Number(profile?.calorie_goal_kcal) || 0;
   const protGoal = Number(profile?.protein_goal_g) || 0;
   const waterGoal = Number(profile?.water_goal_ml) || DEFAULT_WATER_GOAL_ML;
+  const spendLimit = Number(profile?.daily_spend_limit) || 0;
+  const workoutsGoal = Number(profile?.weekly_workouts_goal) || 0;
+  const sleepGoal = Number(profile?.sleep_goal_h) || 0;
+  const spentToday = data?.spentToday ?? 0;
+  const workoutsWeek = data?.workoutsWeek ?? 0;
+  const sleptToday = (() => {
+    const e = events.find((ev) => ev.kind === "sleep");
+    return e ? Number(e.payload?.hours) || 0 : null;
+  })();
+  const brlFmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
   const has = (k: string) => events.some((e) => e.kind === k);
   const pillarsTouched = [
@@ -131,6 +152,64 @@ function DayProgress() {
         </div>
         <Bar value={water} goal={waterGoal} color="hsl(205 70% 55%)" />
       </div>
+
+      {/* Gasto do dia (Prosperidade) */}
+      {spendLimit > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="w-4 h-4 grid place-items-center text-[13px]" style={{ color: "hsl(var(--prosperidade))" }} aria-hidden>R$</span>
+              Gasto de hoje
+            </span>
+            <span className="text-muted-foreground">
+              <strong className="text-foreground">{brlFmt(spentToday)}</strong> / {brlFmt(spendLimit)}
+            </span>
+          </div>
+          <Bar value={spentToday} goal={spendLimit} color="hsl(var(--prosperidade))" />
+          <p className="text-[11px] text-muted-foreground">
+            {spentToday <= spendLimit
+              ? `${brlFmt(spendLimit - spentToday)} disponíveis dentro do teto do dia.`
+              : `${brlFmt(spentToday - spendLimit)} acima do teto de hoje — o Conselheiro pode ajudar a reequilibrar a semana.`}
+          </p>
+        </div>
+      )}
+
+      {/* Treinos na semana (Vitalidade) */}
+      {workoutsGoal > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-1.5 font-medium">
+              <Dumbbell className="w-4 h-4" style={{ color: "hsl(var(--vitalidade))" }} /> Treinos na semana
+            </span>
+            <span className="text-muted-foreground">
+              <strong className="text-foreground">{workoutsWeek}</strong> / {workoutsGoal}
+            </span>
+          </div>
+          <Bar value={workoutsWeek} goal={workoutsGoal} color="hsl(var(--vitalidade))" />
+          <p className="text-[11px] text-muted-foreground">
+            {workoutsWeek >= workoutsGoal
+              ? "Meta da semana batida. 💪"
+              : `Faltam ${workoutsGoal - workoutsWeek} treino(s) até domingo.`}
+          </p>
+        </div>
+      )}
+
+      {/* Sono (Vitalidade) */}
+      {sleepGoal > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-1.5 font-medium">
+              <Moon className="w-4 h-4" style={{ color: "hsl(var(--vitalidade))" }} /> Sono da última noite
+            </span>
+            <span className="text-muted-foreground">
+              {sleptToday !== null
+                ? (<><strong className="text-foreground">{String(sleptToday).replace(".", ",")}h</strong> / {String(sleepGoal).replace(".", ",")}h</>)
+                : "não registrado"}
+            </span>
+          </div>
+          {sleptToday !== null && <Bar value={sleptToday} goal={sleepGoal} color="hsl(var(--vitalidade))" />}
+        </div>
+      )}
 
       {/* Pilares tocados hoje */}
       <div className="grid grid-cols-4 gap-1.5 pt-0.5">

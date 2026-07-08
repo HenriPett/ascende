@@ -282,6 +282,33 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
         .reduce((sum, e) => sum + (Number((e.payload as any)?.protein_g) || 0), 0);
       lines.push(`META DE PROTEÍNA DIÁRIA: ${protGoal} g. Hoje: ${Math.round(protToday)} g.`);
     }
+
+    // Metas dos demais pilares (gasto do dia, treinos na semana, sono)
+    const spendLimit = Number(p.daily_spend_limit) || 0;
+    if (spendLimit > 0) {
+      const spentToday = (txs ?? [])
+        .filter((t: any) => t.kind === "expense" && String(t.occurred_at).slice(0, 10) === todayIso)
+        .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+      lines.push(`TETO DE GASTO DIÁRIO: ${BRL(spendLimit)}. Hoje: ${BRL(spentToday)} gastos` +
+        (spentToday <= spendLimit ? ` (${BRL(spendLimit - spentToday)} disponíveis).` : ` (${BRL(spentToday - spendLimit)} acima do teto).`));
+    }
+    const wwGoal = Number(p.weekly_workouts_goal) || 0;
+    if (wwGoal > 0) {
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // segunda-feira
+      weekStart.setHours(0, 0, 0, 0);
+      const workoutsWeek = (kinds["workout"] ?? []).filter((e) => new Date(e.occurred_at) >= weekStart).length;
+      lines.push(`META DE TREINOS: ${wwGoal}/semana. Esta semana (desde segunda): ${workoutsWeek} treino(s)` +
+        (workoutsWeek >= wwGoal ? " — meta da semana batida." : ` — faltam ${wwGoal - workoutsWeek}.`));
+    }
+    const sleepGoal = Number(p.sleep_goal_h) || 0;
+    if (sleepGoal > 0) {
+      const sleptToday = (kinds["sleep"] ?? [])
+        .filter((e) => e.occurred_at.slice(0, 10) === todayIso)
+        .map((e) => Number((e.payload as any)?.hours) || 0)[0] ?? null;
+      lines.push(`META DE SONO: ${sleepGoal}h/noite.` +
+        (sleptToday !== null ? ` Última noite: ${sleptToday}h.` : " Sono de hoje ainda não registrado."));
+    }
   }
 
   // Hidratação (água) — total de hoje e média diária dos últimos 7 dias

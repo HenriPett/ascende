@@ -42,7 +42,10 @@ REGRAS:
    • Use tabelas markdown (| Coluna | Coluna |) para comparar valores: macros por refeição, treino por dia, orçamento por categoria.
    • Separe grandes blocos com uma linha "---".
    • Termine com "## Observações": adaptações às condições de saúde, avisos e quando revisar o plano.
-   • Se o plano definir meta calórica diária (e de proteína), preencha daily_calories_kcal e daily_protein_g na ferramenta: ao salvar o plano, o app aplica essas metas e a pessoa acompanha o progresso do dia na tela Hoje.
+   • METAS DO PLANO (o app as aplica ao salvar e a pessoa acompanha na tela Hoje — NUNCA as omita):
+     plano alimentar → daily_calories_kcal é OBRIGATÓRIO (e daily_protein_g quando o plano definir proteína);
+     plano de treino → weekly_workouts é OBRIGATÓRIO (e sleep_hours_target se o plano tratar de sono);
+     plano financeiro → daily_spend_limit quando o plano definir teto diário de gastos.
 5. Perguntas pontuais ("quantas calorias tem ovo?", "treino de peito é bom 2x por semana?") NÃO são planos definitivos: responda normalmente, sem exigir dados.
 6. AJUSTES: se a pessoa comentar ou pedir mudanças em um plano recém-entregue ("não gosto de agachamento", "troca o frango do jantar", "diminui o valor de lazer"), acolha o comentário, refaça o que for preciso e chame registrar_plano DE NOVO com o plano COMPLETO revisado (mesmo título, salvo se a mudança justificar renomear). Nunca registre só a diferença: o plano registrado deve ser sempre autossuficiente. Na resposta em texto, resuma apenas o que mudou.
 
@@ -65,8 +68,11 @@ const SAVE_PLAN_TOOL = {
       kind: { type: "string", enum: ["alimentar", "treino", "financeiro", "rotina", "outro"] },
       pillar: { type: "string", enum: ["prosperidade", "vitalidade", "alimentacao", "mente"], description: "Pilar principal do plano." },
       content_markdown: { type: "string", description: "O plano COMPLETO em markdown: seções, quantidades, horários, valores. Autossuficiente." },
-      daily_calories_kcal: { type: "number", description: "Se o plano (em geral alimentar) define uma META CALÓRICA DIÁRIA, informe-a. O app aplica como meta acompanhada na tela Hoje." },
-      daily_protein_g: { type: "number", description: "Se o plano define meta diária de proteína em gramas, informe-a." },
+      daily_calories_kcal: { type: "number", description: "OBRIGATÓRIO em planos alimentares: a meta calórica diária do plano. O app aplica como meta acompanhada na tela Hoje." },
+      daily_protein_g: { type: "number", description: "Meta diária de proteína em gramas (obrigatória em planos alimentares que a definem)." },
+      weekly_workouts: { type: "number", description: "OBRIGATÓRIO em planos de treino: quantos treinos por semana o plano prevê." },
+      sleep_hours_target: { type: "number", description: "Se o plano define meta de horas de sono por noite, informe-a." },
+      daily_spend_limit: { type: "number", description: "Em planos financeiros: teto de gasto DIÁRIO em reais, se o plano definir um." },
     },
     required: ["title", "kind", "content_markdown"],
   },
@@ -91,6 +97,9 @@ const UPDATE_PROFILE_TOOL = {
       weight_goal_kg: { type: "number", description: "Meta de peso em kg, se a pessoa declarou uma." },
       calorie_goal_kcal: { type: "number", description: "Meta calórica diária em kcal, se a pessoa declarou uma ('minha meta é 3000 kcal por dia')." },
       protein_goal_g: { type: "number", description: "Meta diária de proteína em gramas, se a pessoa declarou uma." },
+      daily_spend_limit: { type: "number", description: "Teto de gasto diário em reais, se a pessoa declarou um ('quero gastar no máximo 80 por dia')." },
+      weekly_workouts_goal: { type: "number", description: "Meta de treinos por semana, se a pessoa declarou uma." },
+      sleep_goal_h: { type: "number", description: "Meta de horas de sono por noite, se a pessoa declarou uma." },
     },
   },
 };
@@ -220,20 +229,73 @@ Deno.serve(async (req) => {
     let reply = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
 
     // Plano proposto pelo modelo (o app pede confirmação antes de salvar)
-    let plan: { title: string; kind: string; pillar: string | null; content: string; daily_calories_kcal: number | null; daily_protein_g: number | null } | null = null;
+    let plan: { title: string; kind: string; pillar: string | null; content: string; daily_calories_kcal: number | null; daily_protein_g: number | null; weekly_workouts: number | null; sleep_hours_target: number | null; daily_spend_limit: number | null } | null = null;
     const planBlock = blocks.find((b) => b.type === "tool_use" && b.name === "registrar_plano");
     if (planBlock?.input?.title && planBlock?.input?.content_markdown) {
       const inp = planBlock.input;
-      const dk = Number(inp.daily_calories_kcal);
-      const dp = Number(inp.daily_protein_g);
+      const inRange = (v: unknown, lo: number, hi: number) => {
+        const n = Number(v);
+        return n >= lo && n <= hi ? Math.round(n * 10) / 10 : null;
+      };
       plan = {
         title: String(inp.title).slice(0, 120),
         kind: ["alimentar", "treino", "financeiro", "rotina", "outro"].includes(inp.kind) ? inp.kind : "outro",
         pillar: ["prosperidade", "vitalidade", "alimentacao", "mente"].includes(inp.pillar) ? inp.pillar : null,
         content: String(inp.content_markdown).slice(0, 20000),
-        daily_calories_kcal: dk >= 800 && dk <= 8000 ? Math.round(dk) : null,
-        daily_protein_g: dp >= 20 && dp <= 400 ? Math.round(dp) : null,
+        daily_calories_kcal: inRange(inp.daily_calories_kcal, 800, 8000),
+        daily_protein_g: inRange(inp.daily_protein_g, 20, 400),
+        weekly_workouts: inRange(inp.weekly_workouts, 1, 14),
+        sleep_hours_target: inRange(inp.sleep_hours_target, 4, 12),
+        daily_spend_limit: inRange(inp.daily_spend_limit, 1, 100000),
       };
+
+      // Rede de segurança: se o modelo esqueceu a meta esperada pelo tipo,
+      // uma extração rápida lê o próprio texto do plano. Falha aqui não derruba nada.
+      const needsKcal = plan.kind === "alimentar" && !plan.daily_calories_kcal;
+      const needsWorkouts = plan.kind === "treino" && !plan.weekly_workouts;
+      if (needsKcal || needsWorkouts) {
+        try {
+          const r = await fetch(ANTHROPIC_URL, {
+            method: "POST",
+            headers: {
+              "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
+              "anthropic-version": ANTHROPIC_VERSION,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: MODEL_FAST,
+              max_tokens: 300,
+              tools: [{
+                name: "extrair_metas",
+                description: "Extrai as metas numéricas definidas neste plano.",
+                input_schema: {
+                  type: "object",
+                  properties: {
+                    daily_calories_kcal: { type: "number", description: "Meta calórica diária definida no plano, se houver." },
+                    daily_protein_g: { type: "number", description: "Meta diária de proteína (g), se houver." },
+                    weekly_workouts: { type: "number", description: "Treinos por semana previstos no plano, se houver." },
+                    sleep_hours_target: { type: "number", description: "Meta de horas de sono por noite, se houver." },
+                    daily_spend_limit: { type: "number", description: "Teto de gasto diário em reais, se houver." },
+                  },
+                },
+              }],
+              tool_choice: { type: "tool", name: "extrair_metas" },
+              messages: [{ role: "user", content: `Extraia as metas deste plano:\n\n${plan.content.slice(0, 6000)}` }],
+            }),
+          });
+          if (r.ok) {
+            const d = await r.json();
+            // deno-lint-ignore no-explicit-any
+            const tu = (d.content ?? []).find((b: any) => b.type === "tool_use");
+            const gi = tu?.input ?? {};
+            plan.daily_calories_kcal = plan.daily_calories_kcal ?? inRange(gi.daily_calories_kcal, 800, 8000);
+            plan.daily_protein_g = plan.daily_protein_g ?? inRange(gi.daily_protein_g, 20, 400);
+            plan.weekly_workouts = plan.weekly_workouts ?? inRange(gi.weekly_workouts, 1, 14);
+            plan.sleep_hours_target = plan.sleep_hours_target ?? inRange(gi.sleep_hours_target, 4, 12);
+            plan.daily_spend_limit = plan.daily_spend_limit ?? inRange(gi.daily_spend_limit, 1, 100000);
+          }
+        } catch { /* segue sem metas extras */ }
+      }
       if (!reply) reply = plan.content; // segurança: nunca responder vazio
     }
 
@@ -258,6 +320,12 @@ Deno.serve(async (req) => {
       if (cg >= 800 && cg <= 8000) { patch.calorie_goal_kcal = Math.round(cg); profileUpdated.push("meta calórica diária"); }
       const pg = Number(inp.protein_goal_g);
       if (pg >= 20 && pg <= 400) { patch.protein_goal_g = Math.round(pg); profileUpdated.push("meta de proteína"); }
+      const dsl = Number(inp.daily_spend_limit);
+      if (dsl >= 1 && dsl <= 100000) { patch.daily_spend_limit = dsl; profileUpdated.push("teto de gasto diário"); }
+      const ww = Number(inp.weekly_workouts_goal);
+      if (ww >= 1 && ww <= 14) { patch.weekly_workouts_goal = Math.round(ww); profileUpdated.push("meta de treinos por semana"); }
+      const sg = Number(inp.sleep_goal_h);
+      if (sg >= 4 && sg <= 12) { patch.sleep_goal_h = sg; profileUpdated.push("meta de sono"); }
       if (Array.isArray(inp.add_dietary_restrictions) && inp.add_dietary_restrictions.length) {
         const { data: prof } = await supabase.from("profiles")
           .select("dietary_restrictions").eq("user_id", user.id).maybeSingle();
