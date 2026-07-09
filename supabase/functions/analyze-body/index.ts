@@ -5,7 +5,7 @@
 // A foto NÃO é armazenada: é analisada e descartada.
 import {
   corsHeaders, serviceClient, requireUser, assertRateLimit,
-  ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART,
+  ANTHROPIC_URL, ANTHROPIC_VERSION, corsFor, MODEL_SMART,
 } from "../_shared/lib.ts";
 
 const MAX_B64 = 7_000_000;
@@ -64,9 +64,10 @@ ${weightKg ? `• Peso informado pelo usuário: ${weightKg} kg (use apenas como 
 Use a ferramenta estimar_composicao.`;
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const cors = corsFor(req);
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
   try {
     const supabase = serviceClient();

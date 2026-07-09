@@ -3,7 +3,7 @@
 // Cache: 1 por usuário por dia (tabela briefings).
 import {
   corsHeaders, serviceClient, requireUser, assertRateLimit, buildSnapshot,
-  ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, SAFETY_RULES,
+  ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, corsFor, SAFETY_RULES,
 } from "../_shared/lib.ts";
 
 // Domingo (fuso de São Paulo) = retrospectiva da semana em vez do briefing do dia
@@ -41,9 +41,10 @@ ${SAFETY_RULES}
 `;
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const cors = corsFor(req);
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
   try {
     const supabase = serviceClient();

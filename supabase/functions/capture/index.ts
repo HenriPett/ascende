@@ -7,16 +7,17 @@
 // aprendeu em `learned`, para o app mostrar ao usuário.
 import {
   corsHeaders, serviceClient, requireUser, assertRateLimit,
-  ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_FAST,
+  ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_FAST, corsFor,
   CAPTURE_TOOL, CAPTURE_SYSTEM, learnFromMessage,
 } from "../_shared/lib.ts";
 
 
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const cors = corsFor(req);
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
   try {
     const supabase = serviceClient();
