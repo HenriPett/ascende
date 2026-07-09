@@ -16,6 +16,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { pillarById } from "@/lib/pillars";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
 import LearnedInsights, { type LearnedMemory } from "@/components/core/LearnedInsights";
+import FirstTimeTip from "@/components/core/FirstTimeTip";
+import { useGuides } from "@/hooks/useGuides";
 import { xpForKind } from "@/lib/xp";
 import { useDictation } from "@/hooks/useDictation";
 import { cn } from "@/lib/utils";
@@ -126,6 +128,7 @@ export default function Chat() {
   const { listening, toggle: toggleMic, stop: stopMic } = useDictation(
     (t) => setInput((v) => (v ? v + " " : "") + t)
   );
+  const { markSeen } = useGuides();
 
   const { data: history, isLoading } = useQuery({
     queryKey: ["chat", user?.id],
@@ -184,6 +187,7 @@ export default function Chat() {
     const content = (text ?? input).trim();
     if ((!content && !attachments.length) || sending) return;
     stopMic();
+    markSeen("conselheiro"); // usou o chat: a dica não é mais necessária
     const sentAttachments = attachments;
     const displayContent = content ||
       `Enviei ${sentAttachments.length === 1 ? "um arquivo" : `${sentAttachments.length} arquivos`} para você analisar.`;
@@ -239,6 +243,7 @@ export default function Chat() {
   // ── Confirmação dos registros detectados na conversa ─────────
   const confirmCaptured = async () => {
     if (!user || !captured) return;
+    markSeen("confirmar-registros");
     const selected = captured.filter((_, i) => capturedChecked[i]);
     if (!selected.length) { setCaptured(null); return; }
     setSavingCaptured(true);
@@ -317,6 +322,7 @@ export default function Chat() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-3 pb-3 pr-1">
+        <FirstTimeTip id="conselheiro" />
         {isLoading && <Skeleton className="h-16 w-3/4" />}
 
         {!isLoading && messages.length === 0 && (
@@ -395,6 +401,7 @@ export default function Chat() {
         {/* Registros detectados na conversa — confirmar antes de gravar */}
         {captured && !sending && (
           <div className="rounded-xl border border-gold/40 bg-card p-3 space-y-2 animate-fade-up">
+            <FirstTimeTip id="confirmar-registros" />
             <p className="text-sm font-medium flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-gold" />
               Percebi coisas para registrar. Confirma?

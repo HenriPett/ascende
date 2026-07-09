@@ -13,6 +13,8 @@ import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
 import { xpForKind } from "@/lib/xp";
 import { useDictation } from "@/hooks/useDictation";
 import LearnedInsights, { type LearnedMemory } from "@/components/core/LearnedInsights";
+import FirstTimeTip from "@/components/core/FirstTimeTip";
+import { useGuides } from "@/hooks/useGuides";
 
 const EXAMPLES = [
   "Gastei 47 no mercado e treinei pernas",
@@ -32,10 +34,12 @@ export default function CaptureBar() {
   const { listening, toggle: toggleMic, stop: stopMic } = useDictation(
     (t) => setText((v) => (v ? v + " " : "") + t)
   );
+  const { markSeen } = useGuides();
 
   const analyze = async () => {
     if (!text.trim()) return;
     stopMic();
+    markSeen("hoje-captura"); // usou a função: a dica não é mais necessária
     setLoading(true);
     setLearned(null);
     try {
@@ -66,6 +70,7 @@ export default function CaptureBar() {
 
   const confirm = async () => {
     if (!user || !proposed) return;
+    markSeen("confirmar-registros"); // confirmou uma vez: já sabe como funciona
     const selected = proposed.filter((_, i) => checked[i]);
     if (!selected.length) { setProposed(null); return; }
     setSaving(true);
@@ -96,6 +101,7 @@ export default function CaptureBar() {
 
       {!proposed && (
         <>
+          <FirstTimeTip id="hoje-captura" />
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -125,6 +131,7 @@ export default function CaptureBar() {
 
       {proposed && (
         <div className="space-y-2 animate-fade-up">
+          <FirstTimeTip id="confirmar-registros" />
           <p className="text-sm text-muted-foreground">Encontrei isto no seu relato. Confirma?</p>
           {proposed.map((ev, i) => {
             const meta = pillarById(ev.pillar);

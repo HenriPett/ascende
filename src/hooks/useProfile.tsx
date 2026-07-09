@@ -52,6 +52,7 @@ export interface Profile {
   daily_spend_limit: number | null;
   weekly_workouts_goal: number | null;
   sleep_goal_h: number | null;
+  guides_seen: string[] | null;
 }
 
 export function useProfile() {

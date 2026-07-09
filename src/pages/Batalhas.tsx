@@ -17,6 +17,8 @@ import {
   computeBattleStats, isFoodBattle, battleLabel,
 } from "@/lib/battles";
 import BattleCheckinCard from "@/components/core/BattleCheckin";
+import FirstTimeTip from "@/components/core/FirstTimeTip";
+import { useGuides } from "@/hooks/useGuides";
 import { cn } from "@/lib/utils";
 
 /* ─── Criação ─── */
@@ -234,6 +236,7 @@ function SosDialog({ battle }: { battle: Battle }) {
 export default function Batalhas() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const { markSeen } = useGuides();
 
   const { data, isLoading } = useQuery({
     queryKey: ["battles", user?.id],
@@ -264,8 +267,10 @@ export default function Batalhas() {
             As lutas que você escolheu enfrentar. Aqui o boss é vencido por acumulação — não por perfeição.
           </p>
         </div>
-        <CreateBattle onCreated={() => qc.invalidateQueries()} />
+        <CreateBattle onCreated={() => { markSeen("batalhas"); qc.invalidateQueries(); }} />
       </div>
+
+      <FirstTimeTip id="batalhas" />
 
       {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
 

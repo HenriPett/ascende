@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PILLARS } from "@/lib/pillars";
 import { ChevronRight, Swords, ClipboardList } from "lucide-react";
+import FirstTimeTip from "@/components/core/FirstTimeTip";
 
 export default function Pilares() {
   const { user } = useAuth();
@@ -35,6 +36,8 @@ export default function Pilares() {
           Cada área da vida, no mesmo lugar. Ative novos pilares em Ajustes quando estiver pronto.
         </p>
       </div>
+
+      <FirstTimeTip id="pilares" />
 
       <div className="grid grid-cols-1 gap-3">
         {PILLARS.map((p) => {

@@ -568,9 +568,14 @@ export async function learnFromMessage(
     const text = String(message ?? "").trim();
     if (text.length < 8) return [];
 
-    const { data: existing } = await supabase.from("ai_memories")
+    const { data: existing, error: readErr } = await supabase.from("ai_memories")
       .select("id,content").eq("user_id", userId)
       .order("created_at", { ascending: false }).limit(80);
+    if (readErr) {
+      // Tabela ausente (setup.sql seção 8 não rodou?) ou erro de leitura
+      console.error("memories: falha ao ler ai_memories", readErr.message ?? readErr);
+      return [];
+    }
     const known = (existing ?? []) as { id: string; content: string }[];
     const knownBlock = known.length
       ? `MEMÓRIAS JÁ EXISTENTES (não repita; use replaces_id do item que for atualizado):\n${known.map((m) => `- [id: ${m.id}] ${m.content}`).join("\n")}`
@@ -595,7 +600,10 @@ export async function learnFromMessage(
         }],
       }),
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error("memories: Anthropic error", res.status, await res.text());
+      return [];
+    }
     const data = await res.json();
     // deno-lint-ignore no-explicit-any
     const tu = (data.content ?? []).find((b: any) => b.type === "tool_use");
@@ -619,11 +627,13 @@ export async function learnFromMessage(
         const { error } = await supabase.from("ai_memories")
           .update({ content, category, updated_at: new Date().toISOString() })
           .eq("id", replacesId).eq("user_id", userId);
-        if (!error) learned.push({ content, category });
+        if (error) console.error("memories: falha ao atualizar", error.message ?? error);
+        else learned.push({ content, category });
       } else {
         const { error } = await supabase.from("ai_memories")
           .insert({ user_id: userId, content, category });
-        if (!error) learned.push({ content, category });
+        if (error) console.error("memories: falha ao inserir", error.message ?? error);
+        else learned.push({ content, category });
       }
     }
 
@@ -641,7 +651,8 @@ export async function learnFromMessage(
       }
     }
     return learned;
-  } catch {
+  } catch (e) {
+    console.error("memories: erro inesperado", e);
     return [];
   }
 }

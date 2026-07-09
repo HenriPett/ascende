@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { LogOut, Loader2, Smartphone, Share, Sun, Moon, Monitor, Plus, X, Brain, Trash2 } from "lucide-react";
 import { PILLARS, type PillarId } from "@/lib/pillars";
 import { MEMORY_CATEGORY_LABEL } from "@/components/core/LearnedInsights";
+import { useGuides } from "@/hooks/useGuides";
 import { cn } from "@/lib/utils";
 
 interface AiMemory { id: string; content: string; category: string; created_at: string }
@@ -95,6 +96,7 @@ export default function Ajustes() {
 
   // ── Memória do Conselheiro: ver e apagar o que a IA aprendeu ──
   const qc = useQueryClient();
+  const { resetAll: resetGuides, disableAll: disableGuides } = useGuides();
   const [clearingMemories, setClearingMemories] = useState(false);
   const { data: memories, isLoading: memoriesLoading } = useQuery({
     queryKey: ["ai-memories", user?.id],
@@ -312,6 +314,31 @@ export default function Ajustes() {
       <Button className="w-full" onClick={save} disabled={saving}>
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar ajustes"}
       </Button>
+
+      {/* Dicas de primeiras vezes */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="font-display font-semibold">Dicas de uso</h2>
+          <p className="text-xs text-muted-foreground">
+            Na primeira vez em cada área, o Ascend mostra uma dica curta explicando como usar.
+            Cada dica aparece uma vez só e some sozinha quando você usa a função.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => {
+            resetGuides();
+            toast.success("Prontinho: as dicas vão aparecer de novo em cada área.");
+          }}>
+            Ver as dicas de novo
+          </Button>
+          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => {
+            disableGuides();
+            toast.success("Dicas desligadas.");
+          }}>
+            Desligar todas
+          </Button>
+        </div>
+      </Card>
 
       {/* Memória do Conselheiro: transparência total sobre o que a IA aprendeu */}
       <Card className="p-4 space-y-3">
