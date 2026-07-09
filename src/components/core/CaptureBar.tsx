@@ -12,6 +12,7 @@ import { pillarById } from "@/lib/pillars";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
 import { xpForKind } from "@/lib/xp";
 import { useDictation } from "@/hooks/useDictation";
+import LearnedInsights, { type LearnedMemory } from "@/components/core/LearnedInsights";
 
 const EXAMPLES = [
   "Gastei 47 no mercado e treinei pernas",
@@ -26,6 +27,7 @@ export default function CaptureBar() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [proposed, setProposed] = useState<ProposedEvent[] | null>(null);
+  const [learned, setLearned] = useState<LearnedMemory[] | null>(null);
   const [checked, setChecked] = useState<boolean[]>([]);
   const { listening, toggle: toggleMic, stop: stopMic } = useDictation(
     (t) => setText((v) => (v ? v + " " : "") + t)
@@ -35,12 +37,22 @@ export default function CaptureBar() {
     if (!text.trim()) return;
     stopMic();
     setLoading(true);
+    setLearned(null);
     try {
       const { data, error } = await supabase.functions.invoke("capture", { body: { text: text.trim() } });
       if (error || data?.error) throw new Error(data?.error ?? "Falha na captura");
       const events: ProposedEvent[] = data?.events ?? [];
+      const insights = (data?.learned ?? []) as LearnedMemory[];
+      if (insights.length) {
+        setLearned(insights);
+        qc.invalidateQueries({ queryKey: ["ai-memories"] });
+      }
       if (!events.length) {
-        toast.info("Não encontrei nada para registrar nesse texto. Tente descrever o que aconteceu — um gasto, um treino, como você dormiu...");
+        if (!insights.length) {
+          toast.info("Não encontrei nada para registrar nesse texto. Tente descrever o que aconteceu — um gasto, um treino, como você dormiu...");
+        } else {
+          setText("");
+        }
         return;
       }
       setProposed(events);
@@ -141,6 +153,11 @@ export default function CaptureBar() {
             </Button>
           </div>
         </div>
+      )}
+
+      {/* O que a IA aprendeu sobre a pessoa neste relato */}
+      {learned && (
+        <LearnedInsights items={learned} onDismiss={() => setLearned(null)} />
       )}
     </Card>
   );

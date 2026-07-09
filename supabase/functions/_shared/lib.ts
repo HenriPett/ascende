@@ -87,7 +87,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   const monthStart = new Date();
   monthStart.setDate(1);
 
-  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, { data: xp }, { data: battles }, { data: bCheckins }, { data: plans }] =
+  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, { data: xp }, { data: battles }, { data: bCheckins }, { data: plans }, { data: memories }] =
     await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       supabase.from("life_events").select("pillar,kind,occurred_at,payload")
@@ -105,6 +105,8 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       supabase.from("plans").select("title,kind,content,created_at")
         .eq("user_id", userId).eq("status", "ativo")
         .order("created_at", { ascending: false }).limit(3),
+      supabase.from("ai_memories").select("content,category")
+        .eq("user_id", userId).order("created_at", { ascending: false }).limit(50),
     ]);
 
   const lines: string[] = [];
@@ -366,6 +368,15 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     );
   }
 
+  // Memória do Conselheiro: nuances aprendidas em conversas anteriores
+  const mems = (memories ?? []) as { content: string; category: string }[];
+  if (mems.length) {
+    lines.push(
+      `O QUE VOCÊ JÁ APRENDEU SOBRE A PESSOA em conversas anteriores (memórias — use com naturalidade para personalizar respostas e planos; NÃO recite a lista de volta nem soe como vigilância):`
+    );
+    for (const m of mems) lines.push(`• [${m.category}] ${m.content}`);
+  }
+
   // Planos ativos (entregas anteriores do Conselheiro que a pessoa salvou)
   const activePlans = (plans ?? []) as { title: string; kind: string; content: string; created_at: string }[];
   if (activePlans.length) {
@@ -476,3 +487,161 @@ Regras:
 • Se o texto não contiver nenhum evento registrável — perguntas, pedidos de conselho, conversa — retorne events: [].
 • Só extraia o que a pessoa RELATOU ter acontecido. Planos e intenções ("vou treinar amanhã") não são eventos. Nunca invente eventos.
 Use SEMPRE a ferramenta registrar_eventos.`;
+/* ─── Memória do Conselheiro (compartilhada entre `ai-chat` e `capture`) ───
+   A cada mensagem do usuário, um modelo rápido extrai NUANCES DURÁVEIS sobre
+   a pessoa (preferências, rotina, contexto, motivações, jeito de ser) e as
+   grava em ai_memories. É isso que faz a IA "aprender" de verdade a cada
+   conversa: as memórias entram no retrato (buildSnapshot) de todas as
+   funções de IA. O app mostra ao usuário o que foi aprendido em cada
+   mensagem, e ele pode ver e apagar tudo em Ajustes. */
+
+export const MEMORY_CATEGORIES = ["preferencia", "rotina", "contexto", "motivacao", "personalidade", "outro"];
+const MEMORY_MAX_PER_USER = 150;
+const MEMORY_MAX_PER_MESSAGE = 3;
+
+const MEMORY_TOOL = {
+  name: "guardar_memorias",
+  description: "Guarda nuances duráveis aprendidas sobre a pessoa nesta mensagem. Retorne memories: [] quando não houver nada durável.",
+  input_schema: {
+    type: "object",
+    properties: {
+      memories: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            content: {
+              type: "string",
+              description: "A nuance, em UMA frase curta em português, na 3ª pessoa implícita. Ex.: 'Não gosta de agachamento', 'Trabalha em turno noturno', 'Prefere respostas diretas e curtas'. Máx. 160 caracteres.",
+            },
+            category: {
+              type: "string",
+              enum: MEMORY_CATEGORIES,
+              description: "preferencia (gostos e aversões) | rotina (horários, hábitos de vida) | contexto (família, trabalho, moradia) | motivacao (o que move a pessoa) | personalidade (jeito de ser e de se comunicar) | outro.",
+            },
+            replaces_id: {
+              type: "string",
+              description: "APENAS se esta memória ATUALIZA ou CONTRADIZ uma memória existente: o id exato dela (da lista fornecida). A antiga será substituída.",
+            },
+          },
+          required: ["content", "category"],
+        },
+      },
+    },
+    required: ["memories"],
+  },
+};
+
+const MEMORY_SYSTEM = `Você é a memória de longo prazo do Ascend, uma plataforma brasileira de qualidade de vida. Sua única tarefa: ler UMA mensagem do usuário e decidir se ela revela algo DURÁVEL sobre quem ele é — algo que continuará verdadeiro daqui a semanas e tornará as próximas conversas mais pessoais.
+
+GUARDE (exemplos):
+• Preferências e aversões estáveis: "odeio brócolis", "não gosto de academia lotada", "prefiro treinar de manhã".
+• Rotina e estrutura de vida: "trabalho em escala 12x36", "acordo às 5h", "só cozinho no domingo".
+• Contexto de vida: "tenho dois filhos pequenos", "moro sozinho", "sou autônomo", "cuido da minha mãe".
+• Motivações e valores declarados: "quero ter energia para brincar com meus filhos".
+• Jeito de ser/comunicar declarado: "vai direto ao ponto comigo", "gosto de entender o porquê das coisas".
+
+NÃO GUARDE:
+• Eventos pontuais do dia (gastos, treinos, refeições, sono, humor de hoje) — outro sistema cuida disso.
+• Dados de perfil estruturado (idade, sexo, altura, peso, restrições alimentares, condições de saúde, medicamentos, renda, metas numéricas) — outro sistema cuida disso.
+• Deduções sensíveis não declaradas (religião, orientação sexual, política, diagnósticos). Só o que a pessoa DISSE sobre si.
+• Julgamentos de valor sobre a pessoa. Descreva, nunca avalie.
+• Nada que a pessoa pediu para esquecer ou que soe como segredo dito de passagem sobre TERCEIROS.
+
+REGRAS:
+• Só o explícito ou claramente implicado pela PRÓPRIA pessoa na mensagem.
+• Máximo ${MEMORY_MAX_PER_MESSAGE} memórias por mensagem; a maioria das mensagens não gera NENHUMA (retorne memories: []). Perguntas genéricas, pedidos de informação e relatos puramente factuais do dia raramente geram memória.
+• Não repita nem parafraseie memórias que já existem na lista fornecida. Se a mensagem ATUALIZA ou CONTRADIZ uma existente ("voltei a gostar de correr"), envie a nova com replaces_id apontando para a antiga.
+• Cada memória: uma frase autossuficiente, curta, sem "O usuário" no início ("Não gosta de agachamento", não "O usuário não gosta de agachamento").
+Use SEMPRE a ferramenta guardar_memorias.`;
+
+/**
+ * Aprende com a mensagem do usuário: extrai nuances duráveis (modelo rápido),
+ * deduplica contra o que já existe, grava/atualiza em ai_memories e devolve
+ * a lista do que foi aprendido AGORA (para o app mostrar ao usuário).
+ * Nunca lança: qualquer falha devolve [] sem derrubar a resposta principal.
+ */
+export async function learnFromMessage(
+  supabase: SupabaseClient, userId: string, message: string,
+): Promise<{ content: string; category: string }[]> {
+  try {
+    const text = String(message ?? "").trim();
+    if (text.length < 8) return [];
+
+    const { data: existing } = await supabase.from("ai_memories")
+      .select("id,content").eq("user_id", userId)
+      .order("created_at", { ascending: false }).limit(80);
+    const known = (existing ?? []) as { id: string; content: string }[];
+    const knownBlock = known.length
+      ? `MEMÓRIAS JÁ EXISTENTES (não repita; use replaces_id do item que for atualizado):\n${known.map((m) => `- [id: ${m.id}] ${m.content}`).join("\n")}`
+      : "Ainda não há memórias sobre esta pessoa.";
+
+    const res = await fetch(ANTHROPIC_URL, {
+      method: "POST",
+      headers: {
+        "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
+        "anthropic-version": ANTHROPIC_VERSION,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL_FAST,
+        max_tokens: 700,
+        system: MEMORY_SYSTEM,
+        tools: [MEMORY_TOOL],
+        tool_choice: { type: "tool", name: "guardar_memorias" },
+        messages: [{
+          role: "user",
+          content: `${knownBlock}\n\nMENSAGEM DO USUÁRIO:\n${text.slice(0, 4000)}`,
+        }],
+      }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    // deno-lint-ignore no-explicit-any
+    const tu = (data.content ?? []).find((b: any) => b.type === "tool_use");
+    const raw = Array.isArray(tu?.input?.memories) ? tu.input.memories : [];
+
+    const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+    const knownNorm = new Set(known.map((m) => norm(m.content)));
+    const knownIds = new Set(known.map((m) => m.id));
+    const learned: { content: string; category: string }[] = [];
+
+    for (const m of raw.slice(0, MEMORY_MAX_PER_MESSAGE)) {
+      const content = String(m?.content ?? "").trim().slice(0, 160);
+      if (content.length < 3) continue;
+      const category = MEMORY_CATEGORIES.includes(String(m?.category)) ? String(m.category) : "outro";
+      const n = norm(content);
+      if (knownNorm.has(n)) continue; // já sabíamos disso, palavra por palavra
+      knownNorm.add(n);
+
+      const replacesId = typeof m?.replaces_id === "string" && knownIds.has(m.replaces_id) ? m.replaces_id : null;
+      if (replacesId) {
+        const { error } = await supabase.from("ai_memories")
+          .update({ content, category, updated_at: new Date().toISOString() })
+          .eq("id", replacesId).eq("user_id", userId);
+        if (!error) learned.push({ content, category });
+      } else {
+        const { error } = await supabase.from("ai_memories")
+          .insert({ user_id: userId, content, category });
+        if (!error) learned.push({ content, category });
+      }
+    }
+
+    // Teto por usuário: além do limite, as memórias mais antigas saem
+    if (learned.length) {
+      const { count } = await supabase.from("ai_memories")
+        .select("id", { count: "exact", head: true }).eq("user_id", userId);
+      const excess = (count ?? 0) - MEMORY_MAX_PER_USER;
+      if (excess > 0) {
+        const { data: oldest } = await supabase.from("ai_memories")
+          .select("id").eq("user_id", userId)
+          .order("created_at", { ascending: true }).limit(excess);
+        const ids = (oldest ?? []).map((o) => o.id);
+        if (ids.length) await supabase.from("ai_memories").delete().in("id", ids);
+      }
+    }
+    return learned;
+  } catch {
+    return [];
+  }
+}

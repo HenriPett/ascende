@@ -2,7 +2,7 @@
 import {
   corsHeaders, corsFor, serviceClient, requireUser, assertRateLimit, buildSnapshot,
   ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, MODEL_FAST, SAFETY_RULES,
-  CAPTURE_TOOL, CAPTURE_SYSTEM,
+  CAPTURE_TOOL, CAPTURE_SYSTEM, learnFromMessage,
 } from "../_shared/lib.ts";
 
 const DAILY_LIMIT = 40;
@@ -17,6 +17,9 @@ const SYSTEM = `Você é o Conselheiro do Ascend, uma plataforma brasileira de q
 • Termine com UM próximo passo pequeno e concreto.
 • Se faltar dado importante, diga o que registrar para você ajudar melhor.
 • ESTILO: escreva como uma pessoa escreve, não como IA. NUNCA use travessão ou meia-risca (— ou –) na resposta; no lugar, use vírgula, dois-pontos, parênteses ou comece outra frase. Evite também fórmulas prontas como "Vamos lá!", "Com certeza!" ou fechos genéricos.
+
+━━━ SUA MEMÓRIA ━━━
+Você aprende sobre a pessoa a cada conversa: o retrato abaixo inclui memórias de conversas anteriores (preferências, rotina, contexto de vida, jeito de ser). Use-as ATIVAMENTE para personalizar respostas e planos: se ela não gosta de um exercício, não o sugira; se trabalha à noite, os horários sugeridos respeitam isso; se pediu respostas diretas, seja direto. Referencie o que já sabe com naturalidade, como um amigo que lembra ("como você prefere treinar de manhã..."), sem recitar listas, sem soar como vigilância e sem repetir na mesma conversa que "guardou" algo.
 
 ━━━ PONDERE ANTES DE RESPONDER ━━━
 Antes de qualquer resposta personalizada (recomendação, análise, decisão sobre a vida da pessoa), avalie em silêncio: "tenho as informações para uma resposta de QUALIDADE, específica para ESTA pessoa, ou vou entregar algo genérico?". Se faltarem dados essenciais, NÃO responda genericamente: faça até 3 perguntas objetivas, ou aponte o que registrar no app, e pare por aí. Uma resposta curta que pede o dado certo vale mais que uma resposta longa e rasa.
@@ -227,6 +230,12 @@ Deno.serve(async (req) => {
         return [];
       }
     })();
+
+    // Também em paralelo: a memória de longo prazo aprende nuances duráveis
+    // da mensagem (preferências, rotina, contexto). O que for aprendido volta
+    // na resposta para o app mostrar. Falha aqui nunca derruba o chat.
+    const learnPromise = learnFromMessage(supabase, user.id, message);
+
     if (!res.ok) {
       console.error("Anthropic error", res.status, await res.text());
       return json({ error: "O Conselheiro está indisponível agora. Tente de novo em instantes." }, 502);
@@ -367,8 +376,8 @@ Deno.serve(async (req) => {
       { user_id: user.id, role: "assistant", content: reply },
     ]);
 
-    const captured = await capturePromise;
-    return json({ reply, captured, plan, profile_updated: profileUpdated });
+    const [captured, learned] = await Promise.all([capturePromise, learnPromise]);
+    return json({ reply, captured, plan, profile_updated: profileUpdated, learned });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);

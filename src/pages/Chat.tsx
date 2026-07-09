@@ -15,6 +15,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { pillarById } from "@/lib/pillars";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
+import LearnedInsights, { type LearnedMemory } from "@/components/core/LearnedInsights";
 import { xpForKind } from "@/lib/xp";
 import { useDictation } from "@/hooks/useDictation";
 import { cn } from "@/lib/utils";
@@ -102,6 +103,7 @@ export default function Chat() {
   const [local, setLocal] = useState<Msg[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [captured, setCaptured] = useState<ProposedEvent[] | null>(null);
+  const [learned, setLearned] = useState<LearnedMemory[] | null>(null);
   const [proposedPlan, setProposedPlan] = useState<ProposedPlan | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
@@ -140,7 +142,7 @@ export default function Chat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, sending, captured, proposedPlan]);
+  }, [messages.length, sending, captured, proposedPlan, learned]);
 
   // ── Anexos ───────────────────────────────────────────────────
   const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -188,6 +190,7 @@ export default function Chat() {
     setInput("");
     setAttachments([]);
     setCaptured(null);
+    setLearned(null);
     setSending(true);
     setLocal((l) => [...l, {
       role: "user",
@@ -209,6 +212,11 @@ export default function Chat() {
       }
       if (data?.plan?.title && data?.plan?.content) {
         setProposedPlan(data.plan as ProposedPlan);
+      }
+      const insights = (data?.learned ?? []) as LearnedMemory[];
+      if (insights.length) {
+        setLearned(insights);
+        qc.invalidateQueries({ queryKey: ["ai-memories"] });
       }
       const updated = (data?.profile_updated ?? []) as string[];
       if (updated.length) {
@@ -352,6 +360,11 @@ export default function Chat() {
               <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
             </div>
           </div>
+        )}
+
+        {/* O que a IA acabou de aprender sobre a pessoa nesta mensagem */}
+        {learned && !sending && (
+          <LearnedInsights items={learned} onDismiss={() => setLearned(null)} />
         )}
 
         {/* Plano pronto para salvar fora do chat */}

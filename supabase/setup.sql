@@ -18,12 +18,33 @@ create table if not exists public.profiles (
 );
 alter table public.profiles enable row level security;
 
+-- Hidratação: meta diária (ml) e garrafas/copos personalizados para registro rápido.
+-- ALTERs idempotentes — seguros para rodar em bancos já existentes.
+alter table public.profiles add column if not exists water_goal_ml int not null default 2000;
+alter table public.profiles add column if not exists water_bottles jsonb not null default
+  '[{"label":"Copo","ml":250},{"label":"Garrafa","ml":500},{"label":"Garrafão","ml":1000}]'::jsonb;
+alter table public.profiles add column if not exists journal_color text not null default 'violeta';
+alter table public.profiles add column if not exists has_religion boolean not null default true;
+alter table public.profiles add column if not exists weight_goal_kg numeric;
+alter table public.profiles add column if not exists health_conditions jsonb not null default '[]'::jsonb;
+alter table public.profiles add column if not exists medications jsonb not null default '[]'::jsonb;
+alter table public.profiles add column if not exists birth_year int;
+alter table public.profiles add column if not exists sex text;                 -- feminino | masculino | null (prefere não dizer)
+alter table public.profiles add column if not exists height_cm numeric;
+alter table public.profiles add column if not exists activity_level text;      -- sedentario | leve | moderado | intenso
+alter table public.profiles add column if not exists dietary_restrictions jsonb not null default '[]'::jsonb;
+alter table public.profiles add column if not exists calorie_goal_kcal int;    -- meta calórica diária
+alter table public.profiles add column if not exists protein_goal_g int;       -- meta diária de proteína
+alter table public.profiles add column if not exists daily_spend_limit numeric;  -- teto de gasto diário (R$)
+alter table public.profiles add column if not exists weekly_workouts_goal int;   -- treinos por semana
+alter table public.profiles add column if not exists sleep_goal_h numeric;       -- horas de sono por noite
+
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles for select using (auth.uid() = user_id);
 drop policy if exists "profiles_insert_own" on public.profiles;
 create policy "profiles_insert_own" on public.profiles for insert with check (auth.uid() = user_id);
 drop policy if exists "profiles_update_own" on public.profiles;
-create policy "profiles_update_own" on public.profiles for update using (auth.uid() = user_id);
+create policy "profiles_update_own" on public.profiles for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- Cria o perfil automaticamente quando um usuário se cadastra
 create or replace function public.handle_new_user()
@@ -46,7 +67,7 @@ create table if not exists public.life_events (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   pillar text not null,        -- prosperidade | vitalidade | alimentacao | mente
-  kind text not null,          -- transaction | habit_done | sleep | workout | meal | mood | gratitude | practice | note
+  kind text not null,          -- transaction | habit_done | sleep | nap | workout | meal | water | journal | weight | body | mood | gratitude | practice | note
   occurred_at timestamptz not null default now(),
   payload jsonb not null default '{}',
   source text not null default 'form',  -- chat_capture | form | system
@@ -59,6 +80,8 @@ drop policy if exists "events_select_own" on public.life_events;
 create policy "events_select_own" on public.life_events for select using (auth.uid() = user_id);
 drop policy if exists "events_insert_own" on public.life_events;
 create policy "events_insert_own" on public.life_events for insert with check (auth.uid() = user_id);
+drop policy if exists "events_update_own" on public.life_events;
+create policy "events_update_own" on public.life_events for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 drop policy if exists "events_delete_own" on public.life_events;
 create policy "events_delete_own" on public.life_events for delete using (auth.uid() = user_id);
 
@@ -76,7 +99,8 @@ alter table public.xp_log enable row level security;
 drop policy if exists "xp_select_own" on public.xp_log;
 create policy "xp_select_own" on public.xp_log for select using (auth.uid() = user_id);
 drop policy if exists "xp_insert_own" on public.xp_log;
-create policy "xp_insert_own" on public.xp_log for insert with check (auth.uid() = user_id);
+-- (sem policy de insert de propósito: XP só entra pelo gatilho award_xp_for_event,
+--  que roda como security definer. Cliente inserir XP direto seria forjar pontos.)
 
 -- XP automático: registrar a vida dá pontos (consistência, não resultado)
 create or replace function public.award_xp_for_event()
@@ -89,12 +113,31 @@ begin
     when 'practice' then 8
     when 'mood' then 5
     when 'sleep' then 5
+    when 'nap' then 2
     when 'meal' then 4
+    when 'water' then 2
+    when 'journal' then 6
+    when 'weight' then 3
+    when 'body' then 4
     when 'gratitude' then 5
     when 'transaction' then 2
     else 3 end;
   insert into public.xp_log (user_id, points, reason)
-  values (new.user_id, pts, 'Registro: ' || new.kind);
+  values (new.user_id, pts, case new.kind
+    when 'habit_done' then 'Hábito concluído'
+    when 'workout' then 'Treino registrado'
+    when 'practice' then 'Prática registrada'
+    when 'mood' then 'Humor registrado'
+    when 'sleep' then 'Sono registrado'
+    when 'nap' then 'Soneca registrada'
+    when 'meal' then 'Refeição registrada'
+    when 'water' then 'Hidratação registrada'
+    when 'journal' then 'Entrada no diário'
+    when 'weight' then 'Peso registrado'
+    when 'body' then 'Composição corporal registrada'
+    when 'gratitude' then 'Gratidão registrada'
+    when 'transaction' then 'Lançamento financeiro'
+    else 'Registro: ' || new.kind end);
   return new;
 end; $$;
 
@@ -121,7 +164,7 @@ create policy "tx_select_own" on public.transactions for select using (auth.uid(
 drop policy if exists "tx_insert_own" on public.transactions;
 create policy "tx_insert_own" on public.transactions for insert with check (auth.uid() = user_id);
 drop policy if exists "tx_update_own" on public.transactions;
-create policy "tx_update_own" on public.transactions for update using (auth.uid() = user_id);
+create policy "tx_update_own" on public.transactions for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 drop policy if exists "tx_delete_own" on public.transactions;
 create policy "tx_delete_own" on public.transactions for delete using (auth.uid() = user_id);
 
@@ -218,3 +261,60 @@ create policy "brief_select_own" on public.briefings for select using (auth.uid(
 -- ═══════════════════════════════════════════════════════════════
 -- Pronto! Agora siga o README para publicar as funções de IA.
 -- ═══════════════════════════════════════════════════════════════
+
+-- ─── PLANOS (entregas definitivas do Conselheiro) ────────────────
+-- Planos alimentares, de treino, financeiros etc. saem do chat e
+-- ficam guardados aqui, com o aval do usuário.
+create table if not exists public.plans (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  kind text not null default 'outro',      -- alimentar | treino | financeiro | rotina | outro
+  pillar text,                             -- pilar principal, se houver
+  content text not null,                   -- markdown completo do plano
+  status text not null default 'ativo',    -- ativo | arquivado
+  created_at timestamptz not null default now()
+);
+create index if not exists plans_user on public.plans (user_id, status, created_at desc);
+alter table public.plans enable row level security;
+drop policy if exists "plans_all_own" on public.plans;
+create policy "plans_all_own" on public.plans for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ─── CONTROLE DE ABUSO DAS FUNÇÕES DE IA ─────────────────────────
+-- Cada chamada a uma função de IA registra uma linha; a própria função
+-- conta a janela recente e recusa excessos (429). RLS ligado SEM policies:
+-- o cliente não lê nem escreve aqui — só o service role das funções.
+create table if not exists public.fn_calls (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  fn text not null,
+  called_at timestamptz not null default now()
+);
+create index if not exists fn_calls_user_fn_time on public.fn_calls (user_id, fn, called_at desc);
+alter table public.fn_calls enable row level security;
+
+
+-- ─── 8. MEMÓRIA DO CONSELHEIRO ──────────────────────────────────
+-- A cada mensagem, a IA extrai e guarda nuances duráveis sobre a pessoa
+-- (preferências, rotina, contexto de vida). Só as funções de IA escrevem
+-- aqui (service role); o usuário vê e apaga as suas em Ajustes.
+create table if not exists public.ai_memories (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  content text not null check (char_length(content) between 3 and 200),
+  category text not null default 'outro'
+    check (category in ('preferencia','rotina','contexto','motivacao','personalidade','outro')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists ai_memories_user_time on public.ai_memories (user_id, created_at desc);
+alter table public.ai_memories enable row level security;
+ 
+-- O usuário LÊ e APAGA as próprias memórias; a escrita é exclusiva do
+-- service role (funções de IA) — por isso não há policy de insert/update.
+drop policy if exists "memories_select_own" on public.ai_memories;
+create policy "memories_select_own" on public.ai_memories for select using (auth.uid() = user_id);
+drop policy if exists "memories_delete_own" on public.ai_memories;
+create policy "memories_delete_own" on public.ai_memories for delete using (auth.uid() = user_id);
+ 

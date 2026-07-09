@@ -2,10 +2,13 @@
 // Recebe texto livre ("gastei 47 no mercado, treinei, dormi 5h, tô ansioso")
 // e devolve eventos estruturados PROPOSTOS. O app mostra para o usuário
 // confirmar antes de gravar — a IA nunca grava sozinha.
+// Em paralelo, a memória de longo prazo aprende nuances duráveis do relato
+// ("não gosto de treinar à noite", "trabalho em escala") e devolve o que
+// aprendeu em `learned`, para o app mostrar ao usuário.
 import {
   corsHeaders, serviceClient, requireUser, assertRateLimit,
   ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_FAST,
-  CAPTURE_TOOL, CAPTURE_SYSTEM,
+  CAPTURE_TOOL, CAPTURE_SYSTEM, learnFromMessage,
 } from "../_shared/lib.ts";
 
 
@@ -23,6 +26,9 @@ Deno.serve(async (req) => {
     if (!text || typeof text !== "string" || text.length > 2000) {
       return json({ error: "Texto inválido." }, 400);
     }
+
+    // Aprendizado em paralelo com a extração de eventos (nunca derruba a captura)
+    const learnPromise = learnFromMessage(supabase, user.id, text);
 
     const res = await fetch(ANTHROPIC_URL, {
       method: "POST",
@@ -45,9 +51,11 @@ Deno.serve(async (req) => {
       return json({ error: "Não consegui interpretar agora. Tente de novo." }, 502);
     }
     const data = await res.json();
+    // deno-lint-ignore no-explicit-any
     const toolUse = (data.content ?? []).find((b: any) => b.type === "tool_use");
     const events = toolUse?.input?.events ?? [];
-    return json({ events });
+    const learned = await learnPromise;
+    return json({ events, learned });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);
