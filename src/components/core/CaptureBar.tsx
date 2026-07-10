@@ -15,6 +15,8 @@ import { useDictation } from "@/hooks/useDictation";
 import LearnedInsights, { type LearnedMemory } from "@/components/core/LearnedInsights";
 import FirstTimeTip from "@/components/core/FirstTimeTip";
 import { useGuides } from "@/hooks/useGuides";
+import Paywall from "@/components/core/Paywall";
+import { readFnError, isPlanLimit, type PlanLimitError } from "@/lib/fnError";
 
 const EXAMPLES = [
   "Gastei 47 no mercado e treinei pernas",
@@ -29,6 +31,7 @@ export default function CaptureBar() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [proposed, setProposed] = useState<ProposedEvent[] | null>(null);
+  const [limitInfo, setLimitInfo] = useState<PlanLimitError | null>(null);
   const [learned, setLearned] = useState<LearnedMemory[] | null>(null);
   const [checked, setChecked] = useState<boolean[]>([]);
   const { listening, toggle: toggleMic, stop: stopMic } = useDictation(
@@ -44,7 +47,12 @@ export default function CaptureBar() {
     setLearned(null);
     try {
       const { data, error } = await supabase.functions.invoke("capture", { body: { text: text.trim() } });
-      if (error || data?.error) throw new Error(data?.error ?? "Falha na captura");
+      if (error) {
+        const body = await readFnError(error);
+        if (isPlanLimit(body)) { setLimitInfo(body); return; }
+        throw new Error("Falha na captura");
+      }
+      if (data?.error) throw new Error(data.error);
       const events: ProposedEvent[] = data?.events ?? [];
       const insights = (data?.learned ?? []) as LearnedMemory[];
       if (insights.length) {
@@ -166,6 +174,9 @@ export default function CaptureBar() {
       {learned && (
         <LearnedInsights items={learned} onDismiss={() => setLearned(null)} />
       )}
+
+      {/* Paywall contextual: só quando o limite do plano é atingido */}
+      <Paywall info={limitInfo} onClose={() => setLimitInfo(null)} />
     </Card>
   );
 }

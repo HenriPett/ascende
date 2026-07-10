@@ -1,5 +1,6 @@
 // Módulo compartilhado das funções do Ascend
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { anthropicCall } from "./usage.ts";
 
 // Defina o secret APP_ORIGIN para restringir quais sites chamam as funções pelo
 // navegador. Aceita várias origens separadas por vírgula (ex.: produção + domínio
@@ -87,16 +88,16 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   const monthStart = new Date();
   monthStart.setDate(1);
 
-  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, { data: xp }, { data: battles }, { data: bCheckins }, { data: plans }, { data: memories }] =
+  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, xpTotalRes, { data: battles }, { data: bCheckins }, { data: plans }, { data: memories }] =
     await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       supabase.from("life_events").select("pillar,kind,occurred_at,payload")
         .eq("user_id", userId).gte("occurred_at", since30)
         .order("occurred_at", { ascending: false }).limit(120),
-      supabase.from("transactions").select("kind,amount,category")
+      supabase.from("transactions").select("kind,amount,category,occurred_at")
         .eq("user_id", userId).gte("occurred_at", monthStart.toISOString().slice(0, 10)),
       supabase.from("habits").select("id,name,pillar").eq("user_id", userId).eq("active", true),
-      supabase.from("xp_log").select("points").eq("user_id", userId),
+      supabase.rpc("xp_total", { uid: userId }),
       supabase.from("battles").select("id,name,triggers")
         .eq("user_id", userId).eq("active", true).eq("visible_to_ai", true),
       supabase.from("battle_checkins").select("battle_id,checkin_date,status,trigger_label")
@@ -111,6 +112,19 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
 
   const lines: string[] = [];
   const p = profile ?? {};
+  // Escopos de privacidade: quais áreas a pessoa autorizou o Conselheiro a analisar.
+  const rawScopes = (p.ai_scopes ?? {}) as Record<string, unknown>;
+  const scopes = {
+    prosperidade: rawScopes.prosperidade !== false,
+    vitalidade: rawScopes.vitalidade !== false,
+    alimentacao: rawScopes.alimentacao !== false,
+    mente: rawScopes.mente !== false,
+    diario: rawScopes.diario !== false,
+  };
+  const disabled = Object.entries(scopes).filter(([, v]) => !v).map(([k]) => k);
+  if (disabled.length) {
+    lines.push(`PRIVACIDADE: a pessoa desativou a análise das áreas: ${disabled.join(", ")}. Esses dados foram omitidos deste retrato de propósito. Não especule sobre eles nem peça para reativar.`);
+  }
   lines.push(`Nome: ${p.name || "não informado"}.`);
   if (p.goal) lines.push(`Objetivo declarado: ${p.goal}.`);
   lines.push(`Pilares ativos: ${(p.pillars ?? []).join(", ") || "nenhum ainda"}.`);
@@ -160,6 +174,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   if (p.monthly_budget) lines.push(`Orçamento mensal desejado: ${BRL(Number(p.monthly_budget))}.`);
 
   // Finanças do mês
+  if (scopes.prosperidade) {
   const income = (txs ?? []).filter((t) => t.kind === "income").reduce((s, t) => s + Number(t.amount), 0);
   const expense = (txs ?? []).filter((t) => t.kind === "expense").reduce((s, t) => s + Number(t.amount), 0);
   const byCat: Record<string, number> = {};
@@ -168,6 +183,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     .map(([c, v]) => `${c} ${BRL(v)}`).join(", ");
   lines.push(`FINANÇAS (mês atual): entradas ${BRL(income)}, saídas ${BRL(expense)}, saldo ${BRL(income - expense)}.` +
     (topCats ? ` Maiores gastos: ${topCats}.` : ""));
+  }
 
   // Hábitos e consistência (últimos 30 dias)
   const habitDone = (events ?? []).filter((e) => e.kind === "habit_done");
@@ -185,15 +201,19 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   const kinds: Record<string, any[]> = {};
   for (const e of events ?? []) (kinds[e.kind] ??= []).push(e);
 
+  if (scopes.vitalidade) {
   const sleeps = (kinds["sleep"] ?? []).map((e) => Number((e.payload as any)?.hours)).filter((n) => n > 0);
   if (sleeps.length) lines.push(`SONO NOTURNO: média de ${(sleeps.reduce((a, b) => a + b, 0) / sleeps.length).toFixed(1)}h nos últimos ${sleeps.length} registros (sonecas contadas à parte).`);
   const naps = (kinds["nap"] ?? []).map((e) => Number((e.payload as any)?.hours)).filter((n) => n > 0);
   if (naps.length) lines.push(`SONECAS (30d): ${naps.length}, média de ${(naps.reduce((a, b) => a + b, 0) / naps.length).toFixed(1)}h cada.`);
+  }
 
+  if (scopes.mente) {
   const moods = (kinds["mood"] ?? []).slice(0, 10).map((e) => (e.payload as any)?.label ?? (e.payload as any)?.score).filter(Boolean);
   if (moods.length) lines.push(`HUMOR (mais recentes primeiro): ${moods.join(", ")}.`);
+  }
 
-  if (kinds["workout"]?.length) {
+  if (scopes.vitalidade && kinds["workout"]?.length) {
     const mCount: Record<string, number> = {};
     for (const e of kinds["workout"]) {
       for (const m of ((e.payload as any)?.muscles ?? []) as string[]) mCount[m] = (mCount[m] ?? 0) + 1;
@@ -208,7 +228,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   }
 
   // Peso e composição corporal
-  if (kinds["weight"]?.length) {
+  if (scopes.alimentacao && kinds["weight"]?.length) {
     const ws = kinds["weight"]
       .map((e) => ({ d: e.occurred_at.slice(0, 10), kg: Number((e.payload as any)?.kg) }))
       .filter((w) => w.kg > 0)
@@ -225,7 +245,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       );
     }
   }
-  if (kinds["body"]?.length) {
+  if (scopes.alimentacao && kinds["body"]?.length) {
     const b = (kinds["body"][0].payload as any) ?? {};
     lines.push(
       `COMPOSIÇÃO CORPORAL (estimativa visual por foto, margem larga): ~${b.body_fat_pct}% de gordura` +
@@ -233,17 +253,17 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     );
   }
 
-  if (kinds["practice"]?.length) lines.push(`PRÁTICA ESPIRITUAL/MENTE: ${kinds["practice"].length} registros em 30 dias.`);
+  if (scopes.mente && kinds["practice"]?.length) lines.push(`PRÁTICA ESPIRITUAL/MENTE: ${kinds["practice"].length} registros em 30 dias.`);
 
   // Diário — pensamentos recentes (a pessoa sabe que o Conselheiro vê o que ela registra)
-  if (kinds["journal"]?.length) {
+  if (scopes.diario && kinds["journal"]?.length) {
     const trechos = kinds["journal"].slice(0, 3)
       .map((e) => String((e.payload as any)?.text ?? "").slice(0, 160)).filter(Boolean)
       .map((t) => `"${t}"`).join(" | ");
     lines.push(`DIÁRIO: ${kinds["journal"].length} entradas em 30 dias.` +
       (trechos ? ` Trechos recentes: ${trechos}.` : ""));
   }
-  if (kinds["meal"]?.length) {
+  if (scopes.alimentacao && kinds["meal"]?.length) {
     const last = kinds["meal"].slice(0, 6).map((e) => {
       const pl = (e.payload as any) ?? {};
       const kcal = Number(pl.calories);
@@ -314,7 +334,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   }
 
   // Hidratação (água) — total de hoje e média diária dos últimos 7 dias
-  if (kinds["water"]?.length) {
+  if (scopes.alimentacao && kinds["water"]?.length) {
     const todayStr = new Date().toISOString().slice(0, 10);
     const since7 = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
     const ml = (e: any) => Number((e.payload as any)?.ml) || 0;
@@ -328,12 +348,12 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       `média de ~${(avg7 / 1000).toFixed(1)}L/dia nos últimos 7 dias.`
     );
   }
-  if (kinds["gratitude"]?.length) {
+  if (scopes.mente && kinds["gratitude"]?.length) {
     const g = kinds["gratitude"].slice(0, 3).map((e) => (e.payload as any)?.text).filter(Boolean).join(" | ");
     if (g) lines.push(`GRATIDÃO recente: ${g}.`);
   }
 
-  const totalXp = (xp ?? []).reduce((s, r) => s + r.points, 0);
+  const totalXp = Number((xpTotalRes as { data?: unknown })?.data ?? 0);
   lines.push(`PROGRESSO: ${totalXp} XP acumulado (nível ${Math.floor(Math.sqrt(totalXp / 50)) + 1}).`);
 
   // Batalhas (somente as que a pessoa autorizou a IA a ver)
@@ -555,104 +575,183 @@ REGRAS:
 • Cada memória: uma frase autossuficiente, curta, sem "O usuário" no início ("Não gosta de agachamento", não "O usuário não gosta de agachamento").
 Use SEMPRE a ferramenta guardar_memorias.`;
 
+/* ─── Mensagens triviais: não gastam chamadas de captura/memória ─── */
+const TRIVIAL_PATTERNS = [
+  /^(obrigad[oa]s?|valeu|vlw|blz|beleza|ok(ay)?|t[áa] bom|show|top|legal|perfeito|entendi|sim|n[ãa]o|talvez)[.!\s]*$/i,
+  /^(pode continuar|continua|continue|prossiga|segue|manda|vai)[.!\s]*$/i,
+  /^(explique? (de novo|novamente|melhor)|repete|repita|como assim|n[ãa]o entendi)[.!?\s]*$/i,
+  /^(oi+|ol[áa]|bom dia|boa tarde|boa noite|e a[íi]|hey|opa|fala)[.!,\s]*$/i,
+  /^(quantas? calorias? tem|o que [ée]|qual [ée] a diferen[çc]a)/i,
+];
+export function isTrivialMessage(text: string): boolean {
+  const t = String(text ?? "").trim();
+  if (t.length < 8) return true;
+  if (t.length <= 120 && TRIVIAL_PATTERNS.some((re) => re.test(t))) return true;
+  return false;
+}
+
+/** Persiste memórias extraídas (dedupe, substituição e teto por plano). */
+async function persistMemories(
+  supabase: SupabaseClient, userId: string,
+  // deno-lint-ignore no-explicit-any
+  raw: any[], known: { id: string; content: string }[], memoryCap: number,
+): Promise<{ content: string; category: string }[]> {
+  const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+  const knownNorm = new Set(known.map((m) => norm(m.content)));
+  const knownIds = new Set(known.map((m) => m.id));
+  const learned: { content: string; category: string }[] = [];
+
+  for (const m of (raw ?? []).slice(0, MEMORY_MAX_PER_MESSAGE)) {
+    const content = String(m?.content ?? "").trim().slice(0, 160);
+    if (content.length < 3) continue;
+    const category = MEMORY_CATEGORIES.includes(String(m?.category)) ? String(m.category) : "outro";
+    const n = norm(content);
+    if (knownNorm.has(n)) continue;
+    knownNorm.add(n);
+
+    const replacesId = typeof m?.replaces_id === "string" && knownIds.has(m.replaces_id) ? m.replaces_id : null;
+    if (replacesId) {
+      const { error } = await supabase.from("ai_memories")
+        .update({ content, category, updated_at: new Date().toISOString() })
+        .eq("id", replacesId).eq("user_id", userId);
+      if (error) console.error("memories: falha ao atualizar", error.message ?? error);
+      else learned.push({ content, category });
+    } else {
+      // Teto por plano: no limite, não cria memórias novas (as antigas ficam).
+      if (known.length + learned.length >= memoryCap) continue;
+      const { error } = await supabase.from("ai_memories")
+        .insert({ user_id: userId, content, category });
+      if (error) console.error("memories: falha ao inserir", error.message ?? error);
+      else learned.push({ content, category });
+    }
+  }
+
+  if (learned.length) {
+    const { count } = await supabase.from("ai_memories")
+      .select("id", { count: "exact", head: true }).eq("user_id", userId);
+    const excess = (count ?? 0) - memoryCap;
+    if (excess > 0) {
+      const { data: oldest } = await supabase.from("ai_memories")
+        .select("id").eq("user_id", userId)
+        .order("created_at", { ascending: true }).limit(excess);
+      const ids = (oldest ?? []).map((o) => o.id);
+      if (ids.length) await supabase.from("ai_memories").delete().in("id", ids);
+    }
+  }
+  return learned;
+}
+
+async function loadKnownMemories(supabase: SupabaseClient, userId: string) {
+  const { data, error } = await supabase.from("ai_memories")
+    .select("id,content").eq("user_id", userId)
+    .order("created_at", { ascending: false }).limit(80);
+  if (error) {
+    console.error("memories: falha ao ler ai_memories", error.message ?? error);
+    return null;
+  }
+  return (data ?? []) as { id: string; content: string }[];
+}
+
+const memoriesBlock = (known: { id: string; content: string }[]) =>
+  known.length
+    ? `MEMÓRIAS JÁ EXISTENTES (não repita; use replaces_id do item que for atualizado):\n${known.map((m) => `- [id: ${m.id}] ${m.content}`).join("\n")}`
+    : "Ainda não há memórias sobre esta pessoa.";
+
 /**
- * Aprende com a mensagem do usuário: extrai nuances duráveis (modelo rápido),
- * deduplica contra o que já existe, grava/atualiza em ai_memories e devolve
- * a lista do que foi aprendido AGORA (para o app mostrar ao usuário).
- * Nunca lança: qualquer falha devolve [] sem derrubar a resposta principal.
+ * Aprende com a mensagem do usuário (memórias duráveis). Pula mensagens
+ * triviais, respeita o teto de memórias do plano e registra o consumo em
+ * ai_usage sob a feature informada. Nunca lança: falha devolve [].
  */
 export async function learnFromMessage(
   supabase: SupabaseClient, userId: string, message: string,
+  feature = "memorias", memoryCap = 150,
 ): Promise<{ content: string; category: string }[]> {
   try {
     const text = String(message ?? "").trim();
-    if (text.length < 8) return [];
+    if (isTrivialMessage(text)) return [];
+    const known = await loadKnownMemories(supabase, userId);
+    if (known === null) return [];
 
-    const { data: existing, error: readErr } = await supabase.from("ai_memories")
-      .select("id,content").eq("user_id", userId)
-      .order("created_at", { ascending: false }).limit(80);
-    if (readErr) {
-      // Tabela ausente (setup.sql seção 8 não rodou?) ou erro de leitura
-      console.error("memories: falha ao ler ai_memories", readErr.message ?? readErr);
-      return [];
-    }
-    const known = (existing ?? []) as { id: string; content: string }[];
-    const knownBlock = known.length
-      ? `MEMÓRIAS JÁ EXISTENTES (não repita; use replaces_id do item que for atualizado):\n${known.map((m) => `- [id: ${m.id}] ${m.content}`).join("\n")}`
-      : "Ainda não há memórias sobre esta pessoa.";
-
-    const res = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-        "anthropic-version": ANTHROPIC_VERSION,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL_FAST,
-        max_tokens: 700,
-        system: MEMORY_SYSTEM,
-        tools: [MEMORY_TOOL],
-        tool_choice: { type: "tool", name: "guardar_memorias" },
-        messages: [{
-          role: "user",
-          content: `${knownBlock}\n\nMENSAGEM DO USUÁRIO:\n${text.slice(0, 4000)}`,
-        }],
-      }),
+    const { res, data } = await anthropicCall(supabase, userId, feature, {
+      model: MODEL_FAST,
+      max_tokens: 700,
+      system: MEMORY_SYSTEM,
+      tools: [MEMORY_TOOL],
+      tool_choice: { type: "tool", name: "guardar_memorias" },
+      messages: [{
+        role: "user",
+        content: `${memoriesBlock(known)}\n\nMENSAGEM DO USUÁRIO:\n${text.slice(0, 4000)}`,
+      }],
     });
-    if (!res.ok) {
-      console.error("memories: Anthropic error", res.status, await res.text());
-      return [];
-    }
-    const data = await res.json();
+    if (!res.ok || !data) return [];
     // deno-lint-ignore no-explicit-any
-    const tu = (data.content ?? []).find((b: any) => b.type === "tool_use");
+    const tu = ((data as any).content ?? []).find((b: any) => b.type === "tool_use");
     const raw = Array.isArray(tu?.input?.memories) ? tu.input.memories : [];
-
-    const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
-    const knownNorm = new Set(known.map((m) => norm(m.content)));
-    const knownIds = new Set(known.map((m) => m.id));
-    const learned: { content: string; category: string }[] = [];
-
-    for (const m of raw.slice(0, MEMORY_MAX_PER_MESSAGE)) {
-      const content = String(m?.content ?? "").trim().slice(0, 160);
-      if (content.length < 3) continue;
-      const category = MEMORY_CATEGORIES.includes(String(m?.category)) ? String(m.category) : "outro";
-      const n = norm(content);
-      if (knownNorm.has(n)) continue; // já sabíamos disso, palavra por palavra
-      knownNorm.add(n);
-
-      const replacesId = typeof m?.replaces_id === "string" && knownIds.has(m.replaces_id) ? m.replaces_id : null;
-      if (replacesId) {
-        const { error } = await supabase.from("ai_memories")
-          .update({ content, category, updated_at: new Date().toISOString() })
-          .eq("id", replacesId).eq("user_id", userId);
-        if (error) console.error("memories: falha ao atualizar", error.message ?? error);
-        else learned.push({ content, category });
-      } else {
-        const { error } = await supabase.from("ai_memories")
-          .insert({ user_id: userId, content, category });
-        if (error) console.error("memories: falha ao inserir", error.message ?? error);
-        else learned.push({ content, category });
-      }
-    }
-
-    // Teto por usuário: além do limite, as memórias mais antigas saem
-    if (learned.length) {
-      const { count } = await supabase.from("ai_memories")
-        .select("id", { count: "exact", head: true }).eq("user_id", userId);
-      const excess = (count ?? 0) - MEMORY_MAX_PER_USER;
-      if (excess > 0) {
-        const { data: oldest } = await supabase.from("ai_memories")
-          .select("id").eq("user_id", userId)
-          .order("created_at", { ascending: true }).limit(excess);
-        const ids = (oldest ?? []).map((o) => o.id);
-        if (ids.length) await supabase.from("ai_memories").delete().in("id", ids);
-      }
-    }
-    return learned;
+    return await persistMemories(supabase, userId, raw, known, memoryCap);
   } catch (e) {
     console.error("memories: erro inesperado", e);
     return [];
+  }
+}
+
+/* ─── Extração COMBINADA: eventos + memórias em UMA chamada ───────
+   Reduz chamadas secundárias (plano, seção 9.2). Usada por `capture`
+   e `ai-chat`. Mensagens triviais não geram chamada nenhuma. */
+
+const COMBINED_TOOL = {
+  name: "extrair_registros_e_memorias",
+  description: "Extrai do relato do usuário: (a) eventos de vida registráveis e (b) nuances duráveis para a memória. Retorne arrays vazios quando não houver nada.",
+  input_schema: {
+    type: "object",
+    properties: {
+      events: (CAPTURE_TOOL.input_schema.properties as Record<string, unknown>).events,
+      memories: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            content: { type: "string", description: "Nuance durável em UMA frase curta (máx. 160 caracteres), 3ª pessoa implícita." },
+            category: { type: "string", enum: MEMORY_CATEGORIES },
+            replaces_id: { type: "string", description: "APENAS se atualiza/contradiz uma memória existente: o id exato dela." },
+          },
+          required: ["content", "category"],
+        },
+      },
+    },
+    required: ["events", "memories"],
+  },
+};
+
+export async function extractEventsAndMemories(
+  supabase: SupabaseClient, userId: string, text: string,
+  feature: string, memoryCap = 150,
+  // deno-lint-ignore no-explicit-any
+): Promise<{ events: any[]; learned: { content: string; category: string }[] }> {
+  try {
+    const t = String(text ?? "").trim();
+    if (isTrivialMessage(t)) return { events: [], learned: [] };
+    const known = (await loadKnownMemories(supabase, userId)) ?? [];
+
+    const { res, data } = await anthropicCall(supabase, userId, feature, {
+      model: MODEL_FAST,
+      max_tokens: 1800,
+      system: `${CAPTURE_SYSTEM}\n\n━━━ MEMÓRIA DE LONGO PRAZO ━━━\n${MEMORY_SYSTEM.split("Use SEMPRE a ferramenta")[0]}\nUse SEMPRE a ferramenta extrair_registros_e_memorias, preenchendo events E memories (vazios quando não houver).`,
+      tools: [COMBINED_TOOL],
+      tool_choice: { type: "tool", name: "extrair_registros_e_memorias" },
+      messages: [{
+        role: "user",
+        content: `${memoriesBlock(known)}\n\nRELATO DO USUÁRIO:\n${t.slice(0, 4000)}`,
+      }],
+    });
+    if (!res.ok || !data) return { events: [], learned: [] };
+    // deno-lint-ignore no-explicit-any
+    const tu = ((data as any).content ?? []).find((b: any) => b.type === "tool_use");
+    const events = Array.isArray(tu?.input?.events) ? tu.input.events : [];
+    const rawMems = Array.isArray(tu?.input?.memories) ? tu.input.memories : [];
+    const learned = await persistMemories(supabase, userId, rawMems, known, memoryCap);
+    return { events, learned };
+  } catch (e) {
+    console.error("extração combinada: erro inesperado", e);
+    return { events: [], learned: [] };
   }
 }

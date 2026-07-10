@@ -21,6 +21,14 @@ import { useGuides } from "@/hooks/useGuides";
 import { xpForKind } from "@/lib/xp";
 import { useDictation } from "@/hooks/useDictation";
 import { cn } from "@/lib/utils";
+import Paywall from "@/components/core/Paywall";
+import { readFnError, isPlanLimit, type PlanLimitError } from "@/lib/fnError";
+
+interface ProfileSuggestion {
+  patch: Record<string, unknown>;
+  merge: Record<string, string[]>;
+  labels: string[];
+}
 
 interface Msg { id?: string; role: "user" | "assistant"; content: string; pending?: boolean }
 
@@ -107,6 +115,9 @@ export default function Chat() {
   const [captured, setCaptured] = useState<ProposedEvent[] | null>(null);
   const [learned, setLearned] = useState<LearnedMemory[] | null>(null);
   const [proposedPlan, setProposedPlan] = useState<ProposedPlan | null>(null);
+  const [limitInfo, setLimitInfo] = useState<PlanLimitError | null>(null);
+  const [profileSuggestion, setProfileSuggestion] = useState<ProfileSuggestion | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [planComment, setPlanComment] = useState("");
@@ -207,7 +218,19 @@ export default function Chat() {
           attachments: sentAttachments.length ? sentAttachments : undefined,
         },
       });
-      if (error || data?.error) throw new Error(data?.error ?? "erro");
+      if (error) {
+        const body = await readFnError(error);
+        if (isPlanLimit(body)) {
+          // Limite do plano atingido: mostra o paywall contextual e devolve o texto
+          setLimitInfo(body);
+          setLocal((l) => l.slice(0, -1));
+          setInput(content);
+          setAttachments(sentAttachments);
+          return;
+        }
+        throw new Error(typeof body?.error === "string" ? (body.error as string) : "erro");
+      }
+      if (data?.error) throw new Error(data.error);
       setLocal([]);
       const events = (data?.captured ?? []) as ProposedEvent[];
       if (events.length) {
@@ -222,11 +245,9 @@ export default function Chat() {
         setLearned(insights);
         qc.invalidateQueries({ queryKey: ["ai-memories"] });
       }
-      const updated = (data?.profile_updated ?? []) as string[];
-      if (updated.length) {
-        toast.success(`Guardei no seu perfil: ${updated.join(", ")}.`);
-        qc.invalidateQueries({ queryKey: ["profile"] });
-      }
+      // Proposta de perfil: NADA é salvo sem a pessoa confirmar (cartão abaixo)
+      const suggestion = data?.profile_suggestion as ProfileSuggestion | null | undefined;
+      if (suggestion?.labels?.length) setProfileSuggestion(suggestion);
       qc.invalidateQueries({ queryKey: ["chat", user?.id] });
     } catch (e) {
       setLocal((l) => l.slice(0, -1));
@@ -237,6 +258,40 @@ export default function Chat() {
       setAttachments(sentAttachments);
     } finally {
       setSending(false);
+    }
+  };
+
+  // ── Confirmação da proposta de perfil feita pelo Conselheiro ─
+  const applyProfileSuggestion = async () => {
+    if (!user || !profileSuggestion) return;
+    setSavingProfile(true);
+    try {
+      const patch: Record<string, unknown> = { ...profileSuggestion.patch };
+      const mergeKeys = Object.keys(profileSuggestion.merge ?? {});
+      if (mergeKeys.length) {
+        const { data: prof } = await supabase.from("profiles")
+          .select("dietary_restrictions,health_conditions,medications")
+          .eq("user_id", user.id).maybeSingle();
+        const current = (prof ?? {}) as Record<string, string[] | null>;
+        for (const k of mergeKeys) {
+          const existing = current[k] ?? [];
+          const seen = new Set(existing.map((v) => v.toLowerCase()));
+          const merged = [...existing];
+          for (const item of profileSuggestion.merge[k]) {
+            if (!seen.has(item.toLowerCase())) { merged.push(item); seen.add(item.toLowerCase()); }
+          }
+          patch[k] = merged;
+        }
+      }
+      const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
+      if (error) throw error;
+      toast.success(`Guardei no seu perfil: ${profileSuggestion.labels.join(", ")}.`);
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      setProfileSuggestion(null);
+    } catch {
+      toast.error("Não consegui salvar no perfil. Tente de novo.");
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -398,6 +453,28 @@ export default function Chat() {
           </div>
         )}
 
+        {/* Proposta de perfil — o Conselheiro sugere, VOCÊ decide salvar */}
+        {profileSuggestion && !sending && (
+          <div className="rounded-xl border border-gold/40 bg-card p-3 space-y-2 animate-fade-up">
+            <p className="text-sm font-medium flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-gold" />
+              Quer salvar isso no seu perfil?
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Entendi na conversa: <strong>{profileSuggestion.labels.join(", ")}</strong>.
+              Nada é salvo sem a sua confirmação.
+            </p>
+            <div className="flex gap-2 justify-end pt-0.5">
+              <Button variant="ghost" size="sm" onClick={() => setProfileSuggestion(null)} disabled={savingProfile}>
+                <X className="w-4 h-4 mr-1" /> Não salvar
+              </Button>
+              <Button size="sm" onClick={applyProfileSuggestion} disabled={savingProfile}>
+                {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Salvar no perfil</>)}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Registros detectados na conversa — confirmar antes de gravar */}
         {captured && !sending && (
           <div className="rounded-xl border border-gold/40 bg-card p-3 space-y-2 animate-fade-up">
@@ -525,6 +602,9 @@ export default function Chat() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Paywall contextual: aparece só quando um limite do plano é atingido */}
+      <Paywall info={limitInfo} onClose={() => setLimitInfo(null)} />
     </div>
   );
 }

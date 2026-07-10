@@ -4,9 +4,10 @@
 // O app mostra para o usuário confirmar antes de gravar — a IA nunca grava sozinha.
 // A foto NÃO é armazenada: é analisada e descartada.
 import {
-  corsHeaders, serviceClient, requireUser, assertRateLimit,
-  ANTHROPIC_URL, ANTHROPIC_VERSION, corsFor, MODEL_SMART,
+  serviceClient, requireUser, assertRateLimit, corsFor, MODEL_SMART,
 } from "../_shared/lib.ts";
+import { anthropicCall, countUsage } from "../_shared/usage.ts";
+import { getEntitlements, spMonthStartUtc, nextSpMonthStartUtc, limitResponse } from "../_shared/entitlements.ts";
 
 const MAX_B64 = 7_000_000;
 const ALLOWED_MEDIA = ["image/jpeg", "image/png", "image/webp"];
@@ -74,6 +75,16 @@ Deno.serve(async (req) => {
     const user = await requireUser(req, supabase);
     await assertRateLimit(supabase, user.id, "analyze-body", 20, 10);
 
+    // Limite mensal por plano (validado no servidor)
+    const ent = await getEntitlements(supabase, user.id);
+    if (ent.flags.premium_limits_enabled && ent.limits.body_photos_monthly !== null) {
+      const used = await countUsage(supabase, user.id, ["analyze-body"], spMonthStartUtc());
+      if (used >= (ent.limits.body_photos_monthly ?? 0)) {
+        return limitResponse(req, "analyze-body", ent.limits.body_photos_monthly ?? 0, nextSpMonthStartUtc(),
+          `Você usou as ${ent.limits.body_photos_monthly} análises de composição corporal deste mês.`);
+      }
+    }
+
     const { image, media_type, weight_kg } = await req.json();
     if (!image || typeof image !== "string" || image.length > MAX_B64) {
       return json({ error: "Imagem inválida ou grande demais." }, 400);
@@ -83,14 +94,7 @@ Deno.serve(async (req) => {
     }
     const weightKg = typeof weight_kg === "number" && weight_kg > 20 && weight_kg < 400 ? weight_kg : undefined;
 
-    const res = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-        "anthropic-version": ANTHROPIC_VERSION,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const { res, data } = await anthropicCall(supabase, user.id, "analyze-body", {
         model: MODEL_SMART,
         max_tokens: 700,
         tools: [TOOL],
@@ -102,15 +106,13 @@ Deno.serve(async (req) => {
             { type: "text", text: PROMPT(weightKg) },
           ],
         }],
-      }),
-    });
-    if (!res.ok) {
-      console.error("Anthropic error", res.status, await res.text());
+      });
+    if (!res.ok || !data) {
       return json({ error: "A análise está indisponível agora. Tente de novo em instantes." }, 502);
     }
 
-    const data = await res.json();
-    const toolUse = (data.content ?? []).find((b: { type: string }) => b.type === "tool_use");
+    // deno-lint-ignore no-explicit-any
+    const toolUse = ((data as any).content ?? []).find((b: { type: string }) => b.type === "tool_use");
     const input = toolUse?.input as {
       valid?: boolean; reason?: string;
       body_fat_low?: number; body_fat_high?: number; note?: string;

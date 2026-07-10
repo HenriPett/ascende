@@ -3,9 +3,10 @@
 // macronutrientes. O app mostra para o usuário confirmar/ajustar antes de gravar —
 // a IA nunca grava sozinha. Estimativa é aproximada e informativa, nunca prescrição.
 import {
-  corsHeaders, serviceClient, requireUser, assertRateLimit,
-  ANTHROPIC_URL, ANTHROPIC_VERSION, corsFor, MODEL_SMART,
+  serviceClient, requireUser, assertRateLimit, corsFor, MODEL_SMART,
 } from "../_shared/lib.ts";
+import { anthropicCall, countUsage } from "../_shared/usage.ts";
+import { getEntitlements, spMonthStartUtc, nextSpMonthStartUtc, limitResponse } from "../_shared/entitlements.ts";
 
 // ~7 MB de base64 ≈ 5 MB de imagem. O app já reduz a foto antes de enviar.
 const MAX_B64 = 7_000_000;
@@ -76,6 +77,16 @@ Deno.serve(async (req) => {
     const user = await requireUser(req, supabase);
     await assertRateLimit(supabase, user.id, "analyze-meal", 40, 10);
 
+    // Limite mensal por plano (validado no servidor)
+    const ent = await getEntitlements(supabase, user.id);
+    if (ent.flags.premium_limits_enabled && ent.limits.meal_photos_monthly !== null) {
+      const used = await countUsage(supabase, user.id, ["analyze-meal"], spMonthStartUtc());
+      if (used >= (ent.limits.meal_photos_monthly ?? 0)) {
+        return limitResponse(req, "analyze-meal", ent.limits.meal_photos_monthly ?? 0, nextSpMonthStartUtc(),
+          `Você usou as ${ent.limits.meal_photos_monthly} análises de refeição deste mês.`);
+      }
+    }
+
     const { image, media_type, note } = await req.json();
     const hasImage = typeof image === "string" && image.length > 0;
     const noteText = typeof note === "string" ? note.trim().slice(0, 300) : "";
@@ -93,14 +104,7 @@ Deno.serve(async (req) => {
           : "Estime as calorias e os macronutrientes desta refeição a partir da foto.")
       : `Sem foto. Estime calorias e macronutrientes a partir desta descrição da refeição: "${noteText}".`;
 
-    const res = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-        "anthropic-version": ANTHROPIC_VERSION,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const { res, data } = await anthropicCall(supabase, user.id, "analyze-meal", {
         model: MODEL_SMART,
         max_tokens: 1000,
         system: SYSTEM,
@@ -115,16 +119,14 @@ Deno.serve(async (req) => {
               ]
             : userText,
         }],
-      }),
-    });
+      });
 
-    if (!res.ok) {
-      console.error("Anthropic error", res.status, await res.text());
+    if (!res.ok || !data) {
       return json({ error: "Não consegui analisar a foto agora. Tente de novo." }, 502);
     }
 
-    const data = await res.json();
-    const toolUse = (data.content ?? []).find((b: any) => b.type === "tool_use");
+    // deno-lint-ignore no-explicit-any
+    const toolUse = ((data as any).content ?? []).find((b: any) => b.type === "tool_use");
     const r = toolUse?.input;
     if (!r) return json({ error: "Não consegui interpretar a foto." }, 502);
 

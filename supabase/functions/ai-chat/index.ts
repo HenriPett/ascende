@@ -1,11 +1,16 @@
 // ASCEND — Conselheiro (chat de IA com visão de todos os pilares)
 import {
-  corsHeaders, corsFor, serviceClient, requireUser, assertRateLimit, buildSnapshot,
-  ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_SMART, MODEL_FAST, SAFETY_RULES,
-  CAPTURE_TOOL, CAPTURE_SYSTEM, learnFromMessage,
+  corsFor, serviceClient, requireUser, assertRateLimit, buildSnapshot,
+  MODEL_SMART, MODEL_FAST, SAFETY_RULES, extractEventsAndMemories,
 } from "../_shared/lib.ts";
+import { anthropicCall, countUsage } from "../_shared/usage.ts";
+import {
+  getEntitlements, limitResponse,
+  spDayStartUtc, spWeekStartUtc, spMonthStartUtc,
+  nextSpDayStartUtc, nextSpWeekStartUtc, nextSpMonthStartUtc,
+} from "../_shared/entitlements.ts";
 
-const DAILY_LIMIT = 40;
+const LEGACY_DAILY_LIMIT = 40; // vigente enquanto premium_limits_enabled = false
 
 const SYSTEM = `Você é o Conselheiro do Ascend, uma plataforma brasileira de qualidade de vida. Você é a única IA que enxerga TODAS as áreas da vida da pessoa ao mesmo tempo: finanças, corpo, alimentação, mente e espírito. Seu papel é ajudá-la a subir de nível na vida real.
 
@@ -52,8 +57,8 @@ REGRAS:
 5. Perguntas pontuais ("quantas calorias tem ovo?", "treino de peito é bom 2x por semana?") NÃO são planos definitivos: responda normalmente, sem exigir dados.
 6. AJUSTES: se a pessoa comentar ou pedir mudanças em um plano recém-entregue ("não gosto de agachamento", "troca o frango do jantar", "diminui o valor de lazer"), acolha o comentário, refaça o que for preciso e chame registrar_plano DE NOVO com o plano COMPLETO revisado (mesmo título, salvo se a mudança justificar renomear). Nunca registre só a diferença: o plano registrado deve ser sempre autossuficiente. Na resposta em texto, resuma apenas o que mudou.
 
-━━━ GUARDANDO DADOS QUE A PESSOA INFORMA NA CONVERSA ━━━
-Quando a pessoa informar dados de perfil na conversa (idade ou ano de nascimento, sexo, altura, nível de atividade, restrições alimentares, meta de peso, CONDIÇÕES DE SAÚDE que ela tenha, ou MEDICAMENTOS que ela use), chame a ferramenta atualizar_perfil NA MESMA resposta, para o app guardar e você não precisar perguntar de novo. Ex.: "sou diabético" → add_health_conditions: ["diabetes"]; "tomo losartana todo dia" → add_medications: ["losartana"]. Ao guardar condição ou medicamento, seja acolhedor e lembre em UMA frase que você considera isso nas sugestões mas não substitui o acompanhamento de quem prescreve; NUNCA sugira iniciar, parar ou mudar dose de medicamento. Se ela der a idade, calcule o ano de nascimento a partir do ano atual. Mencione em UMA frase na resposta que guardou esses dados no perfil dela. O peso ATUAL não vai no perfil: ele vira registro na linha do tempo (o app cuida disso automaticamente).
+━━━ PROPONDO GUARDAR DADOS QUE A PESSOA INFORMA NA CONVERSA ━━━
+Quando a pessoa informar dados de perfil na conversa (idade ou ano de nascimento, sexo, altura, nível de atividade, restrições alimentares, meta de peso, CONDIÇÕES DE SAÚDE que ela tenha, ou MEDICAMENTOS que ela use), chame a ferramenta atualizar_perfil NA MESMA resposta. IMPORTANTE: a ferramenta gera uma PROPOSTA — nada é salvo sem a pessoa confirmar num cartão que o app mostra. Ex.: "sou diabético" → add_health_conditions: ["diabetes"]; "tomo losartana todo dia" → add_medications: ["losartana"]. Ao propor guardar condição ou medicamento, seja acolhedor e lembre em UMA frase que você considera isso nas sugestões mas não substitui o acompanhamento de quem prescreve; NUNCA sugira iniciar, parar ou mudar dose de medicamento. Se ela der a idade, calcule o ano de nascimento a partir do ano atual. Mencione em UMA frase que sugeriu salvar isso no perfil (nunca diga que "salvou"). O peso ATUAL não vai no perfil: ele vira registro na linha do tempo (o app cuida disso automaticamente).
 ${SAFETY_RULES}
 
 ━━━ RETRATO ATUAL DA PESSOA (dados reais da plataforma) ━━━
@@ -84,7 +89,7 @@ const SAVE_PLAN_TOOL = {
 const UPDATE_PROFILE_TOOL = {
   name: "atualizar_perfil",
   description:
-    "Guarda no perfil da pessoa dados que ela informou explicitamente nesta conversa. " +
+    "PROPÕE guardar no perfil dados que a pessoa informou explicitamente nesta conversa (o app pede confirmação dela antes de salvar). " +
     "Preencha APENAS os campos que ela informou agora. Nunca invente ou deduza sem a pessoa ter dito.",
   input_schema: {
     type: "object",
@@ -159,14 +164,48 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Limite diário
-    const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-    const { count } = await supabase.from("chat_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id).eq("role", "user")
-      .gte("created_at", dayStart.toISOString());
-    if ((count ?? 0) >= DAILY_LIMIT) {
-      return json({ error: `Você atingiu o limite de ${DAILY_LIMIT} mensagens por dia. Amanhã o Conselheiro estará aqui de novo.` }, 429);
+    // Limites do Conselheiro — validados NO SERVIDOR, por plano, no fuso de São Paulo
+    const ent = await getEntitlements(supabase, user.id);
+    const countChat = async (sinceIso: string) => {
+      const { count } = await supabase.from("chat_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id).eq("role", "user").gte("created_at", sinceIso);
+      return count ?? 0;
+    };
+    if (ent.flags.premium_limits_enabled) {
+      const L = ent.limits;
+      if (L.chat_daily !== null && (await countChat(spDayStartUtc())) >= L.chat_daily) {
+        return limitResponse(req, "counselor", L.chat_daily, nextSpDayStartUtc(),
+          `Você usou as ${L.chat_daily} mensagens de hoje com o Conselheiro.`);
+      }
+      if (L.chat_weekly !== null && (await countChat(spWeekStartUtc())) >= L.chat_weekly) {
+        return limitResponse(req, "counselor", L.chat_weekly, nextSpWeekStartUtc(),
+          `Você usou as ${L.chat_weekly} mensagens desta semana com o Conselheiro.`);
+      }
+      if (L.chat_monthly !== null && (await countChat(spMonthStartUtc())) >= L.chat_monthly) {
+        return limitResponse(req, "counselor", L.chat_monthly, nextSpMonthStartUtc(),
+          `Você usou as ${L.chat_monthly} mensagens deste mês com o Conselheiro.`);
+      }
+      // Anexos de PDF/documento fazem parte do Ascend+ (com limite mensal)
+      const docCount = atts.filter((a) => a?.kind === "pdf").length;
+      if (docCount > 0) {
+        const cap = L.document_analyses_monthly ?? 0;
+        const used = await countUsage(supabase, user.id, ["chat-documento"], spMonthStartUtc());
+        if (used + docCount > cap) {
+          return limitResponse(req, "document_analysis", cap, nextSpMonthStartUtc(),
+            cap === 0
+              ? "A análise de documentos (PDF) faz parte do Ascend+."
+              : `Você usou as ${cap} análises de documentos deste mês.`);
+        }
+        // registra o consumo dos documentos desta mensagem
+        for (let i = 0; i < docCount; i++) {
+          await supabase.from("ai_usage").insert({
+            user_id: user.id, feature: "chat-documento", model: MODEL_SMART, success: true,
+          });
+        }
+      }
+    } else if ((await countChat(spDayStartUtc())) >= LEGACY_DAILY_LIMIT) {
+      return json({ error: `Você atingiu o limite de ${LEGACY_DAILY_LIMIT} mensagens por dia. Amanhã o Conselheiro estará aqui de novo.` }, 429);
     }
 
     // Contexto: retrato multi-pilar + histórico recente
@@ -183,66 +222,40 @@ Deno.serve(async (req) => {
         : message,
     });
 
-    const res = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-        "anthropic-version": ANTHROPIC_VERSION,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL_SMART,
-        max_tokens: 3000,
-        system: SYSTEM + snapshot,
-        tools: [SAVE_PLAN_TOOL, UPDATE_PROFILE_TOOL],
-        tool_choice: { type: "auto" },
-        messages,
-      }),
+    // Roteamento de modelo: perguntas curtas e diretas não precisam do modelo caro.
+    const needsSmart =
+      contentBlocks.length > 0 ||
+      message.length > 160 ||
+      /plano|dieta|treino|or[çc]ament|financ|analis|relat[óo]rio|semana|m[êe]s|como (estou|est[áa]|anda)|minha vida|meta|estrat[ée]gia|cruz|compar/i.test(message);
+    const model = ent.flags.model_routing_enabled && !needsSmart ? MODEL_FAST : MODEL_SMART;
+
+    const { res, data: mainData } = await anthropicCall(supabase, user.id, "chat-principal", {
+      model,
+      max_tokens: 3000,
+      // Cache de prompt: as regras (estáveis) ficam em bloco cacheado;
+      // o retrato (variável) fica fora do cache.
+      system: [
+        { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
+        { type: "text", text: snapshot },
+      ],
+      tools: [SAVE_PLAN_TOOL, UPDATE_PROFILE_TOOL],
+      tool_choice: { type: "auto" },
+      messages,
     });
 
-    // Em paralelo: extrai eventos registráveis da mensagem ("treinei costas",
-    // "gastei 30 no almoço", "bebi 2L de água"...). São PROPOSTAS — o app pede
-    // confirmação antes de gravar. Falha aqui nunca derruba a resposta do chat.
-    const capturePromise: Promise<unknown[]> = (async () => {
-      try {
-        const r = await fetch(ANTHROPIC_URL, {
-          method: "POST",
-          headers: {
-            "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-            "anthropic-version": ANTHROPIC_VERSION,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: MODEL_FAST,
-            max_tokens: 1500,
-            system: CAPTURE_SYSTEM,
-            tools: [CAPTURE_TOOL],
-            tool_choice: { type: "tool", name: "registrar_eventos" },
-            messages: [{ role: "user", content: message }],
-          }),
-        });
-        if (!r.ok) return [];
-        const d = await r.json();
-        // deno-lint-ignore no-explicit-any
-        const tu = (d.content ?? []).find((b: any) => b.type === "tool_use");
-        return Array.isArray(tu?.input?.events) ? tu.input.events : [];
-      } catch {
-        return [];
-      }
-    })();
+    // Em paralelo: UMA chamada econômica extrai eventos registráveis E memórias
+    // duráveis da mensagem (eram duas chamadas; plano §9.2). São PROPOSTAS — o
+    // app pede confirmação antes de gravar eventos. Mensagens triviais
+    // ("obrigado", "pode continuar") não geram chamada nenhuma.
+    const extractPromise = extractEventsAndMemories(
+      supabase, user.id, message, "chat-extracao", ent.limits.memory_cap,
+    );
 
-    // Também em paralelo: a memória de longo prazo aprende nuances duráveis
-    // da mensagem (preferências, rotina, contexto). O que for aprendido volta
-    // na resposta para o app mostrar. Falha aqui nunca derruba o chat.
-    const learnPromise = learnFromMessage(supabase, user.id, message);
-
-    if (!res.ok) {
-      console.error("Anthropic error", res.status, await res.text());
+    if (!res.ok || !mainData) {
       return json({ error: "O Conselheiro está indisponível agora. Tente de novo em instantes." }, 502);
     }
-    const data = await res.json();
     // deno-lint-ignore no-explicit-any
-    const blocks = (data.content ?? []) as any[];
+    const blocks = ((mainData as any).content ?? []) as any[];
     let reply = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
 
     // Plano proposto pelo modelo (o app pede confirmação antes de salvar)
@@ -272,14 +285,7 @@ Deno.serve(async (req) => {
       const needsWorkouts = plan.kind === "treino" && !plan.weekly_workouts;
       if (needsKcal || needsWorkouts) {
         try {
-          const r = await fetch(ANTHROPIC_URL, {
-            method: "POST",
-            headers: {
-              "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-              "anthropic-version": ANTHROPIC_VERSION,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
+          const { res: r, data: gd } = await anthropicCall(supabase, user.id, "chat-metas", {
               model: MODEL_FAST,
               max_tokens: 300,
               tools: [{
@@ -298,12 +304,10 @@ Deno.serve(async (req) => {
               }],
               tool_choice: { type: "tool", name: "extrair_metas" },
               messages: [{ role: "user", content: `Extraia as metas deste plano:\n\n${plan.content.slice(0, 6000)}` }],
-            }),
           });
-          if (r.ok) {
-            const d = await r.json();
+          if (r.ok && gd) {
             // deno-lint-ignore no-explicit-any
-            const tu = (d.content ?? []).find((b: any) => b.type === "tool_use");
+            const tu = ((gd as any).content ?? []).find((b: any) => b.type === "tool_use");
             const gi = tu?.input ?? {};
             plan.daily_calories_kcal = plan.daily_calories_kcal ?? inRange(gi.daily_calories_kcal, 800, 8000);
             plan.daily_protein_g = plan.daily_protein_g ?? inRange(gi.daily_protein_g, 20, 400);
@@ -316,68 +320,53 @@ Deno.serve(async (req) => {
       if (!reply) reply = plan.content; // segurança: nunca responder vazio
     }
 
-    // Dados de perfil informados na conversa: valida e grava
-    const profileUpdated: string[] = [];
+    // Dados de perfil informados na conversa: viram uma PROPOSTA que o app
+    // mostra para a pessoa confirmar. Nada é gravado automaticamente (plano §7).
+    const suggestedLabels: string[] = [];
+    const patch: Record<string, unknown> = {};
+    const merge: Record<string, string[]> = {};
     const profBlock = blocks.find((b) => b.type === "tool_use" && b.name === "atualizar_perfil");
     if (profBlock?.input && typeof profBlock.input === "object") {
       const inp = profBlock.input as Record<string, unknown>;
-      const patch: Record<string, unknown> = {};
       const yearNow = new Date().getFullYear();
       const by = Number(inp.birth_year);
-      if (by > 1900 && by <= yearNow) { patch.birth_year = Math.round(by); profileUpdated.push("ano de nascimento"); }
-      if (inp.sex === "feminino" || inp.sex === "masculino") { patch.sex = inp.sex; profileUpdated.push("sexo"); }
+      if (by > 1900 && by <= yearNow) { patch.birth_year = Math.round(by); suggestedLabels.push("ano de nascimento"); }
+      if (inp.sex === "feminino" || inp.sex === "masculino") { patch.sex = inp.sex; suggestedLabels.push("sexo"); }
       const h = Number(inp.height_cm);
-      if (h > 80 && h < 250) { patch.height_cm = Math.round(h * 10) / 10; profileUpdated.push("altura"); }
+      if (h > 80 && h < 250) { patch.height_cm = Math.round(h * 10) / 10; suggestedLabels.push("altura"); }
       if (["sedentario", "leve", "moderado", "intenso"].includes(String(inp.activity_level))) {
-        patch.activity_level = inp.activity_level; profileUpdated.push("nível de atividade");
+        patch.activity_level = inp.activity_level; suggestedLabels.push("nível de atividade");
       }
       const wg = Number(inp.weight_goal_kg);
-      if (wg > 20 && wg < 400) { patch.weight_goal_kg = wg; profileUpdated.push("meta de peso"); }
+      if (wg > 20 && wg < 400) { patch.weight_goal_kg = wg; suggestedLabels.push("meta de peso"); }
       const cg = Number(inp.calorie_goal_kcal);
-      if (cg >= 800 && cg <= 8000) { patch.calorie_goal_kcal = Math.round(cg); profileUpdated.push("meta calórica diária"); }
+      if (cg >= 800 && cg <= 8000) { patch.calorie_goal_kcal = Math.round(cg); suggestedLabels.push("meta calórica diária"); }
       const pg = Number(inp.protein_goal_g);
-      if (pg >= 20 && pg <= 400) { patch.protein_goal_g = Math.round(pg); profileUpdated.push("meta de proteína"); }
+      if (pg >= 20 && pg <= 400) { patch.protein_goal_g = Math.round(pg); suggestedLabels.push("meta de proteína"); }
       const dsl = Number(inp.daily_spend_limit);
-      if (dsl >= 1 && dsl <= 100000) { patch.daily_spend_limit = dsl; profileUpdated.push("teto de gasto diário"); }
+      if (dsl >= 1 && dsl <= 100000) { patch.daily_spend_limit = dsl; suggestedLabels.push("teto de gasto diário"); }
       const ww = Number(inp.weekly_workouts_goal);
-      if (ww >= 1 && ww <= 14) { patch.weekly_workouts_goal = Math.round(ww); profileUpdated.push("meta de treinos por semana"); }
+      if (ww >= 1 && ww <= 14) { patch.weekly_workouts_goal = Math.round(ww); suggestedLabels.push("meta de treinos por semana"); }
       const sg = Number(inp.sleep_goal_h);
-      if (sg >= 4 && sg <= 12) { patch.sleep_goal_h = sg; profileUpdated.push("meta de sono"); }
-      // Listas que MESCLAM sem duplicar (restrições, condições, medicamentos)
-      const mergeList = async (
-        col: "dietary_restrictions" | "health_conditions" | "medications",
-        incoming: unknown, label: string, max: number,
-      ) => {
-        if (!Array.isArray(incoming) || !incoming.length) return;
-        const { data: prof } = await supabase.from("profiles")
-          .select(col).eq("user_id", user.id).maybeSingle();
-        const current: string[] = Array.isArray((prof as Record<string, unknown> | null)?.[col])
-          ? ((prof as Record<string, unknown>)[col] as unknown[]).map(String) : [];
-        const lower = new Set(current.map((r) => r.toLowerCase()));
-        const added = (incoming as unknown[])
-          .map((r) => String(r).trim().slice(0, 80))
-          .filter((r) => r && !lower.has(r.toLowerCase()));
-        if (added.length) {
-          patch[col] = [...current, ...added].slice(0, 20);
-          profileUpdated.push(label);
-        }
+      if (sg >= 4 && sg <= 12) { patch.sleep_goal_h = sg; suggestedLabels.push("meta de sono"); }
+      const cleanList = (v: unknown, label: string, key: string) => {
+        if (!Array.isArray(v) || !v.length) return;
+        const items = (v as unknown[]).map((r) => String(r).trim().slice(0, 80)).filter(Boolean).slice(0, 20);
+        if (items.length) { merge[key] = items; suggestedLabels.push(label); }
       };
-      await mergeList("dietary_restrictions", inp.add_dietary_restrictions, "restrições alimentares", 15);
-      await mergeList("health_conditions", inp.add_health_conditions, "condições de saúde", 20);
-      await mergeList("medications", inp.add_medications, "medicamentos", 20);
-      if (Object.keys(patch).length) {
-        const { error: upErr } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
-        if (upErr) { console.error("profile update", upErr); profileUpdated.length = 0; }
-      } else profileUpdated.length = 0;
+      cleanList(inp.add_dietary_restrictions, "restrições alimentares", "dietary_restrictions");
+      cleanList(inp.add_health_conditions, "condições de saúde", "health_conditions");
+      cleanList(inp.add_medications, "medicamentos", "medications");
     }
+    const profileSuggestion = suggestedLabels.length ? { patch, merge, labels: suggestedLabels } : null;
 
     await supabase.from("chat_messages").insert([
       { user_id: user.id, role: "user", content: attNames.length ? `${message}\n📎 ${attNames.join(", ")}` : message },
       { user_id: user.id, role: "assistant", content: reply },
     ]);
 
-    const [captured, learned] = await Promise.all([capturePromise, learnPromise]);
-    return json({ reply, captured, plan, profile_updated: profileUpdated, learned });
+    const { events: captured, learned } = await extractPromise;
+    return json({ reply, captured, plan, profile_suggestion: profileSuggestion, learned });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);

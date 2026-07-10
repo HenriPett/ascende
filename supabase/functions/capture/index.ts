@@ -1,17 +1,14 @@
 // ASCEND — Captura conversacional
-// Recebe texto livre ("gastei 47 no mercado, treinei, dormi 5h, tô ansioso")
-// e devolve eventos estruturados PROPOSTOS. O app mostra para o usuário
-// confirmar antes de gravar — a IA nunca grava sozinha.
-// Em paralelo, a memória de longo prazo aprende nuances duráveis do relato
-// ("não gosto de treinar à noite", "trabalho em escala") e devolve o que
-// aprendeu em `learned`, para o app mostrar ao usuário.
+// Texto livre → eventos estruturados PROPOSTOS + memórias duráveis, em UMA
+// única chamada de IA (modelo econômico). O app pede confirmação antes de
+// gravar qualquer evento — a IA nunca grava sozinha.
+// Limite diário por plano validado NO SERVIDOR (free: 3/dia; Ascend+: 30/dia).
 import {
-  corsHeaders, serviceClient, requireUser, assertRateLimit,
-  ANTHROPIC_URL, ANTHROPIC_VERSION, MODEL_FAST, corsFor,
-  CAPTURE_TOOL, CAPTURE_SYSTEM, learnFromMessage,
+  serviceClient, requireUser, assertRateLimit, corsFor, isTrivialMessage,
+  extractEventsAndMemories,
 } from "../_shared/lib.ts";
-
-
+import { countUsage } from "../_shared/usage.ts";
+import { getEntitlements, spDayStartUtc, nextSpDayStartUtc, limitResponse } from "../_shared/entitlements.ts";
 
 Deno.serve(async (req) => {
   const cors = corsFor(req);
@@ -22,40 +19,29 @@ Deno.serve(async (req) => {
   try {
     const supabase = serviceClient();
     const user = await requireUser(req, supabase);
-    await assertRateLimit(supabase, user.id, "capture", 80, 5);
+    await assertRateLimit(supabase, user.id, "capture", 80, 5); // anti-abuso (independe de plano)
+
     const { text } = await req.json();
     if (!text || typeof text !== "string" || text.length > 2000) {
       return json({ error: "Texto inválido." }, 400);
     }
 
-    // Aprendizado em paralelo com a extração de eventos (nunca derruba a captura)
-    const learnPromise = learnFromMessage(supabase, user.id, text);
+    // Mensagens sem conteúdo registrável não consomem cota nem chamada de IA
+    if (isTrivialMessage(text)) return json({ events: [], learned: [] });
 
-    const res = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-        "anthropic-version": ANTHROPIC_VERSION,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL_FAST,
-        max_tokens: 1500,
-        system: CAPTURE_SYSTEM,
-        tools: [CAPTURE_TOOL],
-        tool_choice: { type: "tool", name: "registrar_eventos" },
-        messages: [{ role: "user", content: text }],
-      }),
-    });
-    if (!res.ok) {
-      console.error("Anthropic error", res.status, await res.text());
-      return json({ error: "Não consegui interpretar agora. Tente de novo." }, 502);
+    // Limite do plano (validado no servidor; frontend só exibe)
+    const ent = await getEntitlements(supabase, user.id);
+    if (ent.flags.premium_limits_enabled && ent.limits.capture_daily !== null) {
+      const used = await countUsage(supabase, user.id, ["capture"], spDayStartUtc());
+      if (used >= ent.limits.capture_daily) {
+        return limitResponse(req, "capture", ent.limits.capture_daily, nextSpDayStartUtc(),
+          `Você usou as ${ent.limits.capture_daily} capturas inteligentes de hoje. Registros manuais continuam ilimitados.`);
+      }
     }
-    const data = await res.json();
-    // deno-lint-ignore no-explicit-any
-    const toolUse = (data.content ?? []).find((b: any) => b.type === "tool_use");
-    const events = toolUse?.input?.events ?? [];
-    const learned = await learnPromise;
+
+    const { events, learned } = await extractEventsAndMemories(
+      supabase, user.id, text, "capture", ent.limits.memory_cap,
+    );
     return json({ events, learned });
   } catch (e) {
     if (e instanceof Response) return e;

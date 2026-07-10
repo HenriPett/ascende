@@ -12,7 +12,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "sonner";
-import { LogOut, Loader2, Smartphone, Share, Sun, Moon, Monitor, Plus, X, Brain, Trash2 } from "lucide-react";
+import { LogOut, Loader2, Smartphone, Share, Sun, Moon, Monitor, Plus, X, Brain, Trash2, Download, ShieldAlert, Sparkles, Eye } from "lucide-react";
+import { Link } from "react-router-dom";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { PILLARS, type PillarId } from "@/lib/pillars";
 import { MEMORY_CATEGORY_LABEL } from "@/components/core/LearnedInsights";
 import { useGuides } from "@/hooks/useGuides";
@@ -92,6 +96,109 @@ export default function Ajustes() {
   const signOut = async () => {
     await supabase.auth.signOut();
     navigate("/", { replace: true });
+  };
+
+  // ── Privacidade: quais áreas o Conselheiro pode analisar ──────
+  const SCOPES: { id: string; label: string }[] = [
+    { id: "prosperidade", label: "Prosperidade (finanças)" },
+    { id: "vitalidade", label: "Vitalidade (sono e treinos)" },
+    { id: "alimentacao", label: "Alimentação (refeições, peso, hidratação)" },
+    { id: "mente", label: "Mente & Espírito (humor, práticas, gratidão)" },
+    { id: "diario", label: "Diário (trechos das suas anotações)" },
+  ];
+  const [scopes, setScopes] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    const raw = ((profile as unknown as { ai_scopes?: Record<string, boolean> })?.ai_scopes) ?? {};
+    const next: Record<string, boolean> = {};
+    for (const sc of SCOPES) next[sc.id] = raw[sc.id] !== false;
+    setScopes(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile]);
+  const toggleScope = async (id: string, on: boolean) => {
+    if (!user) return;
+    const next = { ...scopes, [id]: on };
+    setScopes(next);
+    const { error } = await supabase.from("profiles").update({ ai_scopes: next }).eq("user_id", user.id);
+    if (error) { toast.error("Não consegui salvar a preferência."); setScopes(scopes); return; }
+    toast.success(on ? "O Conselheiro voltará a considerar essa área." : "O Conselheiro deixará essa área de fora das análises.");
+  };
+
+  // ── Exportação de dados (sempre gratuita) ─────────────────────
+  const EXPORT_TABLES = [
+    "profiles", "life_events", "transactions", "habits", "habit_logs",
+    "chat_messages", "briefings", "plans", "battles", "battle_checkins",
+    "ai_memories", "xp_log",
+  ];
+  const [exporting, setExporting] = useState<"json" | "csv" | null>(null);
+  const download = (filename: string, content: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  };
+  const exportJson = async () => {
+    if (!user) return;
+    setExporting("json");
+    try {
+      const out: Record<string, unknown[]> = {};
+      for (const t of EXPORT_TABLES) {
+        const { data, error } = await supabase.from(t).select("*").eq("user_id", user.id).limit(10000);
+        if (error) throw error;
+        out[t] = data ?? [];
+      }
+      download(`ascend-dados-${new Date().toISOString().slice(0, 10)}.json`,
+        JSON.stringify({ exported_at: new Date().toISOString(), ...out }, null, 2),
+        "application/json");
+      toast.success("Exportação concluída. O arquivo JSON foi baixado.");
+    } catch {
+      toast.error("Não consegui exportar agora. Tente de novo.");
+    } finally { setExporting(null); }
+  };
+  const toCsv = (rows: Record<string, unknown>[]) => {
+    if (!rows.length) return "";
+    const cols = Object.keys(rows[0]);
+    const esc = (v: unknown) => {
+      const str = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+      return /[",\n;]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    return [cols.join(","), ...rows.map((r) => cols.map((c) => esc(r[c])).join(","))].join("\n");
+  };
+  const exportCsv = async () => {
+    if (!user) return;
+    setExporting("csv");
+    try {
+      for (const t of ["life_events", "transactions"]) {
+        const { data, error } = await supabase.from(t).select("*").eq("user_id", user.id).limit(10000);
+        if (error) throw error;
+        download(`ascend-${t}-${new Date().toISOString().slice(0, 10)}.csv`,
+          toCsv((data ?? []) as Record<string, unknown>[]), "text/csv");
+      }
+      toast.success("Exportação concluída. Os arquivos CSV foram baixados.");
+    } catch {
+      toast.error("Não consegui exportar agora. Tente de novo.");
+    } finally { setExporting(null); }
+  };
+
+  // ── Exclusão definitiva da conta (sempre gratuita) ────────────
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteText, setDeleteText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const deleteAccount = async () => {
+    if (deleteText !== "EXCLUIR") return;
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("delete-account", {
+        body: { confirm: "EXCLUIR" },
+      });
+      if (error || data?.error) throw new Error(data?.error ?? "erro");
+      toast.success("Conta excluída. Sentiremos sua falta.");
+      await supabase.auth.signOut();
+      navigate("/", { replace: true });
+    } catch {
+      toast.error("Não consegui excluir agora. Tente novamente ou fale com o suporte.");
+      setDeleting(false);
+    }
   };
 
   // ── Memória do Conselheiro: ver e apagar o que a IA aprendeu ──
@@ -340,6 +447,41 @@ export default function Ajustes() {
         </div>
       </Card>
 
+      {/* Assinatura */}
+      <Card className="p-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display font-semibold flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-gold" /> Assinatura
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Veja seu plano atual, conheça o Ascend+ ou gerencie sua assinatura.
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm" className="shrink-0">
+          <Link to="/app/assinatura">Ver planos</Link>
+        </Button>
+      </Card>
+
+      {/* Privacidade: o que o Conselheiro pode analisar */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="font-display font-semibold flex items-center gap-1.5">
+            <Eye className="w-4 h-4 text-primary" /> O que o Conselheiro pode analisar
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Desative uma área e o Conselheiro, o briefing e as análises deixam esses dados
+            de fora na hora. Seus registros continuam salvos e visíveis para você.
+          </p>
+        </div>
+        {SCOPES.map((sc) => (
+          <div key={sc.id} className="flex items-center justify-between gap-3">
+            <Label htmlFor={`scope-${sc.id}`} className="text-sm font-normal">{sc.label}</Label>
+            <Switch id={`scope-${sc.id}`} checked={scopes[sc.id] ?? true}
+              onCheckedChange={(v) => toggleScope(sc.id, !!v)} />
+          </div>
+        ))}
+      </Card>
+
       {/* Memória do Conselheiro: transparência total sobre o que a IA aprendeu */}
       <Card className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
@@ -422,10 +564,59 @@ export default function Ajustes() {
         </div>
       </Card>
 
-      <p className="text-xs text-muted-foreground px-1">
-        Seus dados são seus. Para excluir sua conta e todos os dados definitivamente, escreva
-        para o suporte — a exclusão apaga tudo, sem cópias.
-      </p>
+      {/* Seus dados: exportação e exclusão — sempre gratuitas */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="font-display font-semibold flex items-center gap-1.5">
+            <Download className="w-4 h-4 text-primary" /> Seus dados
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Seus dados são seus. Exporte tudo quando quiser — de graça, sempre.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={exportJson} disabled={exporting !== null}>
+            {exporting === "json" ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Download className="w-3.5 h-3.5 mr-1.5" /> Exportar tudo (JSON)</>)}
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={exporting !== null}>
+            {exporting === "csv" ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Download className="w-3.5 h-3.5 mr-1.5" /> Registros e finanças (CSV)</>)}
+          </Button>
+        </div>
+        <div className="rounded-md border border-destructive/30 p-3 space-y-2">
+          <p className="text-sm font-semibold flex items-center gap-1.5 text-destructive">
+            <ShieldAlert className="w-4 h-4" /> Excluir minha conta
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Apaga definitivamente sua conta e TODOS os dados (registros, conversas, memórias,
+            planos, XP). Não tem volta. Se tiver assinatura ativa, cancele antes pelo portal
+            na página Assinatura. Dica: exporte seus dados acima antes de excluir.
+          </p>
+          <Button variant="destructive" size="sm" onClick={() => { setDeleteText(""); setDeleteOpen(true); }}>
+            Excluir conta e dados
+          </Button>
+        </div>
+      </Card>
+
+      {/* Confirmação reforçada da exclusão */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Excluir conta definitivamente</DialogTitle>
+            <DialogDescription>
+              Esta ação apaga TODOS os seus dados e não pode ser desfeita.
+              Para confirmar, digite <strong>EXCLUIR</strong> abaixo.
+            </DialogDescription>
+          </DialogHeader>
+          <Input value={deleteText} onChange={(e) => setDeleteText(e.target.value.toUpperCase())}
+            placeholder="EXCLUIR" aria-label="Digite EXCLUIR para confirmar" />
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)} disabled={deleting}>Cancelar</Button>
+            <Button variant="destructive" onClick={deleteAccount} disabled={deleteText !== "EXCLUIR" || deleting}>
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Excluir tudo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Button variant="ghost" className="w-full text-muted-foreground" onClick={signOut}>
         <LogOut className="w-4 h-4 mr-1.5" /> Sair da conta

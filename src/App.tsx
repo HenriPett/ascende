@@ -20,6 +20,7 @@ import Batalhas from "@/pages/Batalhas";
 import Planos from "@/pages/Planos";
 import Legal from "@/pages/Legal";
 import Ajustes from "@/pages/Ajustes";
+import Assinatura from "@/pages/Assinatura";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -82,6 +83,7 @@ export default function App() {
               <Route path="alimentacao" element={<Alimentacao />} />
               <Route path="mente" element={<Mente />} />
               <Route path="batalhas" element={<Batalhas />} />
+              <Route path="assinatura" element={<Assinatura />} />
               <Route path="planos" element={<Planos />} />
               <Route path="score" element={<Score />} />
               <Route path="ajustes" element={<Ajustes />} />

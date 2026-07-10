@@ -516,7 +516,7 @@ function Briefing() {
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("briefing", { body: {} });
       if (error || data?.error) throw new Error(data?.error ?? "erro");
-      return data.briefing as string;
+      return data as { briefing: string | null; locked?: boolean; reason?: string };
     },
   });
 
@@ -540,7 +540,15 @@ function Briefing() {
           de IA foram publicadas — passo 4 do README.)
         </p>
       )}
-      {data && <p className="text-sm leading-relaxed whitespace-pre-line">{data}</p>}
+      {data?.locked && (
+        <div className="space-y-2">
+          <p className="text-sm opacity-90">{data.reason ?? "O briefing diário faz parte do Ascend+."}</p>
+          <Link to="/app/assinatura" className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4">
+            Conhecer o Ascend+
+          </Link>
+        </div>
+      )}
+      {data?.briefing && <p className="text-sm leading-relaxed whitespace-pre-line">{data.briefing}</p>}
     </Card>
   );
 }

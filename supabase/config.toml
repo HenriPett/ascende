@@ -14,3 +14,18 @@ verify_jwt = true
 
 [functions.analyze-body]
 verify_jwt = true
+[functions.create-checkout]
+verify_jwt = true
+
+[functions.customer-portal]
+verify_jwt = true
+
+[functions.get-subscription]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+# O webhook é autenticado pela assinatura HMAC do Stripe, não por JWT
+[functions.billing-webhook]
+verify_jwt = false
