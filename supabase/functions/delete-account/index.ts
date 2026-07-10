@@ -1,4 +1,4 @@
-// ASCEND — Exclusão definitiva da conta (SEMPRE gratuita; plano §6 e §19)
+// ASCENDE — Exclusão definitiva da conta (SEMPRE gratuita; plano §6 e §19)
 // Confirmação reforçada: o corpo precisa trazer confirm: "EXCLUIR".
 // auth.users(id) tem ON DELETE CASCADE em todas as tabelas → apaga tudo.
 import { serviceClient, requireUser, corsFor } from "../_shared/lib.ts";

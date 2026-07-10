@@ -1,4 +1,4 @@
-// ASCEND — Webhook do Stripe (verify_jwt = false; autenticado pela ASSINATURA do Stripe)
+// ASCENDE — Webhook do Stripe (verify_jwt = false; autenticado pela ASSINATURA do Stripe)
 // Idempotente: cada evento é registrado em billing_webhook_events com chave única;
 // reprocessamentos retornam 200 sem efeito. A conta do usuário guarda apenas a
 // permissão final (plan_key ascend_plus) — nunca depende do id do Stripe.

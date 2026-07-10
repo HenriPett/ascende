@@ -1,4 +1,4 @@
-// Página da assinatura: plano atual, comparação Gratuito × Ascend+,
+// Página da assinatura: plano atual, comparação Gratuito × Ascende+,
 // checkout do Stripe e portal do cliente. Limites reais vêm do servidor.
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -44,7 +44,7 @@ export default function Assinatura() {
     const status = searchParams.get("status");
     if (!status) return;
     if (status === "sucesso") {
-      toast.success("Assinatura confirmada! Bem-vindo(a) ao Ascend+. Pode levar alguns segundos para ativar.");
+      toast.success("Assinatura confirmada! Bem-vindo(a) ao Ascende+. Pode levar alguns segundos para ativar.");
       qc.invalidateQueries({ queryKey: ["entitlements"] });
     } else if (status === "cancelado") {
       toast.info("Checkout cancelado. Nada foi cobrado.");
@@ -85,7 +85,7 @@ export default function Assinatura() {
       <div>
         <h1 className="text-xl font-display font-bold">Assinatura</h1>
         <p className="text-sm text-muted-foreground">
-          O Ascend é gratuito para sempre no essencial. O Ascend+ amplia os recursos de IA.
+          O Ascende é gratuito para sempre no essencial. O Ascende+ amplia os recursos de IA.
         </p>
       </div>
 
@@ -96,7 +96,7 @@ export default function Assinatura() {
         ) : (
           <>
             <p className="text-sm">
-              Seu plano: <strong>{isPlus ? "Ascend+" : "Gratuito"}</strong>
+              Seu plano: <strong>{isPlus ? "Ascende+" : "Gratuito"}</strong>
               {isPlus && ent?.subscription?.current_period_end && (
                 <span className="text-muted-foreground">
                   {" · "}{ent.subscription.cancel_at_period_end ? "termina" : "renova"} em{" "}
@@ -106,7 +106,7 @@ export default function Assinatura() {
             </p>
             {ent?.subscription?.status === "past_due" && (
               <p className="text-sm text-destructive">
-                O último pagamento falhou. Atualize a forma de pagamento no portal abaixo para não perder o Ascend+.
+                O último pagamento falhou. Atualize a forma de pagamento no portal abaixo para não perder o Ascende+.
               </p>
             )}
             {ent?.subscription && ent.subscription.provider === "stripe" && (
@@ -134,7 +134,7 @@ export default function Assinatura() {
         <Card className="p-4 space-y-3 border-gold/50">
           <div>
             <h2 className="font-display font-semibold flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-gold" /> Ascend+
+              <Sparkles className="w-4 h-4 text-gold" /> Ascende+
             </h2>
             <p className="text-lg font-bold">{ent?.pricing?.monthly_label ?? "R$ 19,90/mês"}</p>
             <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "ou anual com desconto"}</p>

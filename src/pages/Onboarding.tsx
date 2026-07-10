@@ -208,7 +208,7 @@ export default function Onboarding() {
             <Input id="spirit" maxLength={60} placeholder="Ex.: oração, meditação, culto, silêncio, leitura..."
               value={spirit} onChange={(e) => setSpirit(e.target.value)} />
             <p className="text-xs text-muted-foreground">
-              O Ascend respeita o seu vocabulário e a sua crença — a plataforma acompanha
+              O Ascende respeita o seu vocabulário e a sua crença — a plataforma acompanha
               a prática que <em>você</em> definiu, nunca sugere uma.
             </p>
           </div>

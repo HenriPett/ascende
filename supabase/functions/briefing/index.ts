@@ -1,6 +1,6 @@
-// ASCEND — Briefing do dia / Retrospectiva de domingo
+// ASCENDE — Briefing do dia / Retrospectiva de domingo
 // Cache: 1 por usuário por dia (tabela briefings), com data no fuso de São Paulo.
-// Plano gratuito: retrospectiva semanal (domingo). Ascend+: briefing diário.
+// Plano gratuito: retrospectiva semanal (domingo). Ascende+: briefing diário.
 // Roteamento de modelo: retratos curtos (pouco dado) usam o modelo econômico.
 import {
   serviceClient, requireUser, assertRateLimit, buildSnapshot,
@@ -11,7 +11,7 @@ import {
   getEntitlements, spParts, isSundayInSP, nextSpDayStartUtc,
 } from "../_shared/entitlements.ts";
 
-const RETRO_SYSTEM = `Você escreve a retrospectiva de domingo do Ascend — plataforma brasileira de qualidade de vida.
+const RETRO_SYSTEM = `Você escreve a retrospectiva de domingo do Ascende — plataforma brasileira de qualidade de vida.
 ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –); prefira vírgula, dois-pontos ou frases separadas.
 Com base no retrato da pessoa (dados reais), escreva de 4 a 6 frases curtas em português do Brasil olhando para a SEMANA que passou:
 1. O resumo honesto da semana, cruzando pilares quando os dados permitirem (o que andou, o que travou).
@@ -22,7 +22,7 @@ Tom: caloroso, direto, sem falso entusiasmo, sem envergonhar. Sem listas, sem t�
 Se houver poucos dados, dê boas-vindas e diga (em 1 frase) o que registrar para a próxima retrospectiva valer a pena.
 ${SAFETY_RULES}`;
 
-const SYSTEM = `Você escreve o briefing matinal do Ascend — plataforma brasileira de qualidade de vida.
+const SYSTEM = `Você escreve o briefing matinal do Ascende — plataforma brasileira de qualidade de vida.
 ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –); prefira vírgula, dois-pontos ou frases separadas.
 Com base no retrato da pessoa (dados reais), escreva de 3 a 5 frases curtas em português do Brasil:
 1. Como a vida dela está neste momento, cruzando pilares (finanças × sono × hábitos × humor) quando os dados permitirem.
@@ -50,12 +50,12 @@ Deno.serve(async (req) => {
       .select("content").eq("user_id", user.id).eq("brief_date", today).maybeSingle();
     if (cached?.content) return json({ briefing: cached.content, cached: true });
 
-    // Plano gratuito: briefing diário é do Ascend+; a retrospectiva de domingo é de todos.
+    // Plano gratuito: briefing diário é do Ascende+; a retrospectiva de domingo é de todos.
     const ent = await getEntitlements(supabase, user.id);
     if (ent.flags.premium_limits_enabled && !ent.limits.briefing_daily && !sunday) {
       return json({
         briefing: null, locked: true, feature: "briefing",
-        reason: "O briefing diário faz parte do Ascend+. Sua retrospectiva da semana chega todo domingo.",
+        reason: "O briefing diário faz parte do Ascende+. Sua retrospectiva da semana chega todo domingo.",
         reset_at: nextSpDayStartUtc(), upgrade_available: true,
       });
     }

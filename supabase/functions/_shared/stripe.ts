@@ -1,8 +1,32 @@
-// ASCEND — Cliente Stripe minimalista (REST via fetch, sem SDK)
+// ASCENDE — Cliente Stripe minimalista (REST via fetch, sem SDK)
 // Os dados da entidade de cobrança ficam em app_settings ('billing_entity')
 // e nos secrets — nunca no código (plano §3). Trocar de conta Stripe =
 // trocar secrets; os usuários e assinaturas internas não mudam.
 const STRIPE_API = "https://api.stripe.com/v1";
+
+/**
+ * Resolve a origem do app para montar success_url / cancel_url / return_url.
+ * Tolerante a configuração com VÁRIAS URLs separadas por vírgula em APP_ORIGIN
+ * (ex.: "https://ascende.netlify.app, https://ascende.site"): escolhe a que
+ * bate com o Origin da requisição; senão, usa a primeira válida. Também
+ * conserta "https//dominio" (sem dois-pontos) e remove barra final.
+ */
+export function resolveAppOrigin(req: Request): string {
+  const normalize = (raw: string): string | null => {
+    let u = raw.trim().replace(/\/+$/, "");
+    if (!u) return null;
+    u = u.replace(/^(https?)\/\//i, "$1://"); // "https//x" -> "https://x"
+    if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+    try { const p = new URL(u); return `${p.protocol}//${p.host}`; } catch { return null; }
+  };
+  const configured = (Deno.env.get("APP_ORIGIN") ?? "")
+    .split(",").map(normalize).filter((x): x is string => !!x);
+  const reqOrigin = normalize(req.headers.get("origin") ?? "");
+  if (reqOrigin && configured.includes(reqOrigin)) return reqOrigin;
+  if (configured.length) return configured[0];
+  if (reqOrigin) return reqOrigin;
+  throw new Error("APP_ORIGIN não configurada");
+}
 
 function key(): string {
   const k = Deno.env.get("STRIPE_SECRET_KEY");

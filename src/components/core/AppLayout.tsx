@@ -58,7 +58,7 @@ export default function AppLayout() {
       {/* Topo — cristal */}
       <header className="sticky top-0 z-30 glass border-x-0 border-t-0 rounded-none">
         <div className="container flex items-center justify-between h-14">
-          <Link to="/app" aria-label="Ascend — início">
+          <Link to="/app" aria-label="Ascende — início">
             <Logo size="sm" />
           </Link>
 

@@ -1,12 +1,13 @@
-# Segurança dos dados no Ascend
+# Segurança dos dados no Ascende
 
-O Ascend lida com dados sensíveis: saúde, medicamentos, diário, humor, finanças, fé e fotos do corpo.
+O Ascende lida com dados sensíveis: saúde, medicamentos, diário, humor, finanças, fé e fotos do corpo.
 Este documento registra o resultado da auditoria de segurança, o que é garantido **em código**
 e o que precisa ser configurado **no painel** (Supabase e Netlify).
 
 ## O que está garantido em código
 
 **Isolamento por usuário (RLS)**
+
 - Todas as tabelas têm Row Level Security ligado, com políticas `auth.uid() = user_id`
   para leitura e escrita: `profiles`, `life_events`, `transactions`, `habits`, `habit_logs`,
   `xp_log`, `chat_messages`, `briefings`, `battles`, `battle_checkins`, `plans`.
@@ -19,6 +20,7 @@ e o que precisa ser configurado **no painel** (Supabase e Netlify).
 - Todas as funções `security definer` fixam `set search_path = public` (contra sequestro de search_path).
 
 **Funções de IA (edge functions)**
+
 - Toda função valida o JWT (`requireUser`) antes de qualquer coisa; `verify_jwt = true` no config.
 - Rate limit por usuário em todas (proteção de custo e abuso):
   ai-chat 20/5min · capture 30/5min · analyze-meal 20/10min · analyze-body 8/10min · briefing 6/60min.
@@ -33,6 +35,7 @@ e o que precisa ser configurado **no painel** (Supabase e Netlify).
   própria pessoa informou). Planos e registros passam por confirmação do usuário no app.
 
 **Frontend e deploy**
+
 - Zero `dangerouslySetInnerHTML` alcançável por entrada do usuário (o markdown do chat/planos
   usa um parser próprio que gera nós React, imune a XSS).
 - Sem `console.log` de dados no código do app.
@@ -47,26 +50,21 @@ e o que precisa ser configurado **no painel** (Supabase e Netlify).
 ## Checklist manual (fazer no painel — ~15 minutos)
 
 **Supabase → Authentication**
+
 1. Ativar **Leaked password protection** (bloqueia senhas vazadas, via HaveIBeenPwned).
 2. Conferir **Confirm email** ligado (evita cadastro com e-mail de terceiros).
 3. Em **Rate limits**, manter os padrões de auth (proteção de força bruta no login).
 
-**Supabase → Edge Functions → Secrets**
-4. Criar o secret `APP_ORIGIN` com a URL exata do site (ex.: `https://seuapp.netlify.app`).
-   Sem ele o CORS fica aberto (modo dev).
-5. Conferir que `ANTHROPIC_API_KEY` está só aqui (nunca no frontend ou no repositório).
+**Supabase → Edge Functions → Secrets** 4. Criar o secret `APP_ORIGIN` com a URL exata do site (ex.: `https://seuapp.netlify.app`).
+Sem ele o CORS fica aberto (modo dev). 5. Conferir que `ANTHROPIC_API_KEY` está só aqui (nunca no frontend ou no repositório).
 
-**Supabase → Database**
-6. Ativar backups diários (plano free já tem 7 dias; PITR se for a produção séria).
+**Supabase → Database** 6. Ativar backups diários (plano free já tem 7 dias; PITR se for a produção séria).
 
-**Contas**
-7. Ligar **2FA** nas contas do Supabase, Netlify e do provedor de e-mail.
+**Contas** 7. Ligar **2FA** nas contas do Supabase, Netlify e do provedor de e-mail.
 
-**Rotina**
-8. Se qualquer chave vazar (commit acidental, print), rotacione na hora:
-   Supabase → Settings → API (anon/service) e console da Anthropic (API key).
-9. Depois de rodar o `setup.sql` desta versão, execute o Security Advisor do Supabase
-   (Database → Advisors) e confirme zero alertas de RLS.
+**Rotina** 8. Se qualquer chave vazar (commit acidental, print), rotacione na hora:
+Supabase → Settings → API (anon/service) e console da Anthropic (API key). 9. Depois de rodar o `setup.sql` desta versão, execute o Security Advisor do Supabase
+(Database → Advisors) e confirme zero alertas de RLS.
 
 ## Limitações conhecidas (transparência)
 

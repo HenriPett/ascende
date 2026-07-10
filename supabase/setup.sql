@@ -667,7 +667,7 @@ begin
   end if;
   select count(*) into n from public.plans where user_id = new.user_id and status = 'ativo';
   if new.status = 'ativo' and n >= cap then
-    raise exception 'PLAN_LIMIT_REACHED: máximo de % plano(s) ativo(s) no seu plano. Arquive um plano ou assine o Ascend+.', cap
+    raise exception 'PLAN_LIMIT_REACHED: máximo de % plano(s) ativo(s) no seu plano. Arquive um plano ou assine o Ascende+.', cap
       using errcode = 'P0001';
   end if;
   return new;

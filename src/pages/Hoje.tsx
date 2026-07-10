@@ -542,9 +542,9 @@ function Briefing() {
       )}
       {data?.locked && (
         <div className="space-y-2">
-          <p className="text-sm opacity-90">{data.reason ?? "O briefing diário faz parte do Ascend+."}</p>
+          <p className="text-sm opacity-90">{data.reason ?? "O briefing diário faz parte do Ascende+."}</p>
           <Link to="/app/assinatura" className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4">
-            Conhecer o Ascend+
+            Conhecer o Ascende+
           </Link>
         </div>
       )}

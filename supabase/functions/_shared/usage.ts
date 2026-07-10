@@ -1,4 +1,4 @@
-// ASCEND — Telemetria de IA (medição real de custo)
+// ASCENDE — Telemetria de IA (medição real de custo)
 // Toda chamada à Anthropic passa por `anthropicCall`, que registra em ai_usage:
 // tokens (incl. cache), custo estimado, sucesso, erro, latência e request id.
 // Falha na telemetria NUNCA derruba a chamada principal.

@@ -1,4 +1,4 @@
-// ASCEND — Foto de corpo inteiro → estimativa de composição corporal
+// ASCENDE — Foto de corpo inteiro → estimativa de composição corporal
 // Recebe uma foto (base64) e devolve uma estimativa PROPOSTA de % de gordura
 // (como FAIXA, nunca número falsamente preciso) e massa magra derivada do peso.
 // O app mostra para o usuário confirmar antes de gravar — a IA nunca grava sozinha.

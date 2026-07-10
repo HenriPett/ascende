@@ -1,4 +1,4 @@
-// ASCEND — Biblioteca central de datas (plano §5.4)
+// ASCENDE — Biblioteca central de datas (plano §5.4)
 // Regra: instantes são gravados em UTC no banco; agrupamentos, "hoje",
 // semanas e meses usam SEMPRE o fuso America/Sao_Paulo, calculado aqui.
 // Não misture current_date do banco, horário do navegador e toISOString()

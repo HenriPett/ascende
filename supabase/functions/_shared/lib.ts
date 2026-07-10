@@ -1,4 +1,4 @@
-// Módulo compartilhado das funções do Ascend
+// Módulo compartilhado das funções do Ascende
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { anthropicCall } from "./usage.ts";
 
@@ -424,7 +424,7 @@ export const SAFETY_RULES = `
 • Nunca envergonhe a pessoa por uma semana ruim. Recaída é o caso normal. Sempre ofereça um próximo passo pequeno e possível.
 ━━━ BATALHAS (lutas pessoais: pornografia, redes sociais, cigarro, apostas etc.) ━━━
 • Recaída se acolhe, nunca se julga. O dado importante da recaída é o gatilho — ajude a pessoa a enxergar o padrão (ex.: recaídas em noites de sono ruim, em dias de humor baixo, em madrugadas). Reforce que os dias limpos acumulados não se perdem.
-• Ao notar padrão severo em batalhas de álcool, drogas ou apostas (recaídas quase diárias, sinais de abstinência física, dívidas ou perdas relevantes), diga com clareza e carinho que isso merece acompanhamento profissional e aponte caminhos concretos no Brasil: CAPS (unidades públicas de saúde mental), Alcoólicos Anônimos, Narcóticos Anônimos, Jogadores Anônimos. O Ascend é apoio, não tratamento.
+• Ao notar padrão severo em batalhas de álcool, drogas ou apostas (recaídas quase diárias, sinais de abstinência física, dívidas ou perdas relevantes), diga com clareza e carinho que isso merece acompanhamento profissional e aponte caminhos concretos no Brasil: CAPS (unidades públicas de saúde mental), Alcoólicos Anônimos, Narcóticos Anônimos, Jogadores Anônimos. O Ascende é apoio, não tratamento.
 • NUNCA trate comida como inimigo nem incentive "batalha contra comer". Se a pessoa enquadrar alimentação como guerra/restrição, redirecione com gentileza para hábitos positivos no pilar Alimentação (ex.: "fazer uma refeição de verdade") — guerra contra comida alimenta compulsão. Sinais de transtorno alimentar merecem indicação de profissional.`;
 /* ─── Captura conversacional (compartilhada entre `capture` e `ai-chat`) ───
    Texto livre → eventos estruturados PROPOSTOS. O app sempre pede confirmação
@@ -492,7 +492,7 @@ export const CAPTURE_TOOL = {
   },
 };
 
-export const CAPTURE_SYSTEM = `Você extrai eventos estruturados de relatos do dia a dia de brasileiros, para a plataforma Ascend.
+export const CAPTURE_SYSTEM = `Você extrai eventos estruturados de relatos do dia a dia de brasileiros, para a plataforma Ascende.
 Regras:
 • Extraia TODOS os eventos presentes no texto — um relato pode alimentar vários pilares de uma vez.
 • Valores em reais: "47", "R$47", "quarenta e sete" → amount 47. Gastos são expense; salário/recebimentos são income.
@@ -552,7 +552,7 @@ const MEMORY_TOOL = {
   },
 };
 
-const MEMORY_SYSTEM = `Você é a memória de longo prazo do Ascend, uma plataforma brasileira de qualidade de vida. Sua única tarefa: ler UMA mensagem do usuário e decidir se ela revela algo DURÁVEL sobre quem ele é — algo que continuará verdadeiro daqui a semanas e tornará as próximas conversas mais pessoais.
+const MEMORY_SYSTEM = `Você é a memória de longo prazo do Ascende, uma plataforma brasileira de qualidade de vida. Sua única tarefa: ler UMA mensagem do usuário e decidir se ela revela algo DURÁVEL sobre quem ele é — algo que continuará verdadeiro daqui a semanas e tornará as próximas conversas mais pessoais.
 
 GUARDE (exemplos):
 • Preferências e aversões estáveis: "odeio brócolis", "não gosto de academia lotada", "prefiro treinar de manhã".

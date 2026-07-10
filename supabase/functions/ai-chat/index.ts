@@ -1,4 +1,4 @@
-// ASCEND — Conselheiro (chat de IA com visão de todos os pilares)
+// ASCENDE — Conselheiro (chat de IA com visão de todos os pilares)
 import {
   corsFor, serviceClient, requireUser, assertRateLimit, buildSnapshot,
   MODEL_SMART, MODEL_FAST, SAFETY_RULES, extractEventsAndMemories,
@@ -12,7 +12,7 @@ import {
 
 const LEGACY_DAILY_LIMIT = 40; // vigente enquanto premium_limits_enabled = false
 
-const SYSTEM = `Você é o Conselheiro do Ascend, uma plataforma brasileira de qualidade de vida. Você é a única IA que enxerga TODAS as áreas da vida da pessoa ao mesmo tempo: finanças, corpo, alimentação, mente e espírito. Seu papel é ajudá-la a subir de nível na vida real.
+const SYSTEM = `Você é o Conselheiro do Ascende, uma plataforma brasileira de qualidade de vida. Você é a única IA que enxerga TODAS as áreas da vida da pessoa ao mesmo tempo: finanças, corpo, alimentação, mente e espírito. Seu papel é ajudá-la a subir de nível na vida real.
 
 ━━━ COMO VOCÊ RESPONDE ━━━
 • Português do Brasil, tom caloroso e direto, sem jargão. Máximo 4 parágrafos curtos.
@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
         return limitResponse(req, "counselor", L.chat_monthly, nextSpMonthStartUtc(),
           `Você usou as ${L.chat_monthly} mensagens deste mês com o Conselheiro.`);
       }
-      // Anexos de PDF/documento fazem parte do Ascend+ (com limite mensal)
+      // Anexos de PDF/documento fazem parte do Ascende+ (com limite mensal)
       const docCount = atts.filter((a) => a?.kind === "pdf").length;
       if (docCount > 0) {
         const cap = L.document_analyses_monthly ?? 0;
@@ -194,7 +194,7 @@ Deno.serve(async (req) => {
         if (used + docCount > cap) {
           return limitResponse(req, "document_analysis", cap, nextSpMonthStartUtc(),
             cap === 0
-              ? "A análise de documentos (PDF) faz parte do Ascend+."
+              ? "A análise de documentos (PDF) faz parte do Ascende+."
               : `Você usou as ${cap} análises de documentos deste mês.`);
         }
         // registra o consumo dos documentos desta mensagem

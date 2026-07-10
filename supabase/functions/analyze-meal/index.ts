@@ -1,4 +1,4 @@
-// ASCEND — Foto da refeição → estimativa de calorias
+// ASCENDE — Foto da refeição → estimativa de calorias
 // Recebe uma foto (base64) e devolve uma estimativa PROPOSTA de calorias e
 // macronutrientes. O app mostra para o usuário confirmar/ajustar antes de gravar —
 // a IA nunca grava sozinha. Estimativa é aproximada e informativa, nunca prescrição.
@@ -54,7 +54,7 @@ const TOOL = {
   },
 };
 
-const SYSTEM = `Você é um assistente de estimativa nutricional do Ascend, plataforma brasileira de qualidade de vida.
+const SYSTEM = `Você é um assistente de estimativa nutricional do Ascende, plataforma brasileira de qualidade de vida.
 Você recebe UMA foto de refeição e/ou uma descrição em texto, e estima calorias e macronutrientes da porção.
 
 REGRAS:

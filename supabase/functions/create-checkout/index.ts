@@ -1,9 +1,9 @@
-// ASCEND — Cria a sessão de checkout do Stripe (assinatura Ascend+)
+// ASCENDE — Cria a sessão de checkout do Stripe (assinatura Ascende+)
 // Requer flags: subscriptions_enabled e stripe_checkout_enabled.
 // Secrets: STRIPE_SECRET_KEY, STRIPE_PRICE_MONTHLY_ID, STRIPE_PRICE_ANNUAL_ID, APP_ORIGIN.
 import { serviceClient, requireUser, corsFor } from "../_shared/lib.ts";
 import { getFlags } from "../_shared/entitlements.ts";
-import { stripe, findOrCreateCustomer } from "../_shared/stripe.ts";
+import { stripe, findOrCreateCustomer, resolveAppOrigin } from "../_shared/stripe.ts";
 
 Deno.serve(async (req) => {
   const cors = corsFor(req);
@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
       : Deno.env.get("STRIPE_PRICE_MONTHLY_ID");
     if (!priceId) return json({ error: "Preço não configurado." }, 500);
 
-    const origin = Deno.env.get("APP_ORIGIN") ?? req.headers.get("origin") ?? "";
+    const origin = resolveAppOrigin(req);
     const customerId = await findOrCreateCustomer(supabase, user.id, user.email ?? undefined);
 
     const session = await stripe("/checkout/sessions", {

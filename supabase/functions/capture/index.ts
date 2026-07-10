@@ -1,8 +1,8 @@
-// ASCEND — Captura conversacional
+// ASCENDE — Captura conversacional
 // Texto livre → eventos estruturados PROPOSTOS + memórias duráveis, em UMA
 // única chamada de IA (modelo econômico). O app pede confirmação antes de
 // gravar qualquer evento — a IA nunca grava sozinha.
-// Limite diário por plano validado NO SERVIDOR (free: 3/dia; Ascend+: 30/dia).
+// Limite diário por plano validado NO SERVIDOR (free: 3/dia; Ascende+: 30/dia).
 import {
   serviceClient, requireUser, assertRateLimit, corsFor, isTrivialMessage,
   extractEventsAndMemories,

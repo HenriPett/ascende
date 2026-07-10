@@ -58,7 +58,7 @@ export default function Paywall({
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-sm font-medium">Com o Ascend+ você tem:</p>
+          <p className="text-sm font-medium">Com o Ascende+ você tem:</p>
           <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
             {PLUS_BENEFITS.map((b) => <li key={b}>{b}</li>)}
           </ul>
@@ -72,7 +72,7 @@ export default function Paywall({
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>Agora não</Button>
             <Button onClick={() => { onClose(); navigate("/app/assinatura"); }}>
-              Conhecer o Ascend+
+              Conhecer o Ascende+
             </Button>
           </div>
         </div>

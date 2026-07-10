@@ -1,4 +1,4 @@
-// ASCEND — Permissões e limites por plano (validação NO SERVIDOR)
+// ASCENDE — Permissões e limites por plano (validação NO SERVIDOR)
 // Fonte única de verdade: app_settings ('flags' e 'plan_limits'), com padrões
 // embutidos como fallback. O frontend apenas EXIBE o resultado.
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";

@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { cn } from "@/lib/utils";
 
-/* ─── Marca Ascend ───────────────────────────────────────────────
+/* ─── Marca Ascende ───────────────────────────────────────────────
    Símbolo: uma linha de cume ascendente e um sol nascente.
    Lê-se como montanha e como gráfico subindo — traço aberto,
    sem caixa, em gradiente dourado. */
@@ -40,7 +40,7 @@ export default function Logo({
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <LogoMark className={mark} />
-      <span className={cn("font-display font-semibold tracking-tight", word)}>Ascend</span>
+      <span className={cn("font-display font-semibold tracking-tight", word)}>Ascende</span>
     </div>
   );
 }

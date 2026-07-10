@@ -1,4 +1,4 @@
-// ASCEND — Estado da assinatura + permissões + uso atual (para o frontend EXIBIR)
+// ASCENDE — Estado da assinatura + permissões + uso atual (para o frontend EXIBIR)
 // A validação real dos limites acontece em cada função; aqui é só leitura.
 import { serviceClient, requireUser, corsFor } from "../_shared/lib.ts";
 import { countUsage } from "../_shared/usage.ts";

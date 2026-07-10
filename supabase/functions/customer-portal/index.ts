@@ -1,6 +1,6 @@
-// ASCEND — Portal do cliente Stripe (gerenciar/cancelar assinatura)
+// ASCENDE — Portal do cliente Stripe (gerenciar/cancelar assinatura)
 import { serviceClient, requireUser, corsFor } from "../_shared/lib.ts";
-import { stripe } from "../_shared/stripe.ts";
+import { stripe, resolveAppOrigin } from "../_shared/stripe.ts";
 
 Deno.serve(async (req) => {
   const cors = corsFor(req);
@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
     if (!sub?.provider_customer_id) {
       return json({ error: "Você ainda não tem uma assinatura para gerenciar." }, 404);
     }
-    const origin = Deno.env.get("APP_ORIGIN") ?? req.headers.get("origin") ?? "";
+    const origin = resolveAppOrigin(req);
     const session = await stripe("/billing_portal/sessions", {
       customer: sub.provider_customer_id,
       return_url: `${origin}/app/assinatura`,
