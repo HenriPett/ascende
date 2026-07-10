@@ -15,6 +15,7 @@ import {
 import { DEFAULT_WATER_GOAL_ML, DEFAULT_WATER_BOTTLES } from "@/hooks/useProfile";
 import { useEffect, useRef, useState } from "react";
 import { greet, todayISO } from "@/lib/format";
+import { dateISOInSP, daysAgoISOInSP } from "@/lib/dates";
 import { pillarById } from "@/lib/pillars";
 import { cn } from "@/lib/utils";
 
@@ -30,15 +31,13 @@ function useActiveStreak() {
       const { data } = await supabase.from("life_events")
         .select("occurred_at").eq("user_id", user!.id)
         .gte("occurred_at", since).limit(2000);
-      return new Set((data ?? []).map((e) => String(e.occurred_at).slice(0, 10)));
+      // Dia calculado no fuso de São Paulo (plano §5.4)
+      return new Set((data ?? []).map((e) => dateISOInSP(String(e.occurred_at))));
     },
   });
   if (!data) return 0;
 
-  const dayIso = (offset: number) => {
-    const d = new Date(); d.setDate(d.getDate() - offset);
-    return d.toISOString().slice(0, 10);
-  };
+  const dayIso = (offset: number) => daysAgoISOInSP(offset);
   // Hoje ainda em andamento: não quebra se vazio; começa de hoje se ativo, senão de ontem
   let streak = 0;
   let offset = data.has(dayIso(0)) ? 0 : 1;
@@ -562,7 +561,7 @@ function HabitsToday() {
     queryKey: ["habits-today", user?.id, today],
     enabled: !!user,
     queryFn: async () => {
-      const since60 = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
+      const since60 = daysAgoISOInSP(60);
       const [{ data: habits }, { data: logs }, { data: history }] = await Promise.all([
         supabase.from("habits").select("id,name,pillar").eq("user_id", user!.id).eq("active", true).order("created_at"),
         supabase.from("habit_logs").select("id,habit_id").eq("user_id", user!.id).eq("log_date", today),
@@ -574,10 +573,7 @@ function HabitsToday() {
         if (!byHabit.has(l.habit_id)) byHabit.set(l.habit_id, new Set());
         byHabit.get(l.habit_id)!.add(String(l.log_date));
       }
-      const dayIso = (off: number) => {
-        const d = new Date(); d.setDate(d.getDate() - off);
-        return d.toISOString().slice(0, 10);
-      };
+      const dayIso = (off: number) => daysAgoISOInSP(off);
       const streaks: Record<string, number> = {};
       for (const [id, days] of byHabit) {
         let n = 0;
@@ -662,7 +658,7 @@ export default function Hoje() {
   const streak = useActiveStreak();
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl lg:max-w-4xl mx-auto space-y-4 animate-fade-up">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold">
@@ -680,14 +676,16 @@ export default function Hoje() {
         )}
       </div>
 
+      {/* Ordem da tela Hoje (plano §5.5): prioridade do dia (briefing/primeiros
+          passos) → captura inteligente → compromissos → indicadores principais
+          → ações rápidas → batalhas → Conselheiro → informações secundárias. */}
       <Briefing />
       <FirstSteps />
-      <ProfileCompleteness />
+      <CaptureBar />
+      <HabitsToday />
       <DayProgress />
       <QuickActions />
-      <CaptureBar />
       <BattleCheckinCard />
-      <HabitsToday />
 
       <Link
         to="/app/conselheiro"
@@ -701,6 +699,9 @@ export default function Hoje() {
         </div>
         <ChevronRight className="w-5 h-5 text-muted-foreground" />
       </Link>
+
+      {/* Informação secundária: completude do perfil fica por último */}
+      <ProfileCompleteness />
     </div>
   );
 }

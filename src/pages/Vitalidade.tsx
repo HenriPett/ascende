@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { daysAgoISOInSP } from "@/lib/dates";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import GoalInput from "@/components/core/GoalInput";
@@ -102,7 +103,7 @@ export default function Vitalidade() {
     queryKey: ["vitalidade", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const since = new Date(Date.now() - 27 * 864e5).toISOString().slice(0, 10);
+      const since = daysAgoISOInSP(27); // fronteira de dia em São Paulo (plano §5.4)
       const since30 = new Date(Date.now() - 30 * 864e5).toISOString();
       const [{ data: habits }, { data: logs }, { data: workouts }, { data: sleepToday }] = await Promise.all([
         supabase.from("habits").select("id,name,pillar").eq("user_id", user!.id).eq("active", true).order("created_at"),
@@ -226,7 +227,7 @@ export default function Vitalidade() {
   })();
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl lg:max-w-4xl mx-auto space-y-4 animate-fade-up">
       <div>
         <h1 className="font-display text-2xl font-semibold" style={{ color: "hsl(var(--vitalidade))" }}>
           Vitalidade

@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { HeartHandshake, Send, BookOpen, Loader2, Trash2, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { eventLabel } from "@/lib/eventLabels";
+import { todayISOInSP, dateISOInSP } from "@/lib/dates";
 
 const MOODS = [
   { score: 1, emoji: "😞", label: "péssimo" },
@@ -54,11 +56,13 @@ export default function Mente() {
     },
   });
 
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const moodToday = (events ?? []).find((e) => e.kind === "mood" && e.occurred_at.slice(0, 10) === todayIso);
-  const practiceToday = (events ?? []).some((e) => e.kind === "practice" && e.occurred_at.slice(0, 10) === todayIso);
+  // "Hoje" SEMPRE no fuso de São Paulo (plano §5.4): perto da meia-noite,
+  // toISOString() (UTC) marcava o dia errado.
+  const todayIso = todayISOInSP();
+  const moodToday = (events ?? []).find((e) => e.kind === "mood" && dateISOInSP(e.occurred_at) === todayIso);
+  const practiceToday = (events ?? []).some((e) => e.kind === "practice" && dateISOInSP(e.occurred_at) === todayIso);
   const journalEntries = (events ?? []).filter((e) => e.kind === "journal");
-  const journalToday = journalEntries.some((e) => e.occurred_at.slice(0, 10) === todayIso);
+  const journalToday = journalEntries.some((e) => dateISOInSP(e.occurred_at) === todayIso);
 
   const logMood = async (score: number, label: string) => {
     if (!user) return;
@@ -285,7 +289,8 @@ export default function Mente() {
                   {new Date(e.occurred_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                 </span>
                 <span className="truncate min-w-0 flex-1">
-                  {e.payload?.text ?? e.payload?.summary ?? e.payload?.description ?? e.kind}
+                  {/* Tradução central: nenhum nome interno (habit_done etc.) na tela */}
+                  {eventLabel(e.kind, e.payload)}
                 </span>
               </div>
             ))}

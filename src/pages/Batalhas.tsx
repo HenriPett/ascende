@@ -10,13 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Swords, Plus, Loader2, LifeBuoy, Archive, MessageCircle, Apple } from "lucide-react";
+import { Swords, Plus, Loader2, LifeBuoy, Archive, ArchiveRestore, MessageCircle, Apple } from "lucide-react";
 import {
   type Battle, type BattleCheckin as Checkin,
   BATTLE_TEMPLATES, COMMON_TRIGGERS, MILESTONES,
   computeBattleStats, isFoodBattle, battleLabel,
 } from "@/lib/battles";
-import BattleCheckinCard from "@/components/core/BattleCheckin";
+import { CheckinRow } from "@/components/core/BattleCheckin";
+import { todayISO } from "@/lib/format";
 import FirstTimeTip from "@/components/core/FirstTimeTip";
 import { useGuides } from "@/hooks/useGuides";
 import { cn } from "@/lib/utils";
@@ -242,19 +243,32 @@ export default function Batalhas() {
     queryKey: ["battles", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const [{ data: battles }, { data: checkins }] = await Promise.all([
+      const [{ data: battles }, { data: archived }, { data: checkins }] = await Promise.all([
         supabase.from("battles").select("*").eq("user_id", user!.id).eq("active", true).order("created_at"),
+        supabase.from("battles").select("*").eq("user_id", user!.id).eq("active", false).order("created_at", { ascending: false }),
         supabase.from("battle_checkins").select("*").eq("user_id", user!.id).order("checkin_date", { ascending: false }).limit(1000),
       ]);
-      return { battles: (battles ?? []) as Battle[], checkins: (checkins ?? []) as Checkin[] };
+      return {
+        battles: (battles ?? []) as Battle[],
+        archived: (archived ?? []) as Battle[],
+        checkins: (checkins ?? []) as Checkin[],
+      };
     },
   });
 
   const archive = async (b: Battle) => {
     await supabase.from("battles").update({ active: false }).eq("id", b.id);
-    toast.success(`"${battleLabel(b)}" arquivada. Os dias limpos que você acumulou ficam guardados.`);
+    toast.success(`"${battleLabel(b)}" arquivada. Os dias limpos que você acumulou ficam guardados — dá para reativar quando quiser, aqui embaixo.`);
     qc.invalidateQueries();
   };
+
+  const restore = async (b: Battle) => {
+    await supabase.from("battles").update({ active: true }).eq("id", b.id);
+    toast.success(`"${battleLabel(b)}" reativada. Todo o histórico e os dias limpos continuam valendo.`);
+    qc.invalidateQueries();
+  };
+
+  const today = todayISO();
 
   return (
     <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
@@ -340,6 +354,10 @@ export default function Batalhas() {
               </p>
             )}
 
+            {/* Check-in do dia DENTRO do cartão (plano §5.3): estatísticas,
+                check-in, emergência e privacidade em uma experiência só. */}
+            <CheckinRow battle={b} todayCheckin={cks.find((c) => c.checkin_date === today)} />
+
             <div className="flex items-center justify-between gap-2">
               <SosDialog battle={b} />
               <span className="text-[11px] text-muted-foreground">
@@ -350,8 +368,38 @@ export default function Batalhas() {
         );
       })}
 
-      {/* Check-in do dia (mesmo componente da tela Hoje) */}
-      <BattleCheckinCard />
+      {/* Batalhas arquivadas: visíveis e com fluxo de restauração (plano §5.3) */}
+      {(data?.archived ?? []).length > 0 && (
+        <Card className="p-4 space-y-2.5">
+          <div>
+            <h2 className="font-display font-semibold flex items-center gap-1.5">
+              <Archive className="w-4 h-4 text-muted-foreground" /> Batalhas arquivadas
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Nada se perde ao arquivar: histórico e dias limpos ficam guardados. Reative quando quiser.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            {(data?.archived ?? []).map((b) => {
+              const cks = (data?.checkins ?? []).filter((c) => c.battle_id === b.id);
+              const stats = computeBattleStats(cks);
+              return (
+                <div key={b.id} className="flex items-center gap-3 rounded-md border p-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{battleLabel(b)}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {stats.totalClean} dias limpos acumulados · recorde {stats.record}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => restore(b)}>
+                    <ArchiveRestore className="w-3.5 h-3.5 mr-1.5" /> Reativar
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       <p className="text-xs text-muted-foreground">
         Batalhas com álcool, drogas ou apostas merecem reforço profissional: CAPS, Alcoólicos Anônimos,

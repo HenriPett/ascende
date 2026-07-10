@@ -39,6 +39,10 @@ export default function Pilares() {
 
       <FirstTimeTip id="pilares" />
 
+      {/* Pilares = áreas da vida; Ferramentas = recursos transversais (plano §5.4) */}
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pt-1">
+        Pilares
+      </p>
       <div className="grid grid-cols-1 gap-3">
         {PILLARS.map((p) => {
           const isActive = active.has(p.id);
@@ -67,6 +71,12 @@ export default function Pilares() {
           );
         })}
 
+      </div>
+
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pt-2">
+        Ferramentas
+      </p>
+      <div className="grid grid-cols-1 gap-3">
         {/* Batalhas: transversal aos pilares */}
         <Card className="border-gold/30">
           <Link to="/app/batalhas" className="flex items-center gap-4 p-4">

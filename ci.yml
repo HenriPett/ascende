@@ -1,0 +1,56 @@
+# ASCENDE — Integração contínua (plano §6.3)
+# Toda alteração enviada ao repositório executa: instalação limpa,
+# TypeScript, lint, testes, build e verificação de higiene do repositório
+# (nada de node_modules/.env/.DS_Store versionados).
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalação limpa
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc -b
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Testes
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Higiene do repositório
+        run: |
+          set -e
+          for path in node_modules .env .DS_Store dist; do
+            if git ls-files --error-unmatch "$path" > /dev/null 2>&1; then
+              echo "::error::'$path' está versionado — remova do repositório (git rm -r --cached $path)."
+              exit 1
+            fi
+          done
+          # .DS_Store em qualquer subpasta
+          if git ls-files | grep -q "\.DS_Store$"; then
+            echo "::error::Arquivos .DS_Store versionados — remova-os."
+            exit 1
+          fi
+
+      - name: Verificação do setup.sql (sintaxe básica)
+        run: |
+          # Garante que o arquivo de banco não ficou com marcadores de conflito
+          ! grep -nE '^(<<<<<<<|=======|>>>>>>>)' supabase/setup.sql

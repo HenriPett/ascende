@@ -7,7 +7,7 @@ import {
   serviceClient, requireUser, assertRateLimit, corsFor, MODEL_SMART,
 } from "../_shared/lib.ts";
 import { anthropicCall, countUsage } from "../_shared/usage.ts";
-import { getEntitlements, spMonthStartUtc, nextSpMonthStartUtc, limitResponse } from "../_shared/entitlements.ts";
+import { getEntitlements, getFlags, spMonthStartUtc, nextSpMonthStartUtc, limitResponse } from "../_shared/entitlements.ts";
 
 const MAX_B64 = 7_000_000;
 const ALLOWED_MEDIA = ["image/jpeg", "image/png", "image/webp"];
@@ -73,6 +73,20 @@ Deno.serve(async (req) => {
   try {
     const supabase = serviceClient();
     const user = await requireUser(req, supabase);
+
+    // ── FUNÇÃO SUSPENSA (plano de consolidação, Etapa 4.1) ─────────
+    // A estimativa de composição corporal por foto foi retirada da interface
+    // até existir uma metodologia honesta (faixas + peso/altura/sexo/evolução,
+    // nunca um ponto médio de aparência clínica). Reative via app_settings:
+    // flags.body_photo_enabled = true.
+    const flags = await getFlags(supabase);
+    if (!flags.body_photo_enabled) {
+      return json({
+        error: "A estimativa de composição corporal por foto está temporariamente suspensa enquanto revisamos a metodologia. Continue registrando seu peso na aba Alimentação.",
+        code: "FEATURE_SUSPENDED",
+      }, 403);
+    }
+
     await assertRateLimit(supabase, user.id, "analyze-body", 20, 10);
 
     // Limite mensal por plano (validado no servidor)

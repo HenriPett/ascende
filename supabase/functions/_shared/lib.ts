@@ -1,6 +1,7 @@
 // Módulo compartilhado das funções do Ascende
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { anthropicCall } from "./usage.ts";
+import { spParts, spMonthStartUtc } from "./entitlements.ts";
 
 // Defina o secret APP_ORIGIN para restringir quais sites chamam as funções pelo
 // navegador. Aceita várias origens separadas por vírgula (ex.: produção + domínio
@@ -85,8 +86,9 @@ const BRL = (v: number) => v.toLocaleString("pt-BR", { style: "currency", curren
  */
 export async function buildSnapshot(supabase: SupabaseClient, userId: string): Promise<string> {
   const since30 = new Date(Date.now() - 30 * 864e5).toISOString();
-  const monthStart = new Date();
-  monthStart.setDate(1);
+  // Fronteiras de dia/mês SEMPRE no fuso de São Paulo (plano §5.4)
+  const todaySpIso = spParts().dateIso;
+  const monthStartSpIso = spMonthStartUtc().slice(0, 10);
 
   const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, xpTotalRes, { data: battles }, { data: bCheckins }, { data: plans }, { data: memories }] =
     await Promise.all([
@@ -95,7 +97,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
         .eq("user_id", userId).gte("occurred_at", since30)
         .order("occurred_at", { ascending: false }).limit(120),
       supabase.from("transactions").select("kind,amount,category,occurred_at")
-        .eq("user_id", userId).gte("occurred_at", monthStart.toISOString().slice(0, 10)),
+        .eq("user_id", userId).gte("occurred_at", monthStartSpIso),
       supabase.from("habits").select("id,name,pillar").eq("user_id", userId).eq("active", true),
       supabase.rpc("xp_total", { uid: userId }),
       supabase.from("battles").select("id,name,triggers")
@@ -284,8 +286,8 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       : "";
     lines.push(`ALIMENTAÇÃO: ${kinds["meal"].length} refeições registradas em 30 dias. Últimas: ${last}.${kcalInfo}${typeInfo}`);
 
-    // Meta calórica do dia (o Conselheiro deve saber quanto falta HOJE)
-    const todayIso = new Date().toISOString().slice(0, 10);
+    // Meta calórica do dia (o Conselheiro deve saber quanto falta HOJE — em SP)
+    const todayIso = todaySpIso;
     const kcalToday = kinds["meal"]
       .filter((e) => e.occurred_at.slice(0, 10) === todayIso)
       .reduce((sum, e) => sum + (Number((e.payload as any)?.calories) || 0), 0);
@@ -300,7 +302,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     const protGoal = Number(p.protein_goal_g) || 0;
     if (protGoal > 0) {
       const protToday = kinds["meal"]
-        .filter((e) => e.occurred_at.slice(0, 10) === todayIso)
+        .filter((e) => spParts(new Date(e.occurred_at)).dateIso === todayIso)
         .reduce((sum, e) => sum + (Number((e.payload as any)?.protein_g) || 0), 0);
       lines.push(`META DE PROTEÍNA DIÁRIA: ${protGoal} g. Hoje: ${Math.round(protToday)} g.`);
     }
@@ -326,7 +328,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     const sleepGoal = Number(p.sleep_goal_h) || 0;
     if (sleepGoal > 0) {
       const sleptToday = (kinds["sleep"] ?? [])
-        .filter((e) => e.occurred_at.slice(0, 10) === todayIso)
+        .filter((e) => spParts(new Date(e.occurred_at)).dateIso === todayIso)
         .map((e) => Number((e.payload as any)?.hours) || 0)[0] ?? null;
       lines.push(`META DE SONO: ${sleepGoal}h/noite.` +
         (sleptToday !== null ? ` Última noite: ${sleptToday}h.` : " Sono de hoje ainda não registrado."));
@@ -335,10 +337,10 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
 
   // Hidratação (água) — total de hoje e média diária dos últimos 7 dias
   if (scopes.alimentacao && kinds["water"]?.length) {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = todaySpIso;
     const since7 = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
     const ml = (e: any) => Number((e.payload as any)?.ml) || 0;
-    const todayMl = kinds["water"].filter((e) => e.occurred_at.slice(0, 10) === todayStr).reduce((s, e) => s + ml(e), 0);
+    const todayMl = kinds["water"].filter((e) => spParts(new Date(e.occurred_at)).dateIso === todayStr).reduce((s, e) => s + ml(e), 0);
     const last7 = kinds["water"].filter((e) => e.occurred_at.slice(0, 10) >= since7);
     const days7 = new Set(last7.map((e) => e.occurred_at.slice(0, 10))).size || 1;
     const avg7 = Math.round(last7.reduce((s, e) => s + ml(e), 0) / days7);
@@ -725,11 +727,12 @@ const COMBINED_TOOL = {
 export async function extractEventsAndMemories(
   supabase: SupabaseClient, userId: string, text: string,
   feature: string, memoryCap = 150,
+  opts: { reservationId?: number | null } = {},
   // deno-lint-ignore no-explicit-any
-): Promise<{ events: any[]; learned: { content: string; category: string }[] }> {
+): Promise<{ ok: boolean; events: any[]; learned: { content: string; category: string }[] }> {
   try {
     const t = String(text ?? "").trim();
-    if (isTrivialMessage(t)) return { events: [], learned: [] };
+    if (isTrivialMessage(t)) return { ok: true, events: [], learned: [] };
     const known = (await loadKnownMemories(supabase, userId)) ?? [];
 
     const { res, data } = await anthropicCall(supabase, userId, feature, {
@@ -742,16 +745,16 @@ export async function extractEventsAndMemories(
         role: "user",
         content: `${memoriesBlock(known)}\n\nRELATO DO USUÁRIO:\n${t.slice(0, 4000)}`,
       }],
-    });
-    if (!res.ok || !data) return { events: [], learned: [] };
+    }, { reservationId: opts.reservationId ?? null });
+    if (!res.ok || !data) return { ok: false, events: [], learned: [] };
     // deno-lint-ignore no-explicit-any
     const tu = ((data as any).content ?? []).find((b: any) => b.type === "tool_use");
     const events = Array.isArray(tu?.input?.events) ? tu.input.events : [];
     const rawMems = Array.isArray(tu?.input?.memories) ? tu.input.memories : [];
     const learned = await persistMemories(supabase, userId, rawMems, known, memoryCap);
-    return { events, learned };
+    return { ok: true, events, learned };
   } catch (e) {
     console.error("extração combinada: erro inesperado", e);
-    return { events: [], learned: [] };
+    return { ok: false, events: [], learned: [] };
   }
 }

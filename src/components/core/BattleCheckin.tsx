@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Swords, ShieldCheck, Shield, CloudRain, ChevronRight } from "lucide-react";
 import { todayISO } from "@/lib/format";
+import { daysAgoISOInSP } from "@/lib/dates";
 import {
   type Battle, type BattleCheckin as Checkin, type CheckinStatus,
   battleLabel, MILESTONES, computeBattleStats,
@@ -21,7 +22,7 @@ const STATUS_META: Record<CheckinStatus, { label: string; toastMsg: string; icon
   relapsed: { label: "Recaí", toastMsg: "Obrigado pela honestidade — é ela que constrói a subida. +5 XP", icon: CloudRain },
 };
 
-function CheckinRow({ battle, todayCheckin }: { battle: Battle; todayCheckin?: Checkin }) {
+export function CheckinRow({ battle, todayCheckin }: { battle: Battle; todayCheckin?: Checkin }) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [pendingStatus, setPendingStatus] = useState<CheckinStatus | null>(null);
@@ -143,7 +144,7 @@ export default function BattleCheckinCard() {
       const [{ data: battles }, { data: checkins }] = await Promise.all([
         supabase.from("battles").select("*").eq("user_id", user!.id).eq("active", true).order("created_at"),
         supabase.from("battle_checkins").select("*").eq("user_id", user!.id)
-          .gte("checkin_date", new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10)),
+          .gte("checkin_date", daysAgoISOInSP(120)),
       ]);
       return { battles: (battles ?? []) as Battle[], checkins: (checkins ?? []) as Checkin[] };
     },

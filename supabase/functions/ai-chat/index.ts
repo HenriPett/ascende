@@ -3,7 +3,7 @@ import {
   corsFor, serviceClient, requireUser, assertRateLimit, buildSnapshot,
   MODEL_SMART, MODEL_FAST, SAFETY_RULES, extractEventsAndMemories,
 } from "../_shared/lib.ts";
-import { anthropicCall, countUsage } from "../_shared/usage.ts";
+import { anthropicCall, reserveUsage, releaseUsage } from "../_shared/usage.ts";
 import {
   getEntitlements, limitResponse,
   spDayStartUtc, spWeekStartUtc, spMonthStartUtc,
@@ -165,6 +165,7 @@ Deno.serve(async (req) => {
     }
 
     // Limites do Conselheiro — validados NO SERVIDOR, por plano, no fuso de São Paulo
+    const docReservations: number[] = [];
     const ent = await getEntitlements(supabase, user.id);
     const countChat = async (sinceIso: string) => {
       const { count } = await supabase.from("chat_messages")
@@ -186,22 +187,22 @@ Deno.serve(async (req) => {
         return limitResponse(req, "counselor", L.chat_monthly, nextSpMonthStartUtc(),
           `Você usou as ${L.chat_monthly} mensagens deste mês com o Conselheiro.`);
       }
-      // Anexos de PDF/documento fazem parte do Ascende+ (com limite mensal)
+      // Anexos de PDF/documento fazem parte do Ascende+ (com limite mensal).
+      // A cota é RESERVADA atomicamente aqui e DEVOLVIDA se a análise falhar:
+      // uma tentativa fracassada nunca consome o limite (plano §3.4/§3.6).
       const docCount = atts.filter((a) => a?.kind === "pdf").length;
       if (docCount > 0) {
         const cap = L.document_analyses_monthly ?? 0;
-        const used = await countUsage(supabase, user.id, ["chat-documento"], spMonthStartUtc());
-        if (used + docCount > cap) {
-          return limitResponse(req, "document_analysis", cap, nextSpMonthStartUtc(),
-            cap === 0
-              ? "A análise de documentos (PDF) faz parte do Ascende+."
-              : `Você usou as ${cap} análises de documentos deste mês.`);
-        }
-        // registra o consumo dos documentos desta mensagem
         for (let i = 0; i < docCount; i++) {
-          await supabase.from("ai_usage").insert({
-            user_id: user.id, feature: "chat-documento", model: MODEL_SMART, success: true,
-          });
+          const { id } = await reserveUsage(supabase, user.id, "chat-documento", cap, spMonthStartUtc());
+          if (id === null) {
+            for (const r of docReservations) await releaseUsage(supabase, r);
+            return limitResponse(req, "document_analysis", cap, nextSpMonthStartUtc(),
+              cap === 0
+                ? "A análise de documentos (PDF) faz parte do Ascende+."
+                : `Você usou as ${cap} análises de documentos deste mês.`);
+          }
+          docReservations.push(id);
         }
       }
     } else if ((await countChat(spDayStartUtc())) >= LEGACY_DAILY_LIMIT) {
@@ -243,17 +244,24 @@ Deno.serve(async (req) => {
       messages,
     });
 
-    // Em paralelo: UMA chamada econômica extrai eventos registráveis E memórias
-    // duráveis da mensagem (eram duas chamadas; plano §9.2). São PROPOSTAS — o
-    // app pede confirmação antes de gravar eventos. Mensagens triviais
-    // ("obrigado", "pode continuar") não geram chamada nenhuma.
+    if (!res.ok || !mainData) {
+      // A resposta principal falhou: nada é salvo (nem mensagem, nem memórias,
+      // nem eventos) e as reservas de análise de documento são devolvidas —
+      // tentativa fracassada não consome limite (plano §3.3/§3.4).
+      for (const r of docReservations) await releaseUsage(supabase, r);
+      return json({
+        error: "O Conselheiro está indisponível agora. Sua mensagem não foi perdida: tente enviar de novo em instantes.",
+        recoverable: true,
+      }, 502);
+    }
+
+    // Só APÓS a resposta principal ter sucesso: UMA chamada econômica extrai
+    // eventos registráveis E memórias duráveis da mensagem (plano §9.2). São
+    // PROPOSTAS — o app pede confirmação antes de gravar eventos. Mensagens
+    // triviais ("obrigado", "pode continuar") não geram chamada nenhuma.
     const extractPromise = extractEventsAndMemories(
       supabase, user.id, message, "chat-extracao", ent.limits.memory_cap,
     );
-
-    if (!res.ok || !mainData) {
-      return json({ error: "O Conselheiro está indisponível agora. Tente de novo em instantes." }, 502);
-    }
     // deno-lint-ignore no-explicit-any
     const blocks = ((mainData as any).content ?? []) as any[];
     let reply = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
@@ -317,7 +325,11 @@ Deno.serve(async (req) => {
           }
         } catch { /* segue sem metas extras */ }
       }
-      if (!reply) reply = plan.content; // segurança: nunca responder vazio
+      if (!reply) {
+        // O modelo usou só a ferramenta: gera uma confirmação curta em vez de
+        // salvar um balão vazio (plano §3.3).
+        reply = `Seu plano "${plan.title}" está pronto. Veja o cartão abaixo para revisar, pedir ajustes ou salvar em Meus planos.`;
+      }
     }
 
     // Dados de perfil informados na conversa: viram uma PROPOSTA que o app
@@ -360,10 +372,25 @@ Deno.serve(async (req) => {
     }
     const profileSuggestion = suggestedLabels.length ? { patch, merge, labels: suggestedLabels } : null;
 
-    await supabase.from("chat_messages").insert([
+    // Nunca salvar mensagem do assistente sem conteúdo (plano §3.3):
+    // • ferramenta usada sem texto → confirmação curta;
+    // • nem texto nem ação → erro recuperável, nada é gravado.
+    if (!reply && profileSuggestion) {
+      reply = "Anotei! Veja o cartão abaixo para confirmar o que quer guardar no seu perfil.";
+    }
+    if (!reply.trim()) {
+      for (const r of docReservations) await releaseUsage(supabase, r);
+      return json({
+        error: "O Conselheiro não conseguiu formular uma resposta agora. Tente reformular ou enviar de novo.",
+        recoverable: true,
+      }, 502);
+    }
+
+    const { error: insertErr } = await supabase.from("chat_messages").insert([
       { user_id: user.id, role: "user", content: attNames.length ? `${message}\n📎 ${attNames.join(", ")}` : message },
       { user_id: user.id, role: "assistant", content: reply },
     ]);
+    if (insertErr) console.error("chat_messages insert", insertErr);
 
     const { events: captured, learned } = await extractPromise;
     return json({ reply, captured, plan, profile_suggestion: profileSuggestion, learned });

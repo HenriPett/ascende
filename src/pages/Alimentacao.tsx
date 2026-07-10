@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { todayISOInSP, dateISOInSP, daysAgoISOInSP } from "@/lib/dates";
 import { useAuth } from "@/hooks/useAuth";
 import {
   useProfile, DEFAULT_WATER_BOTTLES, DEFAULT_WATER_GOAL_ML, type WaterBottle,
@@ -19,7 +20,7 @@ import {
 import { toast } from "sonner";
 import {
   Plus, Trash2, Sparkles, UtensilsCrossed, Camera, Loader2, Check, X,
-  Flame, Droplet, Settings2, Undo2, Scale, Pencil, ScanLine, TrendingUp,
+  Flame, Droplet, Settings2, Undo2, Scale, Pencil, TrendingUp,
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar,
@@ -40,15 +41,6 @@ interface MealPayload {
 interface MealEvent { id: string; occurred_at: string; payload: MealPayload }
 interface WaterEvent { id: string; occurred_at: string; payload: { ml?: number } }
 interface WeightEvent { id: string; occurred_at: string; payload: { kg?: number } }
-interface BodyEvent { id: string; occurred_at: string; payload: { body_fat_pct?: number; body_fat_range?: string; lean_mass_kg?: number } }
-
-interface BodyEstimate {
-  body_fat_pct: number;
-  body_fat_range: string;
-  lean_mass_kg?: number;
-  note?: string;
-}
-
 interface Estimate {
   description: string;
   items: string[];
@@ -114,10 +106,7 @@ export default function Alimentacao() {
   const [weightGoalInput, setWeightGoalInput] = useState("");
   const [calorieGoalInput, setCalorieGoalInput] = useState("");
   const [savingWeight, setSavingWeight] = useState(false);
-  const bodyFileRef = useRef<HTMLInputElement>(null);
-  const [bodyAnalyzing, setBodyAnalyzing] = useState(false);
-  const [bodyEstimate, setBodyEstimate] = useState<BodyEstimate | null>(null);
-  const [savingBody, setSavingBody] = useState(false);
+  // (composição corporal por foto suspensa — plano §4.1; estados removidos)
 
   // ── Edição de calorias no histórico ──────────────────────────
   const [editingMeal, setEditingMeal] = useState<MealEvent | null>(null);
@@ -158,18 +147,6 @@ export default function Alimentacao() {
         .eq("user_id", user!.id).eq("kind", "weight").gte("occurred_at", since)
         .order("occurred_at", { ascending: true }).limit(200);
       return (data ?? []) as WeightEvent[];
-    },
-  });
-
-  const { data: bodyScans } = useQuery({
-    queryKey: ["body-scans", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      const { data } = await supabase.from("life_events")
-        .select("id,occurred_at,payload")
-        .eq("user_id", user!.id).eq("kind", "body")
-        .order("occurred_at", { ascending: false }).limit(5);
-      return (data ?? []) as BodyEvent[];
     },
   });
 
@@ -333,54 +310,9 @@ export default function Alimentacao() {
     refreshProfile();
   };
 
-  // ── Análise corporal por foto ────────────────────────────────
-  const latestWeightKg = (weights ?? []).length
-    ? Number((weights ?? [])[(weights ?? []).length - 1].payload?.kg) || undefined
-    : undefined;
-
-  const onPickBodyPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setBodyEstimate(null);
-    setBodyAnalyzing(true);
-    try {
-      const { data: img, media_type } = await fileToResizedBase64(file);
-      const { data, error } = await supabase.functions.invoke("analyze-body", {
-        body: { image: img, media_type, weight_kg: latestWeightKg },
-      });
-      if (error || data?.error) throw new Error(data?.error ?? "falha");
-      if (!data?.valid || !data?.estimate) {
-        toast.info(data?.reason ?? "Não consegui analisar essa foto. Tente uma foto de corpo inteiro, de frente, com boa luz.");
-        return;
-      }
-      setBodyEstimate(data.estimate as BodyEstimate);
-    } catch {
-      toast.error("Não consegui analisar agora. Verifique sua conexão e tente de novo.");
-    } finally {
-      setBodyAnalyzing(false);
-    }
-  };
-
-  const confirmBody = async () => {
-    if (!user || !bodyEstimate) return;
-    setSavingBody(true);
-    const { error } = await supabase.from("life_events").insert({
-      user_id: user.id, pillar: "alimentacao", kind: "body",
-      payload: {
-        body_fat_pct: bodyEstimate.body_fat_pct,
-        body_fat_range: bodyEstimate.body_fat_range,
-        lean_mass_kg: bodyEstimate.lean_mass_kg,
-        summary: `Composição corporal (estimativa por foto): ~${bodyEstimate.body_fat_pct}% de gordura`,
-      },
-      source: "photo",
-    });
-    setSavingBody(false);
-    if (error) { toast.error("Não consegui salvar."); return; }
-    toast.success("Estimativa registrada. +4 XP");
-    setBodyEstimate(null);
-    qc.invalidateQueries();
-  };
+  // ── Análise corporal por foto: SUSPENSA (plano §4.1) ─────────
+  // Handlers removidos junto com o cartão da interface; estimativas antigas
+  // (kind "body") permanecem no banco, sem novo destaque.
 
   // ── Edição de calorias no histórico ──────────────────────────
   const saveMealCalories = async (meal: MealEvent, calories: number) => {
@@ -431,18 +363,16 @@ export default function Alimentacao() {
     const out: { dia: string; kcal: number }[] = [];
     for (let i = 13; i >= 0; i--) {
       const d = new Date(Date.now() - i * 864e5);
-      const iso = d.toISOString().slice(0, 10);
+      const iso = daysAgoISOInSP(i); // dia no fuso de São Paulo (plano §5.4)
       if (map[iso]) out.push({ dia: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }), kcal: Math.round(map[iso]) });
     }
     return out;
   })();
 
-  const latestScan = (bodyScans ?? [])[0];
-
-  // Progresso calórico de HOJE
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // Progresso calórico de HOJE (fuso de São Paulo — plano §5.4)
+  const todayIso = todayISOInSP();
   const kcalToday = Math.round((meals ?? [])
-    .filter((m) => m.occurred_at.slice(0, 10) === todayIso)
+    .filter((m) => dateISOInSP(m.occurred_at) === todayIso)
     .reduce((sum, m) => sum + (Number(m.payload?.calories) || 0), 0));
   const kcalGoal = Number(profile?.calorie_goal_kcal) || 0;
 
@@ -454,7 +384,7 @@ export default function Alimentacao() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl lg:max-w-4xl mx-auto space-y-4 animate-fade-up">
       <div>
         <h1 className="font-display text-2xl font-semibold" style={{ color: "hsl(var(--alimentacao))" }}>
           Alimentação
@@ -817,69 +747,11 @@ export default function Alimentacao() {
           </Link>
         </p>
 
-        {/* Composição corporal por foto */}
-          <div className="rounded-lg border p-3 space-y-2.5">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-medium flex items-center gap-1.5">
-                  <ScanLine className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
-                  Composição corporal por foto
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Estimativa visual do % de gordura e massa magra. É uma aproximação com margem
-                  larga — para precisão, bioimpedância ou DEXA com um profissional. A foto não fica salva.
-                </p>
-              </div>
-            </div>
-
-            <input ref={bodyFileRef} type="file" accept="image/*"
-              className="hidden" onChange={onPickBodyPhoto} />
-
-            {latestScan && !bodyEstimate && (
-              <p className="text-xs rounded-md bg-muted px-2.5 py-1.5">
-                Última estimativa ({new Date(latestScan.occurred_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}):
-                ~{latestScan.payload?.body_fat_pct}% de gordura
-                {latestScan.payload?.lean_mass_kg ? ` · ~${String(latestScan.payload.lean_mass_kg).replace(".", ",")} kg de massa magra` : ""}
-              </p>
-            )}
-
-            {!bodyEstimate && (
-              <Button variant="secondary" className="w-full"
-                onClick={() => bodyFileRef.current?.click()} disabled={bodyAnalyzing}>
-                {bodyAnalyzing
-                  ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analisando...</>)
-                  : (<><Camera className="w-4 h-4 mr-2" /> Enviar foto de corpo inteiro</>)}
-              </Button>
-            )}
-
-            {bodyEstimate && (
-              <div className="space-y-2.5 animate-fade-up">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-md bg-muted px-3 py-2">
-                    <p className="text-[11px] text-muted-foreground">Gordura corporal (faixa)</p>
-                    <p className="text-sm font-semibold">{bodyEstimate.body_fat_range}</p>
-                  </div>
-                  <div className="rounded-md bg-muted px-3 py-2">
-                    <p className="text-[11px] text-muted-foreground">Massa magra estimada</p>
-                    <p className="text-sm font-semibold">
-                      {bodyEstimate.lean_mass_kg
-                        ? `~${String(bodyEstimate.lean_mass_kg).replace(".", ",")} kg`
-                        : "registre seu peso p/ calcular"}
-                    </p>
-                  </div>
-                </div>
-                {bodyEstimate.note && <p className="text-xs text-muted-foreground italic">{bodyEstimate.note}</p>}
-                <div className="flex gap-2 justify-end">
-                  <Button variant="ghost" size="sm" onClick={() => setBodyEstimate(null)} disabled={savingBody}>
-                    <X className="w-4 h-4 mr-1" /> Descartar
-                  </Button>
-                  <Button size="sm" onClick={confirmBody} disabled={savingBody}>
-                    {savingBody ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Registrar</>)}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
+        {/* Composição corporal por foto — SUSPENSA (plano de consolidação,
+            Etapa 4.1): a estimativa exibia um ponto médio de aparência clínica
+            que a fotografia não sustenta. A função volta como experimento com
+            faixas + peso/altura/sexo/evolução e comparativos privados. O
+            backend também está bloqueado (flags.body_photo_enabled = false). */}
         </Card>
 
 

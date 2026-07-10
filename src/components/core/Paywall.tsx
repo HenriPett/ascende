@@ -20,10 +20,12 @@ const FEATURE_LABEL: Record<string, string> = {
   plans: "Planos ativos",
 };
 
+// Só benefícios que EXISTEM hoje (plano §2.2): nada de relatório mensal ou
+// análises avançadas até estarem implementados de verdade.
 const PLUS_BENEFITS = [
   "Conselheiro: 15 mensagens por dia (até 300 no mês)",
   "Captura inteligente: 30 por dia",
-  "Briefing diário + retrospectiva semanal + relatório mensal",
+  "Briefing diário todas as manhãs",
   "30 análises de refeição e 10 análises de PDF por mês",
   "Até 5 planos ativos e 150 memórias do Conselheiro",
 ];
@@ -66,8 +68,8 @@ export default function Paywall({
 
         <div className="flex items-center justify-between gap-2 pt-1">
           <div className="text-sm">
-            <p className="font-semibold">{ent?.pricing?.monthly_label ?? "R$ 19,90/mês"}</p>
-            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "ou plano anual com desconto"}</p>
+            <p className="font-semibold">{ent?.pricing?.monthly_label ?? "R$ 29,90/mês"}</p>
+            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "R$ 239,90/ano (2 meses grátis)"}</p>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>Agora não</Button>

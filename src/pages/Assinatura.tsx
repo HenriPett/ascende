@@ -22,15 +22,17 @@ const FREE_FEATURES = [
   "Exportação de dados e privacidade — sempre grátis",
 ];
 
+// Verdade comercial (plano §2.2): a página só promete o que EXISTE hoje.
+// Relatório mensal e análises avançadas voltam a esta lista quando a
+// experiência completa estiver implementada — não antes.
 const PLUS_FEATURES = [
   "Tudo do plano gratuito",
   "Captura inteligente: 30 por dia",
   "Conselheiro: 15 mensagens por dia (até 300/mês)",
-  "Briefing diário + retrospectiva + relatório mensal",
+  "Briefing diário todas as manhãs",
   "30 análises de refeição por mês",
   "Análise de documentos: 10 PDFs por mês",
-  "Até 5 planos ativos · 150 memórias",
-  "Gráficos e análises avançadas",
+  "Até 5 planos ativos · 150 memórias do Conselheiro",
 ];
 
 export default function Assinatura() {
@@ -136,8 +138,8 @@ export default function Assinatura() {
             <h2 className="font-display font-semibold flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-gold" /> Ascende+
             </h2>
-            <p className="text-lg font-bold">{ent?.pricing?.monthly_label ?? "R$ 19,90/mês"}</p>
-            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "ou anual com desconto"}</p>
+            <p className="text-lg font-bold">{ent?.pricing?.monthly_label ?? "R$ 29,90/mês"}</p>
+            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "R$ 239,90/ano (2 meses grátis)"}</p>
           </div>
           <ul className="text-sm space-y-1.5">
             {PLUS_FEATURES.map((f) => (

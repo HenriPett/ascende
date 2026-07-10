@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { spParts } from "@/lib/dates";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import GoalInput from "@/components/core/GoalInput";
@@ -63,11 +64,13 @@ export default function Prosperidade() {
     queryKey: ["transactions-6m", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const start = new Date();
-      start.setMonth(start.getMonth() - 5);
-      start.setDate(1);
+      // Início da janela de 6 meses calculado no fuso de São Paulo (plano §5.4)
+      const { y, m } = spParts();
+      const startM = m - 5 <= 0 ? m + 7 : m - 5;
+      const startY = m - 5 <= 0 ? y - 1 : y;
+      const startIso = `${startY}-${String(startM).padStart(2, "0")}-01`;
       const { data } = await supabase.from("transactions").select("*")
-        .eq("user_id", user!.id).gte("occurred_at", start.toISOString().slice(0, 10))
+        .eq("user_id", user!.id).gte("occurred_at", startIso)
         .order("occurred_at", { ascending: false }).order("created_at", { ascending: false }).limit(1000);
       return (data ?? []) as Tx[];
     },
@@ -161,7 +164,7 @@ export default function Prosperidade() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl lg:max-w-5xl mx-auto space-y-4 animate-fade-up">
       <div>
         <h1 className="font-display text-2xl font-semibold" style={{ color: "hsl(var(--prosperidade))" }}>
           Prosperidade

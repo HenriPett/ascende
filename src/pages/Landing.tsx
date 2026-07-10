@@ -220,7 +220,7 @@ export default function Landing() {
               {
                 n: "2",
                 title: "A IA conecta os pontos",
-                desc: "Um briefing por dia cruzando finanças, corpo, alimentação e mente — e um Conselheiro que responde qualquer pergunta com os seus dados, não com conselhos genéricos.",
+                desc: "Uma retrospectiva toda semana cruzando finanças, corpo, alimentação e mente (no Ascende+, um briefing todo dia) — e um Conselheiro que responde com os seus dados, não com conselhos genéricos.",
               },
               {
                 n: "3",
@@ -341,6 +341,10 @@ export default function Landing() {
                 confirmar. Com limites claros: o Conselheiro não diagnostica, não prescreve e não
                 recomenda investimentos — ele organiza, conecta e aponta o próximo degrau.
               </p>
+              <p className="mt-2 text-xs text-white/50">
+                No plano gratuito: 5 mensagens por semana. A análise de PDFs e o briefing diário
+                fazem parte do Ascende+ — a comparação completa está mais abaixo.
+              </p>
               <div className="mt-5 flex flex-wrap gap-2">
                 {[
                   { icon: Mic, label: "Voz" },
@@ -385,6 +389,70 @@ export default function Landing() {
         </p>
       </section>
 
+      {/* ─── Planos: o que é grátis e o que é Ascende+ ─── */}
+      <section className="container py-16 md:py-24 max-w-4xl">
+        <h2 className="font-display text-3xl md:text-4xl font-semibold text-center">
+          Grátis para sempre no essencial.
+        </h2>
+        <p className="text-center text-muted-foreground mt-3 mb-10 max-w-xl mx-auto">
+          Registrar a vida nunca terá preço. O Ascende+ amplia os recursos de inteligência artificial.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="rounded-xl border bg-card p-6">
+            <h3 className="font-display text-lg font-semibold">Gratuito</h3>
+            <p className="text-2xl font-bold mt-1">R$ 0</p>
+            <ul className="mt-4 space-y-2 text-sm">
+              {[
+                "Registros manuais, hábitos e batalhas sem limite",
+                "Diário, hidratação, XP, níveis e gráficos básicos",
+                "Captura inteligente: 3 por dia",
+                "Conselheiro: 5 mensagens por semana",
+                "2 análises de refeição por mês",
+                "Retrospectiva da semana todo domingo",
+                "1 plano ativo · 20 memórias do Conselheiro",
+                "Exportação de dados e privacidade — sempre grátis",
+              ].map((f) => (
+                <li key={f} className="flex gap-2">
+                  <Check className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <span className="text-muted-foreground">{f}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-xl border border-gold/50 bg-card p-6">
+            <h3 className="font-display text-lg font-semibold flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-gold" /> Ascende+
+            </h3>
+            <p className="text-2xl font-bold mt-1">
+              R$ 29,90<span className="text-sm font-normal text-muted-foreground">/mês</span>
+            </p>
+            <p className="text-xs text-muted-foreground">ou R$ 239,90/ano (2 meses grátis)</p>
+            <ul className="mt-4 space-y-2 text-sm">
+              {[
+                "Tudo do plano gratuito",
+                "Captura inteligente: 30 por dia",
+                "Conselheiro: 15 mensagens por dia (até 300/mês)",
+                "Briefing diário todas as manhãs",
+                "30 análises de refeição por mês",
+                "Análise de documentos: 10 PDFs por mês",
+                "Até 5 planos ativos · 150 memórias do Conselheiro",
+              ].map((f) => (
+                <li key={f} className="flex gap-2">
+                  <Check className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+                  <span>{f}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <p className="mt-5 text-xs text-muted-foreground text-center max-w-2xl mx-auto">
+          Cancelamento a qualquer momento. Ao encerrar o Ascende+ você não perde nada:
+          registros e memórias continuam com você; o que passar do limite gratuito fica
+          arquivado (somente leitura) e volta ao reativar. Seus dados nunca viram produto —
+          detalhes na <Link to="/privacidade" className="underline underline-offset-2">Política de Privacidade</Link>.
+        </p>
+      </section>
+
       {/* ─── FAQ ─── */}
       <section className="border-t bg-card/50">
         <div className="container py-16 md:py-20 max-w-2xl">
@@ -393,7 +461,10 @@ export default function Landing() {
             <AccordionItem value="q1">
               <AccordionTrigger className="text-left">Quanto custa?</AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
-                Criar conta e começar é grátis. Você registra sua vida, acompanha hábitos, XP e score sem pagar nada.
+                Criar conta e começar é grátis, para sempre: você registra sua vida, acompanha hábitos,
+                XP e indicadores sem pagar nada. O Ascende+ (R$ 29,90/mês ou R$ 239,90/ano) amplia os
+                recursos de IA — mais mensagens do Conselheiro, briefing diário, mais análises por foto
+                e por documento. A comparação completa está logo acima.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="q2">

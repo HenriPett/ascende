@@ -20,6 +20,8 @@ import {
 import { PILLARS, type PillarId } from "@/lib/pillars";
 import { MEMORY_CATEGORY_LABEL } from "@/components/core/LearnedInsights";
 import { useGuides } from "@/hooks/useGuides";
+import FeedbackDialog from "@/components/core/FeedbackDialog";
+import { todayISOInSP } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 interface AiMemory { id: string; content: string; category: string; created_at: string }
@@ -147,7 +149,7 @@ export default function Ajustes() {
         if (error) throw error;
         out[t] = data ?? [];
       }
-      download(`ascend-dados-${new Date().toISOString().slice(0, 10)}.json`,
+      download(`ascende-dados-${todayISOInSP()}.json`,
         JSON.stringify({ exported_at: new Date().toISOString(), ...out }, null, 2),
         "application/json");
       toast.success("Exportação concluída. O arquivo JSON foi baixado.");
@@ -171,7 +173,7 @@ export default function Ajustes() {
       for (const t of ["life_events", "transactions"]) {
         const { data, error } = await supabase.from(t).select("*").eq("user_id", user.id).limit(10000);
         if (error) throw error;
-        download(`ascend-${t}-${new Date().toISOString().slice(0, 10)}.csv`,
+        download(`ascende-${t}-${todayISOInSP()}.csv`,
           toCsv((data ?? []) as Record<string, unknown>[]), "text/csv");
       }
       toast.success("Exportação concluída. Os arquivos CSV foram baixados.");
@@ -421,6 +423,17 @@ export default function Ajustes() {
       <Button className="w-full" onClick={save} disabled={saving}>
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar ajustes"}
       </Button>
+
+      {/* Feedback — canal TEMPORÁRIO da fase de consolidação */}
+      <Card className="p-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display font-semibold">Feedback sobre a plataforma</h2>
+          <p className="text-xs text-muted-foreground">
+            Encontrou um problema, teve uma ideia ou quer elogiar? Vai direto para quem constrói o Ascende.
+          </p>
+        </div>
+        <FeedbackDialog trigger={<Button variant="outline" size="sm" className="shrink-0">Enviar feedback</Button>} />
+      </Card>
 
       {/* Dicas de primeiras vezes */}
       <Card className="p-4 space-y-3">

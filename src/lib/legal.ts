@@ -1,15 +1,17 @@
 // Documentos legais do Ascende, renderizados em /privacidade, /termos e /aviso-legal.
-// Última revisão do conteúdo: 07/07/2026. Ao alterar, atualize LEGAL_VERSION —
-// ela é gravada no aceite de cada cadastro (auditoria de consentimento).
+// Última revisão do conteúdo: 10/07/2026 — declaração do Microsoft Clarity
+// (analytics de experiência) e do canal de feedback. Ao alterar, atualize
+// LEGAL_VERSION — ela é gravada no aceite de cada cadastro (auditoria de
+// consentimento).
 
-export const LEGAL_VERSION = "2026-07-07";
+export const LEGAL_VERSION = "2026-07-10";
 
 export const PRIVACIDADE = `
 # Política de Privacidade e Proteção de Dados Pessoais
 
 Em conformidade com a Lei Geral de Proteção de Dados Pessoais — LGPD (Lei nº 13.709/2018)
 
-**Última atualização: 07 de julho de 2026**
+**Última atualização: 10 de julho de 2026**
 
 ## Identificação da Controladora
 
@@ -48,6 +50,8 @@ O Ascende **não vende dados pessoais, não exibe publicidade e não usa os dado
 | Conteúdo de interação | Mensagens do chat com o Conselheiro, arquivos anexados, planos salvos | Prestar o serviço de assistente e manter o histórico acessível ao USUÁRIO |
 | Fotos enviadas para análise | Fotos de refeições e de corpo inteiro | Gerar estimativas (calorias; composição corporal). **Não são mantidas pela ASCENDE após o processamento**: são utilizadas transitoriamente para a análise e apenas o resultado confirmado pelo USUÁRIO é salvo |
 | Identificação digital (automática) | Endereço IP, dispositivo, sistema, registros de acesso | Segurança, prevenção a fraudes e cumprimento do Marco Civil da Internet |
+| Métricas de experiência (automática) | Interações de navegação na plataforma coletadas pelo Microsoft Clarity: cliques, rolagem, movimentos de tela e informações técnicas do dispositivo (ver Seção 6.1) | Entender como a plataforma é usada, identificar problemas de usabilidade e melhorar o serviço (legítimo interesse, art. 7º, IX, da LGPD) |
+| Feedback voluntário | Mensagens enviadas pelo USUÁRIO no canal de feedback da plataforma (categoria, texto e tela de origem) | Melhorar o serviço e priorizar correções durante a fase de consolidação |
 | Dados anonimizados | Estatísticas sem identificação do titular | Estudos e melhoria do serviço, sem possibilidade razoável de reidentificação (art. 5º, XI, da LGPD) |
 
 ## 3. Dos Dados Pessoais Sensíveis
@@ -74,22 +78,34 @@ Para gerar as respostas do Conselheiro, briefings, extração de registros a par
 
 O Ascende somente compartilha dados pessoais nas seguintes hipóteses:
 
-- **Operadores de infraestrutura** (Supabase, Netlify, Anthropic), estritamente para viabilizar o funcionamento descrito nesta Política, sob instruções da ASCENDE;
+- **Operadores de infraestrutura e melhoria do serviço** (Supabase, Netlify, Anthropic e Microsoft — esta última exclusivamente para as métricas de experiência do Microsoft Clarity, descritas na Seção 6.1), estritamente para viabilizar o funcionamento descrito nesta Política, sob instruções da ASCENDE;
 - **Autoridades competentes**, mediante requisição, requerimento ou ordem judicial, ou para prevenção e combate a fraudes e ilícitos;
 - **Transferência de ativos**: em caso de reorganização societária ou venda, os dados poderão ser transferidos ao sucessor, mantidas as garantias desta Política;
 - **Com autorização específica do USUÁRIO**, nos demais casos.
 
 Senhas nunca são compartilhadas nem são legíveis pela ASCENDE: são armazenadas exclusivamente na forma de hash criptográfico seguro, tecnologia que impede a recuperação do valor original. Internamente, o acesso a dados é restrito, registrado e limitado ao estritamente necessário.
 
-## 6. De Cookies, Tokens e Tecnologias de Autenticação
+## 6. De Cookies, Tokens e Tecnologias de Coleta
 
-O Ascende não utiliza cookies de publicidade nem rastreadores de marketing de terceiros. São utilizados apenas:
+O Ascende **não utiliza cookies de publicidade nem rastreadores de marketing**. São utilizados:
 
 - **Tokens de autenticação** (armazenados localmente no dispositivo do USUÁRIO), essenciais para manter a sessão ativa e segura;
 - **Preferências locais** (como o tema claro/escuro), guardadas no próprio dispositivo;
-- **Registros técnicos de acesso**, exigidos pelo Marco Civil da Internet e usados para segurança.
+- **Registros técnicos de acesso**, exigidos pelo Marco Civil da Internet e usados para segurança;
+- **Microsoft Clarity**, ferramenta de análise de experiência descrita na Seção 6.1.
 
-O USUÁRIO pode limpar esses dados no navegador ou dispositivo a qualquer momento, com possível necessidade de novo login.
+### 6.1 Do Microsoft Clarity (análise de experiência de uso)
+
+Para entender como a plataforma é utilizada e melhorá-la, o Ascende utiliza o **Microsoft Clarity**, ferramenta da Microsoft Corporation que coleta métricas de comportamento de navegação (como cliques, toques, rolagem de tela, tempo em cada página e mapas de calor) e pode gerar **reproduções da sessão de navegação**, além de informações técnicas do dispositivo e do navegador. Sobre esse tratamento:
+
+- A finalidade é **exclusivamente** a melhoria da usabilidade e a identificação de problemas na plataforma — **nunca publicidade, criação de perfis para marketing ou venda de dados**;
+- A base legal é o **legítimo interesse** da ASCENDE na melhoria do serviço (art. 7º, IX, da LGPD), com avaliação de balanceamento em favor do titular pela natureza técnica e limitada da coleta;
+- A ferramenta é configurada para **mascarar conteúdos sensíveis**; ainda assim, o USUÁRIO deve saber que a coleta pode abranger interações em áreas autenticadas da plataforma;
+- **O conteúdo dos seus registros permanece protegido**: senhas nunca são capturadas, e os dados do seu banco (transações, diário, saúde, conversas com o Conselheiro) não são compartilhados com a Microsoft — a ferramenta observa a interação com a interface, não o banco de dados;
+- Os dados coletados pelo Clarity são processados pela Microsoft, podendo haver **transferência internacional** nos termos do art. 33 da LGPD, com salvaguardas contratuais compatíveis; o tratamento pela Microsoft observa também os termos e a política de privacidade da própria Microsoft;
+- O USUÁRIO pode **opor-se a esse tratamento** (art. 18, § 2º, da LGPD) pelo canal de atendimento/Encarregado, além de poder utilizar bloqueadores de rastreamento no navegador, sem prejuízo das funcionalidades essenciais da plataforma.
+
+O USUÁRIO pode limpar tokens e preferências no navegador ou dispositivo a qualquer momento, com possível necessidade de novo login.
 
 ## 7. Da Segurança
 

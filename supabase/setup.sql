@@ -592,6 +592,10 @@ create table if not exists public.billing_webhook_events (
 );
 alter table public.billing_webhook_events enable row level security;
 -- RLS sem policies: só service role.
+-- Consolidação (Etapa 1.1): estados explícitos + suporte a reprocessamento.
+-- status assume: processing | processed | failed | ignored.
+alter table public.billing_webhook_events add column if not exists attempts int not null default 1;
+alter table public.billing_webhook_events add column if not exists last_error text;
 
 -- A permissão final da conta (independente do provedor)
 create or replace function public.has_ascend_plus(uid uuid)
@@ -643,8 +647,8 @@ insert into public.app_settings (key, value) values
     }
   }'::jsonb),
   ('pricing', '{
-    "monthly_label": "R$ 19,90/mês",
-    "annual_label": "R$ 199/ano (2 meses grátis)"
+    "monthly_label": "R$ 29,90/mês",
+    "annual_label": "R$ 239,90/ano (2 meses grátis)"
   }'::jsonb),
   ('billing_entity', '{
     "name": "", "document": "", "note": "Dados da entidade de cobrança ficam AQUI (configuração), nunca no código."
@@ -652,30 +656,133 @@ insert into public.app_settings (key, value) values
 on conflict (key) do nothing;
 
 -- ─── 14. LIMITE DE PLANOS ATIVOS (aplicado no servidor/banco) ───
+-- Consolidação (Etapa 1.2): o gatilho vale para CRIAÇÃO, REATIVAÇÃO e
+-- qualquer alteração de status para 'ativo' (arquivar + criar + reativar não
+-- ultrapassa mais o limite). A contagem exclui o próprio plano na atualização.
 create or replace function public.enforce_active_plans_cap()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
-  limits jsonb; cap int; n int; enabled boolean;
+  limits jsonb; cap int; n int; enabled boolean; becoming_active boolean;
 begin
   select coalesce((value->>'premium_limits_enabled')::boolean, false) into enabled
     from public.app_settings where key = 'flags';
   if not coalesce(enabled, false) then return new; end if;
+
+  becoming_active := new.status = 'ativo'
+    and (tg_op = 'INSERT' or old.status is distinct from 'ativo');
+  if not becoming_active then return new; end if;
+
   select value into limits from public.app_settings where key = 'plan_limits';
   if public.has_ascend_plus(new.user_id)
     then cap := coalesce((limits->'plus'->>'max_active_plans')::int, 5);
     else cap := coalesce((limits->'free'->>'max_active_plans')::int, 1);
   end if;
-  select count(*) into n from public.plans where user_id = new.user_id and status = 'ativo';
-  if new.status = 'ativo' and n >= cap then
+
+  -- Exclui o próprio plano da contagem durante uma atualização
+  select count(*) into n from public.plans
+   where user_id = new.user_id and status = 'ativo'
+     and (tg_op = 'INSERT' or id <> new.id);
+
+  if n >= cap then
     raise exception 'PLAN_LIMIT_REACHED: máximo de % plano(s) ativo(s) no seu plano. Arquive um plano ou assine o Ascende+.', cap
       using errcode = 'P0001';
   end if;
   return new;
 end; $$;
 drop trigger if exists trg_plans_cap on public.plans;
-create trigger trg_plans_cap before insert on public.plans
+create trigger trg_plans_cap before insert or update of status on public.plans
   for each row execute function public.enforce_active_plans_cap();
 
 -- ─── 15. PRIVACIDADE: escopos que o Conselheiro pode analisar ───
 alter table public.profiles add column if not exists ai_scopes jsonb not null default
   '{"prosperidade":true,"vitalidade":true,"alimentacao":true,"mente":true,"diario":true}'::jsonb;
+
+-- ═══════════════════════════════════════════════════════════════
+-- FASE DE CONSOLIDAÇÃO (idempotente) — plano de 10/07/2026
+-- Seções 16+: fonte única de preço, limites atômicos de IA, feedback,
+-- higiene do chat e reparo da linha do tempo.
+-- ═══════════════════════════════════════════════════════════════
+
+-- ─── 16. FONTE ÚNICA DE VERDADE DO PREÇO ────────────────────────
+-- Migra bancos existentes que ainda exibem o preço antigo. A página de
+-- assinatura lê SEMPRE daqui — e este valor deve corresponder EXATAMENTE
+-- aos produtos configurados no Stripe (STRIPE_PRICE_MONTHLY_ID / ANNUAL_ID).
+update public.app_settings
+   set value = '{"monthly_label": "R$ 29,90/mês", "annual_label": "R$ 239,90/ano (2 meses grátis)"}'::jsonb,
+       updated_at = now()
+ where key = 'pricing'
+   and (value->>'monthly_label') like '%19,90%';
+
+-- ─── 17. LIMITES DE IA ATÔMICOS (reserva antes da chamada) ──────
+-- Duas requisições simultâneas não passam mais juntas pela verificação:
+-- a função reserva a unidade de cota sob advisory lock (por usuário+feature)
+-- e a função de borda devolve a reserva se a chamada de IA falhar.
+create or replace function public.reserve_ai_usage(uid uuid, feat text, cap int, since timestamptz)
+returns bigint language plpgsql security definer set search_path = public as $$
+declare n int; new_id bigint;
+begin
+  perform pg_advisory_xact_lock(hashtext(uid::text || ':' || feat));
+  if cap is not null then
+    select count(*) into n from public.ai_usage
+     where user_id = uid and feature = feat and success and created_at >= since;
+    if n >= cap then return null; end if;
+  end if;
+  insert into public.ai_usage (user_id, feature, model, success)
+  values (uid, feat, 'reserva', true)
+  returning id into new_id;
+  return new_id;
+end; $$;
+revoke all on function public.reserve_ai_usage(uuid, text, int, timestamptz) from anon, authenticated;
+
+create or replace function public.release_ai_usage(reservation_id bigint)
+returns void language sql security definer set search_path = public as $$
+  delete from public.ai_usage where id = reservation_id and model = 'reserva';
+$$;
+revoke all on function public.release_ai_usage(bigint) from anon, authenticated;
+
+-- ─── 18. FEEDBACK (canal temporário durante o piloto) ───────────
+-- Espaço para os usuários mandarem ideias, problemas e elogios de dentro do
+-- app. Leitura administrativa pelo SQL Editor; o usuário vê o que enviou.
+create table if not exists public.feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  category text not null default 'outro'
+    check (category in ('ideia','problema','elogio','outro')),
+  message text not null check (char_length(message) between 3 and 2000),
+  page text,
+  created_at timestamptz not null default now()
+);
+create index if not exists feedback_created on public.feedback (created_at desc);
+alter table public.feedback enable row level security;
+drop policy if exists "feedback_insert_own" on public.feedback;
+create policy "feedback_insert_own" on public.feedback for insert with check (auth.uid() = user_id);
+drop policy if exists "feedback_select_own" on public.feedback;
+create policy "feedback_select_own" on public.feedback for select using (auth.uid() = user_id);
+
+-- ─── 19. HIGIENE DO CHAT ─────────────────────────────────────────
+-- Remove mensagens vazias antigas do assistente (balões vazios; Etapa 3.3).
+-- As funções não gravam mais mensagens vazias — isto limpa o legado.
+delete from public.chat_messages
+ where btrim(coalesce(content, '')) = '';
+
+-- Conteúdo nunca mais entra vazio (idempotente; ignora se já existir).
+do $$ begin
+  alter table public.chat_messages
+    add constraint chat_messages_content_not_blank check (btrim(content) <> '');
+exception when duplicate_object or check_violation then null; end $$;
+
+-- ─── 20. NOVA FLAG: composição corporal por foto (suspensa) ─────
+-- A função analyze-body só responde com body_photo_enabled = true.
+update public.app_settings
+   set value = value || '{"body_photo_enabled": false}'::jsonb,
+       updated_at = now()
+ where key = 'flags'
+   and not (value ? 'body_photo_enabled');
+
+-- ─── 21. REPARO DA LINHA DO TEMPO (executar UMA vez, com backup) ─
+-- 1. Faça backup (Dashboard → Database → Backups, ou pg_dump).
+-- 2. Rode:   select * from public.repair_timeline();
+-- 3. Anote quantos itens foram vinculados/removidos (linked_*/removed_*).
+-- 4. Confira manualmente alguns usuários (transações × eventos × XP).
+-- 5. Valide: excluir transação remove evento e XP; desfazer hábito idem;
+--    registros repetidos não criam XP duplicado (índices únicos garantem).

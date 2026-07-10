@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
@@ -5,23 +6,26 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import AppLayout from "@/components/core/AppLayout";
+// Carregamento sob demanda por rota (plano §6.4): o usuário não baixa o app
+// inteiro para abrir a tela Hoje. Landing e Auth ficam no bundle inicial
+// (primeira visita); cada página do app vira um chunk próprio.
 import Landing from "@/pages/Landing";
 import Auth from "@/pages/Auth";
-import Onboarding from "@/pages/Onboarding";
-import Hoje from "@/pages/Hoje";
-import Chat from "@/pages/Chat";
-import Pilares from "@/pages/Pilares";
-import Prosperidade from "@/pages/Prosperidade";
-import Vitalidade from "@/pages/Vitalidade";
-import Alimentacao from "@/pages/Alimentacao";
-import Mente from "@/pages/Mente";
-import Score from "@/pages/Score";
-import Batalhas from "@/pages/Batalhas";
-import Planos from "@/pages/Planos";
-import Legal from "@/pages/Legal";
-import Ajustes from "@/pages/Ajustes";
-import Assinatura from "@/pages/Assinatura";
-import NotFound from "@/pages/NotFound";
+const Onboarding = lazy(() => import("@/pages/Onboarding"));
+const Hoje = lazy(() => import("@/pages/Hoje"));
+const Chat = lazy(() => import("@/pages/Chat"));
+const Pilares = lazy(() => import("@/pages/Pilares"));
+const Prosperidade = lazy(() => import("@/pages/Prosperidade"));
+const Vitalidade = lazy(() => import("@/pages/Vitalidade"));
+const Alimentacao = lazy(() => import("@/pages/Alimentacao"));
+const Mente = lazy(() => import("@/pages/Mente"));
+const Score = lazy(() => import("@/pages/Score"));
+const Batalhas = lazy(() => import("@/pages/Batalhas"));
+const Planos = lazy(() => import("@/pages/Planos"));
+const Legal = lazy(() => import("@/pages/Legal"));
+const Ajustes = lazy(() => import("@/pages/Ajustes"));
+const Assinatura = lazy(() => import("@/pages/Assinatura"));
+const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -55,6 +59,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <BrowserRouter>
+          <Suspense fallback={<Splash />}>
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
@@ -90,6 +95,7 @@ export default function App() {
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
         </BrowserRouter>
         <Toaster position="top-center" richColors />
       </TooltipProvider>

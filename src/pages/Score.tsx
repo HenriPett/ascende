@@ -9,7 +9,9 @@ import { Progress } from "@/components/ui/progress";
 import { PILLARS } from "@/lib/pillars";
 import { levelTitle, nextTitle, xpReasonLabel } from "@/lib/xp";
 import { monthStartISO } from "@/lib/format";
-import { Flame, TrendingUp, CalendarCheck } from "lucide-react";
+import { daysAgoISOInSP } from "@/lib/dates";
+import { Badge } from "@/components/ui/badge";
+import { Flame, TrendingUp, TrendingDown, Minus, CalendarCheck } from "lucide-react";
 
 function clamp(n: number) { return Math.max(0, Math.min(100, Math.round(n))); }
 
@@ -54,7 +56,7 @@ export default function Score() {
         supabase.from("life_events").select("pillar,kind,occurred_at,payload").eq("user_id", user!.id).gte("occurred_at", since14),
         supabase.from("transactions").select("kind,amount").eq("user_id", user!.id).gte("occurred_at", monthStartISO()),
         supabase.from("habits").select("id").eq("user_id", user!.id).eq("active", true),
-        supabase.from("habit_logs").select("log_date").eq("user_id", user!.id).gte("log_date", new Date(Date.now() - 13 * 864e5).toISOString().slice(0, 10)),
+        supabase.from("habit_logs").select("log_date").eq("user_id", user!.id).gte("log_date", daysAgoISOInSP(13)),
         supabase.from("xp_log").select("points,reason,created_at").eq("user_id", user!.id).gte("created_at", since7).order("created_at", { ascending: false }).limit(60),
       ]);
       return { events: events ?? [], txs: txs ?? [], habitsCount: (habits ?? []).length, logs: logs ?? [], weekXp: weekXp ?? [] };
@@ -133,18 +135,30 @@ export default function Score() {
   }
 
   const activePillars = new Set(profile?.pillars ?? []);
-  const measured = PILLARS.filter((p) => scores[p.id].value !== null);
-  const overall = measured.length
-    ? Math.round(measured.reduce((s, p) => s + (scores[p.id].value as number), 0) / measured.length)
-    : null;
+
+  // Tendência por pilar: atividade dos últimos 7 dias × 7 dias anteriores.
+  const trendByPillar: Record<string, "up" | "down" | "flat" | null> = {};
+  if (data) {
+    const now = Date.now();
+    for (const p of PILLARS) {
+      const evs = data.events.filter((e) => e.pillar === p.id);
+      if (!evs.length) { trendByPillar[p.id] = null; continue; }
+      const recent = evs.filter((e) => now - new Date(e.occurred_at).getTime() <= 7 * 864e5).length;
+      const previous = evs.length - recent;
+      trendByPillar[p.id] = recent > previous ? "up" : recent < previous ? "down" : "flat";
+    }
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
       <div>
-        <h1 className="font-display text-2xl font-semibold">Seu Score de Vida</h1>
+        <h1 className="font-display text-2xl font-semibold flex items-center gap-2">
+          Indicadores
+          <Badge variant="secondary" className="text-[10px] font-normal align-middle">beta</Badge>
+        </h1>
         <p className="text-sm text-muted-foreground">
-          O XP mede a sua <strong>consistência</strong> (registrar, praticar). O score mede o <strong>estado</strong> de
-          cada pilar. Suba os dois no seu ritmo.
+          O XP mede a sua <strong>consistência</strong> (registrar, praticar) e nunca diminui.
+          Os indicadores por pilar são aproximações em revisão: use-os como bússola, não como nota.
         </p>
       </div>
 
@@ -227,12 +241,9 @@ export default function Score() {
         </Card>
       )}
 
-      {overall !== null && (
-        <Card className="p-4 flex items-center justify-between">
-          <p className="text-sm font-medium">Score geral (pilares com dados)</p>
-          <p className="font-display text-2xl font-semibold">{overall}<span className="text-sm text-muted-foreground">/100</span></p>
-        </Card>
-      )}
+      {/* Nota geral removida de propósito (plano §4.2): misturar indicadores
+          diferentes em um único número escondia mais do que mostrava. Cada
+          pilar tem seu indicador e sua tendência, separados. */}
 
       {/* Por pilar */}
       <div className="space-y-2.5">
@@ -244,6 +255,21 @@ export default function Score() {
               <div className="flex items-center gap-3 mb-2">
                 <p.icon className="w-4 h-4" style={{ color: `hsl(var(${p.colorVar}))` }} />
                 <p className="text-sm font-semibold flex-1">{p.attribute}</p>
+                {trendByPillar[p.id] === "up" && (
+                  <span className="flex items-center gap-1 text-[11px] text-success" title="Mais registros nos últimos 7 dias do que nos 7 anteriores">
+                    <TrendingUp className="w-3.5 h-3.5" /> em alta
+                  </span>
+                )}
+                {trendByPillar[p.id] === "down" && (
+                  <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title="Menos registros nos últimos 7 dias do que nos 7 anteriores">
+                    <TrendingDown className="w-3.5 h-3.5" /> em queda
+                  </span>
+                )}
+                {trendByPillar[p.id] === "flat" && (
+                  <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <Minus className="w-3.5 h-3.5" /> estável
+                  </span>
+                )}
                 <p className="text-sm font-semibold">
                   {s.value !== null ? `${s.value}/100` : "—"}
                 </p>
@@ -264,7 +290,9 @@ export default function Score() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Semana ruim não apaga a subida: o score olha 14 dias, e o XP nunca diminui.
+        Semana ruim não apaga a subida: os indicadores olham 14 dias, e o XP nunca diminui.
+        A metodologia dos indicadores está em revisão (beta) — hoje eles medem sobretudo a
+        frequência de registro, não a qualidade do que foi registrado.
       </p>
     </div>
   );

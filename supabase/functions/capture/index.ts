@@ -7,7 +7,7 @@ import {
   serviceClient, requireUser, assertRateLimit, corsFor, isTrivialMessage,
   extractEventsAndMemories,
 } from "../_shared/lib.ts";
-import { countUsage } from "../_shared/usage.ts";
+import { reserveUsage, releaseUsage } from "../_shared/usage.ts";
 import { getEntitlements, spDayStartUtc, nextSpDayStartUtc, limitResponse } from "../_shared/entitlements.ts";
 
 Deno.serve(async (req) => {
@@ -29,19 +29,28 @@ Deno.serve(async (req) => {
     // Mensagens sem conteúdo registrável não consomem cota nem chamada de IA
     if (isTrivialMessage(text)) return json({ events: [], learned: [] });
 
-    // Limite do plano (validado no servidor; frontend só exibe)
+    // Limite do plano (validado no servidor; frontend só exibe).
+    // A cota é RESERVADA atomicamente ANTES da chamada (duas requisições
+    // simultâneas não passam juntas) e DEVOLVIDA se a extração falhar —
+    // tentativa fracassada não consome limite (plano §3.4/§3.6).
     const ent = await getEntitlements(supabase, user.id);
+    let reservationId: number | null = null;
     if (ent.flags.premium_limits_enabled && ent.limits.capture_daily !== null) {
-      const used = await countUsage(supabase, user.id, ["capture"], spDayStartUtc());
-      if (used >= ent.limits.capture_daily) {
+      const { id } = await reserveUsage(supabase, user.id, "capture", ent.limits.capture_daily, spDayStartUtc());
+      if (id === null) {
         return limitResponse(req, "capture", ent.limits.capture_daily, nextSpDayStartUtc(),
           `Você usou as ${ent.limits.capture_daily} capturas inteligentes de hoje. Registros manuais continuam ilimitados.`);
       }
+      reservationId = id;
     }
 
-    const { events, learned } = await extractEventsAndMemories(
-      supabase, user.id, text, "capture", ent.limits.memory_cap,
+    const { ok, events, learned } = await extractEventsAndMemories(
+      supabase, user.id, text, "capture", ent.limits.memory_cap, { reservationId },
     );
+    if (!ok) {
+      await releaseUsage(supabase, reservationId);
+      return json({ error: "Não consegui interpretar agora. Tente de novo em instantes — a tentativa não contou no seu limite." }, 502);
+    }
     return json({ events, learned });
   } catch (e) {
     if (e instanceof Response) return e;

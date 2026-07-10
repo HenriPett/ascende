@@ -152,7 +152,9 @@ export default function Chat() {
     },
   });
 
-  const messages = [...(history ?? []), ...local];
+  // Nunca renderizar balões vazios (plano §3.3): registros antigos sem
+  // conteúdo são ignorados na tela e limpos pelo setup.sql (seção 19).
+  const messages = [...(history ?? []), ...local].filter((m) => m.content && m.content.trim().length > 0);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

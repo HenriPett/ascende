@@ -23,6 +23,14 @@ export function spParts(d: Date = new Date()) {
 /** "YYYY-MM-DD" de hoje EM SÃO PAULO (use no lugar de toISOString().slice). */
 export const todayISOInSP = () => spParts().dateIso;
 
+/** "YYYY-MM-DD" de um instante qualquer, visto de São Paulo. */
+export const dateISOInSP = (d: Date | string) =>
+  spParts(typeof d === "string" ? new Date(d) : d).dateIso;
+
+/** "YYYY-MM-DD" de N dias atrás, em São Paulo (fronteiras de janelas 7d/14d/30d). */
+export const daysAgoISOInSP = (n: number) =>
+  spParts(new Date(Date.now() - n * 864e5)).dateIso;
+
 /** "YYYY-MM-01" do mês atual em São Paulo. */
 export const monthStartISOInSP = () => {
   const { y, m } = spParts();

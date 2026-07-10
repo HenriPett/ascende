@@ -3,13 +3,14 @@ import { Sun, Moon, MessageCircle, Mountain, BarChart3, Settings } from "lucide-
 import { useXp } from "@/hooks/useXp";
 import { useTheme } from "@/hooks/useTheme";
 import Logo from "@/components/core/Logo";
+import FeedbackDialog from "@/components/core/FeedbackDialog";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/app", label: "Hoje", icon: Sun, end: true },
   { to: "/app/pilares", label: "Pilares", icon: Mountain },
   { to: "/app/conselheiro", label: "Conselheiro", icon: MessageCircle },
-  { to: "/app/score", label: "Score", icon: BarChart3 },
+  { to: "/app/score", label: "Indicadores", icon: BarChart3 },
   { to: "/app/ajustes", label: "Ajustes", icon: Settings },
 ];
 
@@ -80,6 +81,8 @@ export default function AppLayout() {
           </nav>
 
           <div className="flex items-center gap-1.5">
+            {/* Canal TEMPORÁRIO de feedback (fase de consolidação) */}
+            <FeedbackDialog />
             <ThemeToggle />
             <LevelBadge />
           </div>

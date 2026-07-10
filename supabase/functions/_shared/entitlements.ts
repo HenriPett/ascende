@@ -111,6 +111,8 @@ export interface Flags {
   new_score_enabled: boolean;
   global_timeline_enabled: boolean;
   apple_billing_enabled: boolean;
+  /** Composição corporal por foto: suspensa por padrão (plano Etapa 4.1). */
+  body_photo_enabled: boolean;
 }
 
 const DEFAULT_FLAGS: Flags = {
@@ -118,6 +120,7 @@ const DEFAULT_FLAGS: Flags = {
   premium_limits_enabled: false, new_ai_telemetry_enabled: true,
   model_routing_enabled: true, new_score_enabled: false,
   global_timeline_enabled: false, apple_billing_enabled: false,
+  body_photo_enabled: false,
 };
 
 export async function getFlags(supabase: SupabaseClient): Promise<Flags> {

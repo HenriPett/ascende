@@ -5,7 +5,7 @@
 import {
   serviceClient, requireUser, assertRateLimit, corsFor, MODEL_SMART,
 } from "../_shared/lib.ts";
-import { anthropicCall, countUsage } from "../_shared/usage.ts";
+import { anthropicCall, reserveUsage, releaseUsage } from "../_shared/usage.ts";
 import { getEntitlements, spMonthStartUtc, nextSpMonthStartUtc, limitResponse } from "../_shared/entitlements.ts";
 
 // ~7 MB de base64 ≈ 5 MB de imagem. O app já reduz a foto antes de enviar.
@@ -77,23 +77,30 @@ Deno.serve(async (req) => {
     const user = await requireUser(req, supabase);
     await assertRateLimit(supabase, user.id, "analyze-meal", 40, 10);
 
-    // Limite mensal por plano (validado no servidor)
+    // Limite mensal por plano (validado no servidor). Reserva atômica ANTES
+    // da chamada; devolvida se a análise falhar — tentativa fracassada não
+    // consome limite (plano §3.4/§3.6).
     const ent = await getEntitlements(supabase, user.id);
+    let reservationId: number | null = null;
     if (ent.flags.premium_limits_enabled && ent.limits.meal_photos_monthly !== null) {
-      const used = await countUsage(supabase, user.id, ["analyze-meal"], spMonthStartUtc());
-      if (used >= (ent.limits.meal_photos_monthly ?? 0)) {
+      const { id } = await reserveUsage(supabase, user.id, "analyze-meal",
+        ent.limits.meal_photos_monthly ?? 0, spMonthStartUtc());
+      if (id === null) {
         return limitResponse(req, "analyze-meal", ent.limits.meal_photos_monthly ?? 0, nextSpMonthStartUtc(),
           `Você usou as ${ent.limits.meal_photos_monthly} análises de refeição deste mês.`);
       }
+      reservationId = id;
     }
 
     const { image, media_type, note } = await req.json();
     const hasImage = typeof image === "string" && image.length > 0;
     const noteText = typeof note === "string" ? note.trim().slice(0, 300) : "";
     if (!hasImage && !noteText) {
+      await releaseUsage(supabase, reservationId);
       return json({ error: "Envie uma foto ou descreva a refeição." }, 400);
     }
     if (hasImage && image.length > MAX_B64) {
+      await releaseUsage(supabase, reservationId);
       return json({ error: "Imagem muito grande. Tire a foto novamente." }, 413);
     }
     const mediaType = ALLOWED_MEDIA.includes(media_type) ? media_type : "image/jpeg";
@@ -119,16 +126,20 @@ Deno.serve(async (req) => {
               ]
             : userText,
         }],
-      });
+      }, { reservationId });
 
     if (!res.ok || !data) {
-      return json({ error: "Não consegui analisar a foto agora. Tente de novo." }, 502);
+      await releaseUsage(supabase, reservationId);
+      return json({ error: "Não consegui analisar a foto agora. Tente de novo — a tentativa não contou no seu limite." }, 502);
     }
 
     // deno-lint-ignore no-explicit-any
     const toolUse = ((data as any).content ?? []).find((b: any) => b.type === "tool_use");
     const r = toolUse?.input;
-    if (!r) return json({ error: "Não consegui interpretar a foto." }, 502);
+    if (!r) {
+      await releaseUsage(supabase, reservationId);
+      return json({ error: "Não consegui interpretar a foto. Tente de novo — a tentativa não contou no seu limite." }, 502);
+    }
 
     if (!r.is_food) {
       return json({ estimate: null, is_food: false });

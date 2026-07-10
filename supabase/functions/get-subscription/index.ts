@@ -29,10 +29,12 @@ Deno.serve(async (req) => {
         countChat(spDayStartUtc()),
         countChat(spWeekStartUtc()),
         countChat(spMonthStartUtc()),
-        countUsage(supabase, user.id, ["capture"], spDayStartUtc()),
-        countUsage(supabase, user.id, ["analyze-meal"], spMonthStartUtc()),
-        countUsage(supabase, user.id, ["analyze-body"], spMonthStartUtc()),
-        countUsage(supabase, user.id, ["chat-documento"], spMonthStartUtc()),
+        // Endpoint de EXIBIÇÃO: strict:false (erro de contagem vira 0 na tela;
+        // a validação real, fail-closed, acontece em cada função de IA).
+        countUsage(supabase, user.id, ["capture"], spDayStartUtc(), { strict: false }),
+        countUsage(supabase, user.id, ["analyze-meal"], spMonthStartUtc(), { strict: false }),
+        countUsage(supabase, user.id, ["analyze-body"], spMonthStartUtc(), { strict: false }),
+        countUsage(supabase, user.id, ["chat-documento"], spMonthStartUtc(), { strict: false }),
         supabase.from("app_settings").select("value").eq("key", "pricing").maybeSingle(),
       ]);
 
