@@ -59,13 +59,18 @@ export interface RecurringTx {
   active: boolean;
 }
 
-/** Lançamento PROPOSTO pela importação de fatura — só grava após confirmação. */
+/** Lançamento PROPOSTO pela importação de fatura — só grava após confirmação.
+ *  Compras parceladas são expandidas no servidor: além da parcela da fatura,
+ *  entram as passadas e as futuras (origin marca cada uma; o usuário desmarca
+ *  o que não quiser e duplicatas já registradas vêm desmarcadas). */
 export interface ProposedStatementTx {
   kind: "income" | "expense";
   amount: number;
   category: string;
   description: string;
   occurred_at: string; // YYYY-MM-DD
+  origin?: "statement" | "past" | "future";
+  installment?: string | null; // "3/10"
 }
 
 export interface CategoryComposition {
@@ -139,19 +144,24 @@ export function buildMonthMap(
 }
 
 /** Resultado mensal estimado (base da projeção quando não há histórico):
- *  renda − fixos − variáveis estimados. */
+ *  renda − fixos − variáveis estimados.
+ *  Renda declarada (Raio-X) e recorrentes de ENTRADA (Salário) são a mesma
+ *  renda vista por dois caminhos — vale max(declarada, recorrentes de
+ *  entrada), nunca a soma (mesma regra do resto do sistema). */
 export function estimatedMonthlyNet(
   monthlyIncomeDeclared: number,
   recurrings: RecurringTx[],
   estimates: CategoryEstimate[],
 ): number | null {
-  const income = Math.max(0, monthlyIncomeDeclared || 0);
-  if (income <= 0 && !recurrings.length && !estimates.length) return null;
-  const recNet = recurrings
-    .filter((r) => r.active)
-    .reduce((s, r) => s + (r.kind === "income" ? 1 : -1) * Number(r.amount), 0);
+  const active = recurrings.filter((r) => r.active);
+  const recIncome = active.filter((r) => r.kind === "income")
+    .reduce((s, r) => s + Number(r.amount), 0);
+  const recExpense = active.filter((r) => r.kind === "expense")
+    .reduce((s, r) => s + Number(r.amount), 0);
+  const income = Math.max(Math.max(0, monthlyIncomeDeclared || 0), recIncome);
+  if (income <= 0 && recExpense <= 0 && !estimates.length) return null;
   const estOut = estimates.reduce((s, e) => s + Number(e.amount), 0);
-  return income + recNet - estOut;
+  return income - recExpense - estOut;
 }
 
 export interface CalibrationRow {

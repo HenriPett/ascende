@@ -192,10 +192,20 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   // Camada 2: fixos recorrentes (compromissos do mês, cadastrados uma vez)
   const recs = (recurrings ?? []) as { kind: string; amount: number; category: string; description: string | null }[];
   if (recs.length) {
-    const recTotal = recs.filter((r) => r.kind === "expense").reduce((s, r) => s + Number(r.amount), 0);
-    const recList = recs.filter((r) => r.kind === "expense").slice(0, 8)
-      .map((r) => `${r.description || r.category} ${BRL(Number(r.amount))}`).join(", ");
-    lines.push(`GASTOS FIXOS RECORRENTES: ${BRL(recTotal)}/mês comprometidos (${recList}). Já estão materializados nas saídas do mês.`);
+    const recExp = recs.filter((r) => r.kind === "expense");
+    const recInc = recs.filter((r) => r.kind === "income");
+    if (recExp.length) {
+      const recTotal = recExp.reduce((s, r) => s + Number(r.amount), 0);
+      const recList = recExp.slice(0, 8)
+        .map((r) => `${r.description || r.category} ${BRL(Number(r.amount))}`).join(", ");
+      lines.push(`GASTOS FIXOS RECORRENTES: ${BRL(recTotal)}/mês comprometidos (${recList}). Já estão materializados nas saídas do mês.`);
+    }
+    if (recInc.length) {
+      const incTotal = recInc.reduce((s, r) => s + Number(r.amount), 0);
+      const incList = recInc.slice(0, 4)
+        .map((r) => `${r.description || r.category} ${BRL(Number(r.amount))}`).join(", ");
+      lines.push(`ENTRADAS FIXAS RECORRENTES: ${BRL(incTotal)}/mês (${incList}). Já materializadas nas entradas do mês — é a mesma renda da "renda mensal aproximada" acima, vista por outro caminho: NUNCA some as duas.`);
+    }
   }
 
   // Camada 1: estimativas declaradas pela pessoa (Raio-X). São PREMISSAS,

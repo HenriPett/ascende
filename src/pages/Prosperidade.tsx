@@ -21,15 +21,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
   Trash2, Plus, Loader2, LineChart as LineChartIcon, Compass, Repeat,
-  ArrowRight, ArrowLeft, SlidersHorizontal, Pause, Play,
+  ArrowRight, ArrowLeft, SlidersHorizontal, Pause, Play, ChevronLeft, ChevronRight,
 } from "lucide-react";
-import { brl, monthStartISO, todayISO } from "@/lib/format";
+import { brl, todayISO } from "@/lib/format";
 import {
   CATEGORIES, VARIABLE_CATEGORIES, FIXED_SUGGESTIONS,
   type Tx, type CategoryEstimate, type RecurringTx,
@@ -78,6 +79,7 @@ function RaioX({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [income, setIncome] = useState("");
+  const [salaryAsRecurring, setSalaryAsRecurring] = useState(true);
   const [fixed, setFixed] = useState<Record<number, string>>({});
   const [variable, setVariable] = useState<Record<string, string>>({});
 
@@ -99,6 +101,23 @@ function RaioX({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
     try {
       if (incomeV > 0) {
         await supabase.from("profiles").update({ monthly_income: incomeV }).eq("user_id", user.id);
+        // Salário como ENTRADA FIXA: vira recorrente de entrada e já entra
+        // nas Entradas do mês (senão o saldo nasce negativo e mente).
+        if (salaryAsRecurring) {
+          const { data: sal } = await supabase.from("recurring_transactions")
+            .insert({
+              user_id: user.id, kind: "income", amount: incomeV,
+              category: "Salário", description: "Salário", day_of_month: 5,
+            })
+            .select("id,kind,amount,category,description,day_of_month").single();
+          if (sal) {
+            await supabase.from("transactions").insert({
+              user_id: user.id, kind: sal.kind, amount: sal.amount, category: sal.category,
+              description: sal.description, occurred_at: currentMonthDayISO(sal.day_of_month),
+              source: "recurring", recurring_id: sal.id,
+            });
+          }
+        }
       }
 
       // Fixos → recorrentes + materialização do mês corrente na hora
@@ -152,6 +171,10 @@ function RaioX({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
       <p className="text-sm font-medium">Quanto entra por mês, mais ou menos?</p>
       <Input inputMode="decimal" placeholder="Ex.: 4500" value={income}
         onChange={(e) => setIncome(e.target.value)} aria-label="Renda mensal aproximada (R$)" />
+      <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+        <Checkbox checked={salaryAsRecurring} onCheckedChange={(v) => setSalaryAsRecurring(Boolean(v))} />
+        Lançar como entrada fixa todo mês (Salário) — desmarque se sua renda variar muito
+      </label>
       <p className="text-xs text-muted-foreground">
         Valor aproximado, sem centavos. É a base do "plano que cabe no seu bolso".
       </p>
@@ -252,12 +275,18 @@ export default function Prosperidade() {
   const [raioxSkipped, setRaioxSkipped] = useState(() => lsGet("prosperidade-raiox-skip") === "1");
   const [calibDismissed, setCalibDismissed] = useState(false);
 
-  // Recorrentes: novo cadastro
+  // Recorrentes: novo cadastro (gasto OU entrada — salário, aluguel recebido...)
+  const [recKind, setRecKind] = useState<"expense" | "income">("expense");
   const [recDesc, setRecDesc] = useState("");
   const [recAmount, setRecAmount] = useState("");
   const [recCategory, setRecCategory] = useState("Moradia");
   const [recDay, setRecDay] = useState("5");
   const [recSaving, setRecSaving] = useState(false);
+
+  // Navegação entre meses (cards de resumo + lista de lançamentos).
+  // Para trás: até a janela de 6 meses dos gráficos; para frente: até onde
+  // houver lançamentos (parcelas futuras importadas da fatura, por exemplo).
+  const [viewMonth, setViewMonth] = useState(() => monthKey(todayISO()));
 
   // Materialização lazy dos recorrentes: roda no máximo 1x por usuário/mês
   // (a função respeita exclusões: lançamento apagado não "renasce").
@@ -307,26 +336,42 @@ export default function Prosperidade() {
     },
   });
 
-  const monthTxs = (txs ?? []).filter((t) => t.occurred_at >= monthStartISO());
+  const monthTxs = (txs ?? []).filter((t) => monthKey(t.occurred_at) === viewMonth);
   const spendLimit = Number(profile?.daily_spend_limit) || 0;
   const spentToday = (txs ?? [])
     .filter((t) => t.kind === "expense" && t.occurred_at === todayISO())
     .reduce((s, t) => s + Number(t.amount), 0);
+  // Mês em navegação (cards de resumo + lista)
   const income = monthTxs.filter((t) => t.kind === "income").reduce((s, t) => s + Number(t.amount), 0);
   const expense = monthTxs.filter((t) => t.kind === "expense").reduce((s, t) => s + Number(t.amount), 0);
-  const budget = Number(profile?.monthly_budget ?? 0);
-  const budgetPct = budget > 0 ? Math.min((expense / budget) * 100, 100) : null;
-
-  // ── Camadas: composição real × estimado do mês corrente ──────
+  // Mês CORRENTE (Mapa do mês, orçamento, composição): navegação não muda a operação
   const nowKey = monthKey(todayISO());
+  const curMonthTxs = (txs ?? []).filter((t) => monthKey(t.occurred_at) === nowKey);
+  const curIncome = curMonthTxs.filter((t) => t.kind === "income").reduce((s, t) => s + Number(t.amount), 0);
+  const curExpense = curMonthTxs.filter((t) => t.kind === "expense").reduce((s, t) => s + Number(t.amount), 0);
+  const budget = Number(profile?.monthly_budget ?? 0);
+  const budgetPct = budget > 0 ? Math.min((curExpense / budget) * 100, 100) : null;
+
+  // Navegação: limites e rótulo do mês em foco
+  const shiftMonthKey = (key: string, delta: number) => {
+    const [y, m] = key.split("-").map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+    return d.toISOString().slice(0, 7);
+  };
+  const maxTxKey = (txs ?? []).reduce((mx, t) => {
+    const k = monthKey(t.occurred_at);
+    return k > mx ? k : mx;
+  }, nowKey);
+  const viewMonthLabel = new Date(viewMonth + "-02T00:00:00")
+    .toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   const monthlyIncome = Number(profile?.monthly_income ?? 0);
   const composition = useMemo(
     () => composeVariableMonth(expensesByCategory(txs ?? [], nowKey), estimates ?? []),
     [txs, estimates, nowKey],
   );
   const monthMap = useMemo(
-    () => buildMonthMap(monthlyIncome, income, recurrings ?? [], composition),
-    [monthlyIncome, income, recurrings, composition],
+    () => buildMonthMap(monthlyIncome, curIncome, recurrings ?? [], composition),
+    [monthlyIncome, curIncome, recurrings, composition],
   );
   const hasAnyLayer = monthlyIncome > 0 || (estimates ?? []).length > 0 ||
     (recurrings ?? []).length > 0 || (txs ?? []).length > 0;
@@ -412,6 +457,39 @@ export default function Prosperidade() {
 
   const dismissCalibration = () => { lsSet(calibKey, "1"); setCalibDismissed(true); };
 
+  // Self-heal: quem mapeou a renda antes do salário virar entrada fixa
+  // (renda declarada, nenhum recorrente de entrada, mês sem entradas reais)
+  // ganha o conserto em um toque — senão o saldo do mês nasce negativo.
+  const [salaryFixDismissed, setSalaryFixDismissed] = useState(() => lsGet("prosperidade-salary-fix-dismiss") === "1");
+  const [salaryFixSaving, setSalaryFixSaving] = useState(false);
+  const needsSalaryFix = !isLoading && monthlyIncome > 0 && curIncome === 0 &&
+    (recurrings ?? []).every((r) => r.kind !== "income") && !salaryFixDismissed;
+
+  const adoptSalaryRecurring = async () => {
+    if (!user) return;
+    setSalaryFixSaving(true);
+    try {
+      const { data: sal, error } = await supabase.from("recurring_transactions")
+        .insert({
+          user_id: user.id, kind: "income", amount: monthlyIncome,
+          category: "Salário", description: "Salário", day_of_month: 5,
+        })
+        .select("id,kind,amount,category,description,day_of_month").single();
+      if (error || !sal) throw error;
+      await supabase.from("transactions").insert({
+        user_id: user.id, kind: sal.kind, amount: sal.amount, category: sal.category,
+        description: sal.description, occurred_at: currentMonthDayISO(sal.day_of_month),
+        source: "recurring", recurring_id: sal.id,
+      });
+      toast.success("Salário lançado como entrada fixa — cai todo mês, sozinho.");
+      qc.invalidateQueries();
+    } catch {
+      toast.error("Não consegui criar a entrada fixa.");
+    } finally {
+      setSalaryFixSaving(false);
+    }
+  };
+
   const saveSpendLimitRaw = async (raw: string) => {
     if (!user) return;
     const v = Number(raw.replace(",", "."));
@@ -453,7 +531,7 @@ export default function Prosperidade() {
     try {
       const { data: created, error } = await supabase.from("recurring_transactions")
         .insert({
-          user_id: user.id, kind: "expense", amount: v, category: recCategory,
+          user_id: user.id, kind: recKind, amount: v, category: recCategory,
           description: recDesc.trim() || recCategory, day_of_month: day,
         })
         .select("id,kind,amount,category,description,day_of_month").single();
@@ -464,7 +542,9 @@ export default function Prosperidade() {
         description: created.description, occurred_at: currentMonthDayISO(created.day_of_month),
         source: "recurring", recurring_id: created.id,
       });
-      toast.success("Recorrente criado — repetirá todo mês, sozinho.");
+      toast.success(recKind === "income"
+        ? "Entrada fixa criada — cai todo mês, sozinha."
+        : "Recorrente criado — repetirá todo mês, sozinho.");
       setRecDesc(""); setRecAmount("");
       qc.invalidateQueries();
     } catch {
@@ -567,6 +647,25 @@ export default function Prosperidade() {
         </Card>
       )}
 
+      {/* ── Self-heal: renda declarada sem entrada fixa ────────── */}
+      {needsSalaryFix && (
+        <Card className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <p className="text-sm flex-1">
+            Sua renda de <strong>{brl(monthlyIncome)}</strong> está mapeada, mas ainda não entra
+            nas <strong>Entradas</strong> do mês — por isso o saldo aparece negativo.
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button size="sm" onClick={adoptSalaryRecurring} disabled={salaryFixSaving}>
+              {salaryFixSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Lançar como entrada fixa"}
+            </Button>
+            <button className="text-xs text-muted-foreground underline"
+              onClick={() => { lsSet("prosperidade-salary-fix-dismiss", "1"); setSalaryFixDismissed(true); }}>
+              Minha renda varia
+            </button>
+          </div>
+        </Card>
+      )}
+
       {/* ── Calibração do fechamento (primeiros dias do mês) ──── */}
       {showCalibration && (
         <Card className="p-4 space-y-3">
@@ -592,7 +691,31 @@ export default function Prosperidade() {
         </Card>
       )}
 
-      {/* Resumo do mês (real) */}
+      {/* Resumo por mês (real) — navegue para ver outros meses, inclusive
+          futuros quando houver parcelas importadas da fatura */}
+      <div className="flex items-center justify-between -mb-2">
+        <Button variant="ghost" size="icon" className="w-8 h-8"
+          disabled={viewMonth <= monthKeys[0]}
+          onClick={() => setViewMonth((v) => shiftMonthKey(v, -1))}
+          aria-label="Mês anterior">
+          <ChevronLeft className="w-4 h-4" />
+        </Button>
+        <button className="text-sm font-medium capitalize disabled:cursor-default"
+          disabled={viewMonth === nowKey}
+          onClick={() => setViewMonth(nowKey)}
+          title={viewMonth !== nowKey ? "Voltar ao mês atual" : undefined}>
+          {viewMonthLabel}
+          {viewMonth !== nowKey && (
+            <span className="text-xs text-muted-foreground font-normal normal-case"> · voltar ao mês atual</span>
+          )}
+        </button>
+        <Button variant="ghost" size="icon" className="w-8 h-8"
+          disabled={viewMonth >= maxTxKey}
+          onClick={() => setViewMonth((v) => shiftMonthKey(v, 1))}
+          aria-label="Próximo mês">
+          <ChevronRight className="w-4 h-4" />
+        </Button>
+      </div>
       <div className="grid grid-cols-3 gap-2.5">
         <Card className="p-3 min-w-0 overflow-hidden">
           <p className="text-[11px] text-muted-foreground">Entradas</p>
@@ -648,7 +771,7 @@ export default function Prosperidade() {
         <Card className="p-4">
           <div className="flex justify-between text-xs mb-1.5">
             <span className="text-muted-foreground">Orçamento do mês</span>
-            <span>{brl(expense)} de {brl(budget)}</span>
+            <span>{brl(curExpense)} de {brl(budget)}</span>
           </div>
           <Progress value={budgetPct} />
           {budgetPct >= 90 && (
@@ -793,12 +916,12 @@ export default function Prosperidade() {
       <Card className="p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Repeat className="w-4 h-4" style={{ color: "hsl(var(--prosperidade))" }} />
-          <h2 className="font-display font-semibold">Gastos fixos (recorrentes)</h2>
+          <h2 className="font-display font-semibold">Fixos do mês (recorrentes)</h2>
         </div>
         {(recurrings ?? []).length === 0 && (
           <p className="text-sm text-muted-foreground">
-            Aluguel, contas, assinaturas: cadastre uma vez e o Ascende lança todo mês sozinho —
-            60 a 70% do registro típico some daqui.
+            Salário, aluguel, contas, assinaturas: cadastre uma vez e o Ascende lança todo mês
+            sozinho — 60 a 70% do registro típico some daqui.
           </p>
         )}
         <div className="divide-y">
@@ -810,7 +933,9 @@ export default function Prosperidade() {
                 </p>
                 <p className="text-xs text-muted-foreground">{r.category} · todo dia {r.day_of_month}</p>
               </div>
-              <span className="text-sm font-medium">{brl(Number(r.amount))}</span>
+              <span className={r.kind === "income" ? "text-sm font-medium text-success" : "text-sm font-medium"}>
+                {r.kind === "income" ? "+" : "−"}{brl(Number(r.amount))}
+              </span>
               <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground"
                 onClick={() => toggleRecurring(r)} aria-label={r.active ? "Pausar recorrente" : "Reativar recorrente"}>
                 {r.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
@@ -822,7 +947,18 @@ export default function Prosperidade() {
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <Select value={recKind} onValueChange={(v) => {
+            const k = v as "expense" | "income";
+            setRecKind(k);
+            setRecCategory(k === "income" ? "Salário" : "Moradia");
+          }}>
+            <SelectTrigger aria-label="Tipo do recorrente"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="expense">Gasto</SelectItem>
+              <SelectItem value="income">Entrada</SelectItem>
+            </SelectContent>
+          </Select>
           <Input placeholder="Descrição" value={recDesc} maxLength={80}
             onChange={(e) => setRecDesc(e.target.value)} aria-label="Descrição do recorrente" />
           <Input placeholder="Valor (R$)" inputMode="decimal" value={recAmount}
@@ -830,8 +966,10 @@ export default function Prosperidade() {
           <Select value={recCategory} onValueChange={setRecCategory}>
             <SelectTrigger aria-label="Categoria do recorrente"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {CATEGORIES.filter((c) => c !== "Salário" && c !== "Extra").map((c) =>
-                <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              {(recKind === "income"
+                ? ["Salário", "Extra", "Outros"]
+                : CATEGORIES.filter((c) => c !== "Salário" && c !== "Extra")
+              ).map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
           <div className="flex gap-2">
@@ -882,11 +1020,13 @@ export default function Prosperidade() {
 
       {/* Lista do mês */}
       <Card className="p-4">
-        <h2 className="font-display font-semibold mb-3">Lançamentos do mês</h2>
+        <h2 className="font-display font-semibold mb-3 capitalize">Lançamentos · {viewMonthLabel}</h2>
         {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
         {!isLoading && !monthTxs.length && (
           <p className="text-sm text-muted-foreground">
-            Nenhum lançamento ainda. Registre o primeiro acima — ou conte na tela Hoje.
+            {viewMonth === nowKey
+              ? "Nenhum lançamento ainda. Registre o primeiro acima — ou conte na tela Hoje."
+              : "Nenhum lançamento neste mês."}
           </p>
         )}
         <div className="divide-y">

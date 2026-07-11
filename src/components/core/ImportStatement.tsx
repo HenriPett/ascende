@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { FileUp, Loader2, Check } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { brl } from "@/lib/format";
 import { readFnError, isPlanLimit, type PlanLimitError } from "@/lib/fnError";
 import type { ProposedStatementTx } from "@/lib/prosperidade";
@@ -45,9 +46,28 @@ export default function ImportStatement({
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<ProposedStatementTx[] | null>(null);
   const [checked, setChecked] = useState<boolean[]>([]);
+  const [dup, setDup] = useState<boolean[]>([]);
   const [note, setNote] = useState<string | null>(null);
 
-  const reset = () => { setItems(null); setChecked([]); setNote(null); };
+  const reset = () => { setItems(null); setChecked([]); setDup([]); setNote(null); };
+
+  // Deduplicação: parcelas futuras geradas hoje reaparecem na fatura do mês
+  // que vem — antes de propor, comparamos com o que já está registrado
+  // (mesmo tipo, mesmo valor, mesmo mês, mesma descrição) e desmarcamos.
+  const txKey = (t: { kind: string; amount: number; occurred_at: string; description: string | null }) =>
+    `${t.kind}|${Number(t.amount).toFixed(2)}|${t.occurred_at.slice(0, 7)}|${(t.description ?? "").toLowerCase().replace(/\s+/g, " ").trim()}`;
+
+  const findDuplicates = async (list: ProposedStatementTx[]): Promise<boolean[]> => {
+    if (!user || !list.length) return list.map(() => false);
+    const dates = list.map((i) => i.occurred_at).sort();
+    const { data: existing } = await supabase.from("transactions")
+      .select("kind,amount,description,occurred_at")
+      .eq("user_id", user.id)
+      .gte("occurred_at", dates[0]).lte("occurred_at", dates[dates.length - 1])
+      .limit(2000);
+    const seen = new Set((existing ?? []).map(txKey));
+    return list.map((it) => seen.has(txKey(it)));
+  };
 
   const pick = () => fileRef.current?.click();
 
@@ -79,8 +99,10 @@ export default function ImportStatement({
         toast.error("Não encontrei lançamentos legíveis no documento.");
         return;
       }
+      const dups = await findDuplicates(list);
       setItems(list);
-      setChecked(list.map(() => true));
+      setDup(dups);
+      setChecked(list.map((_, i) => !dups[i]));
       setNote(data.note ?? null);
     } catch {
       toast.error("Não consegui ler o documento. Tente de novo.");
@@ -160,6 +182,13 @@ export default function ImportStatement({
         {items && (
           <div className="space-y-3">
             {note && <p className="text-xs text-muted-foreground rounded-md border p-2.5">{note}</p>}
+            {items.some((it) => it.origin === "past" || it.origin === "future") && (
+              <p className="text-xs text-muted-foreground rounded-md border p-2.5">
+                Compras parceladas foram expandidas: as parcelas <strong>passadas e futuras</strong> entram
+                nos meses certos, para o retrato ficar completo de uma vez. Desmarque o que não quiser —
+                e o que já estava registrado veio desmarcado sozinho.
+              </p>
+            )}
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <button className="underline underline-offset-2"
                 onClick={() => setChecked(items.map(() => !checked.every(Boolean)))}>
@@ -173,9 +202,14 @@ export default function ImportStatement({
                   <Checkbox checked={checked[i]}
                     onCheckedChange={(v) => setChecked((arr) => arr.map((c, j) => (j === i ? Boolean(v) : c)))} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{it.description}</p>
+                    <p className="text-sm truncate">
+                      {it.description}
+                      {it.origin === "past" && <Badge variant="secondary" className="text-[10px] ml-1.5 align-middle">parcela passada</Badge>}
+                      {it.origin === "future" && <Badge variant="secondary" className="text-[10px] ml-1.5 align-middle">parcela futura</Badge>}
+                      {dup[i] && <Badge variant="outline" className="text-[10px] ml-1.5 align-middle">já registrado</Badge>}
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      {it.category} · {new Date(it.occurred_at + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                      {it.category} · {new Date(it.occurred_at + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" })}
                     </p>
                   </div>
                   <span className={it.kind === "expense" ? "text-sm font-medium text-destructive" : "text-sm font-medium text-success"}>
