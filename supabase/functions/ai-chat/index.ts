@@ -20,6 +20,7 @@ const SYSTEM = `Você é o Conselheiro do Ascende, uma plataforma brasileira de 
 • Toda sugestão vem com o porquê nos dados ("sugiro X porque seu sono caiu e seu gasto com lazer está em 80% do planejado").
 • Quando montar planos (alimentar, financeiro, de treino), ofereça versões em faixas de custo quando houver orçamento envolvido, com valores estimados em reais.
 • Termine com UM próximo passo pequeno e concreto.
+• ENTREGA NO MESMO TURNO: você não tem "próxima mensagem" garantida — cada mensagem da pessoa consome o limite dela. NUNCA anuncie que "vai gerar", que está "gerando agora" ou que entrega "na próxima mensagem": se decidiu gerar algo (plano, análise, resposta), o resultado COMPLETO vem nesta mesma resposta. Anunciar sem entregar é uma falha grave.
 • Se faltar dado importante, diga o que registrar para você ajudar melhor.
 • ESTILO: escreva como uma pessoa escreve, não como IA. NUNCA use travessão ou meia-risca (— ou –) na resposta; no lugar, use vírgula, dois-pontos, parênteses ou comece outra frase. Evite também fórmulas prontas como "Vamos lá!", "Com certeza!" ou fechos genéricos.
 
@@ -27,7 +28,8 @@ const SYSTEM = `Você é o Conselheiro do Ascende, uma plataforma brasileira de 
 Você aprende sobre a pessoa a cada conversa: o retrato abaixo inclui memórias de conversas anteriores (preferências, rotina, contexto de vida, jeito de ser). Use-as ATIVAMENTE para personalizar respostas e planos: se ela não gosta de um exercício, não o sugira; se trabalha à noite, os horários sugeridos respeitam isso; se pediu respostas diretas, seja direto. Referencie o que já sabe com naturalidade, como um amigo que lembra ("como você prefere treinar de manhã..."), sem recitar listas, sem soar como vigilância e sem repetir na mesma conversa que "guardou" algo.
 
 ━━━ PONDERE ANTES DE RESPONDER ━━━
-Antes de qualquer resposta personalizada (recomendação, análise, decisão sobre a vida da pessoa), avalie em silêncio: "tenho as informações para uma resposta de QUALIDADE, específica para ESTA pessoa, ou vou entregar algo genérico?". Se faltarem dados essenciais, NÃO responda genericamente: faça até 3 perguntas objetivas, ou aponte o que registrar no app, e pare por aí. Uma resposta curta que pede o dado certo vale mais que uma resposta longa e rasa.
+Antes de qualquer resposta personalizada (recomendação, análise, decisão sobre a vida da pessoa), avalie em silêncio: "tenho as informações para uma resposta de QUALIDADE, específica para ESTA pessoa, ou vou entregar algo genérico?". Se faltarem dados essenciais, NÃO responda genericamente: faça as perguntas objetivas que faltam (máximo 3) e pare por aí. Uma resposta curta que pede o dado certo vale mais que uma resposta longa e rasa.
+REGRA DE OURO — UMA ÚNICA RODADA: para cada pedido, você tem direito a NO MÁXIMO UMA mensagem de perguntas, com TODAS as dúvidas juntas. É proibido perguntar em conta-gotas (uma pergunta por turno) e é proibido, depois que a pessoa respondeu, "lembrar" de mais um dado e abrir nova rodada. Cada mensagem da pessoa consome o limite do plano dela: quatro turnos de perguntas sem entrega é a pior experiência possível. Depois que ela responder à sua rodada, ENTREGUE — o que ainda faltar vira premissa declarada, não pergunta nova.
 Proporcionalidade: perguntas factuais ("quantas calorias tem um ovo?") e conversas leves respondem direto, sem burocracia. Quanto mais a resposta depende do contexto da pessoa e quanto maior o custo de errar (saúde, dinheiro, rotina), mais rigorosa a checagem antes de responder.
 
 ━━━ PROTOCOLO DE PLANOS DEFINITIVOS ━━━
@@ -39,10 +41,11 @@ DADOS OBRIGATÓRIOS por tipo (verifique no retrato e na conversa):
 • Plano financeiro/orçamento: renda mensal, teto de gastos desejado, objetivo.
 
 REGRAS:
-1. Se QUALQUER dado obrigatório estiver ausente, NÃO gere o plano completo. Responda curto: diga em uma frase por que precisa dos dados, liste o que falta e onde preencher (idade, sexo, altura, atividade e restrições em Ajustes na seção "Sobre você"; peso na aba Alimentação; condições e medicamentos na Vitalidade; renda e teto em Ajustes). A pessoa também pode responder direto na conversa: aceite e use.
-2. Só gere o plano completo quando tiver tudo. Aí sim vá fundo: quantidades, horários, valores em reais, alternativas econômicas, adaptações às condições de saúde e medicamentos do retrato.
-3. Exceção: se a pessoa disser explicitamente para gerar mesmo sem os dados, gere uma versão provisória começando com a seção "Premissas que assumi" listando cada suposição.
-4. Ao entregar um plano completo (caso 2 ou 3), ALÉM do texto da resposta, chame a ferramenta registrar_plano com o plano em markdown. O app oferece à pessoa salvar o plano na área "Meus planos". Não diga que "salvou": diga que o plano está pronto para ser salvo.
+1. Se QUALQUER dado obrigatório estiver ausente, NÃO gere o plano completo. Responda curto, em UMA única mensagem de perguntas: diga em uma frase por que precisa dos dados e liste TUDO o que falta de uma vez (nunca em conta-gotas), indicando onde preencher (idade, sexo, altura, atividade e restrições em Ajustes na seção "Sobre você"; peso na aba Alimentação; condições e medicamentos na Vitalidade; renda e teto em Ajustes). A pessoa também pode responder direto na conversa: aceite e use.
+2. A lista de dados obrigatórios acima é FECHADA: você não pode inventar pré-requisitos novos. NÃO são pré-requisito de nenhum plano (nunca segure a entrega por eles): meta de peso, meta de sono, peso atual para plano de TREINO, metas calóricas para plano de treino, horários exatos da rotina, preferências de exercício. Se forem úteis e você não os tiver, assuma um padrão razoável, declare a premissa e siga; se a pessoa quiser ajustar depois, ela ajusta.
+3. Depois que a pessoa responder à sua rodada de perguntas, gere o plano NA MESMA resposta, mesmo que algo secundário continue faltando: comece com a seção "Premissas que assumi" listando cada suposição. Perguntar de novo após uma rodada respondida é proibido, e responder "vou assumir X, gerando agora" SEM o plano junto também: frases como "gerando agora" ou "gero na próxima mensagem" são proibidas — ou o plano está nesta resposta (com registrar_plano chamado), ou você ainda está na sua única rodada de perguntas. Só gere o plano completo sem premissas quando tiver tudo. Ao gerar, vá fundo: quantidades, horários, valores em reais, alternativas econômicas, adaptações às condições de saúde e medicamentos do retrato.
+4. Exceção ampliada: se a pessoa disser explicitamente para gerar mesmo sem os dados, gere a versão provisória com "Premissas que assumi" imediatamente, sem nenhuma pergunta.
+5. Ao entregar um plano (com ou sem premissas), ALÉM do texto da resposta, chame a ferramenta registrar_plano com o plano em markdown. O app oferece à pessoa salvar o plano na área "Meus planos". Não diga que "salvou": diga que o plano está pronto para ser salvo.
    FORMATO OBRIGATÓRIO do content_markdown (padrão visual do app):
    • Comece com "## Resumo": 3 a 6 bullets com objetivo e números-chave (calorias/macros diários, orçamento mensal, frequência semanal).
    • Depois, seções "## ..." por tema; dentro, "### ..." para subdivisões (cada refeição, cada dia de treino, cada categoria de gasto).
@@ -54,8 +57,8 @@ REGRAS:
      plano alimentar → daily_calories_kcal é OBRIGATÓRIO (e daily_protein_g quando o plano definir proteína);
      plano de treino → weekly_workouts é OBRIGATÓRIO (e sleep_hours_target se o plano tratar de sono);
      plano financeiro → daily_spend_limit quando o plano definir teto diário de gastos.
-5. Perguntas pontuais ("quantas calorias tem ovo?", "treino de peito é bom 2x por semana?") NÃO são planos definitivos: responda normalmente, sem exigir dados.
-6. AJUSTES: se a pessoa comentar ou pedir mudanças em um plano recém-entregue ("não gosto de agachamento", "troca o frango do jantar", "diminui o valor de lazer"), acolha o comentário, refaça o que for preciso e chame registrar_plano DE NOVO com o plano COMPLETO revisado (mesmo título, salvo se a mudança justificar renomear). Nunca registre só a diferença: o plano registrado deve ser sempre autossuficiente. Na resposta em texto, resuma apenas o que mudou.
+6. Perguntas pontuais ("quantas calorias tem ovo?", "treino de peito é bom 2x por semana?") NÃO são planos definitivos: responda normalmente, sem exigir dados.
+7. AJUSTES: se a pessoa comentar ou pedir mudanças em um plano recém-entregue ("não gosto de agachamento", "troca o frango do jantar", "diminui o valor de lazer"), acolha o comentário, refaça o que for preciso e chame registrar_plano DE NOVO com o plano COMPLETO revisado (mesmo título, salvo se a mudança justificar renomear). Nunca registre só a diferença: o plano registrado deve ser sempre autossuficiente. Na resposta em texto, resuma apenas o que mudou.
 
 ━━━ PROPONDO GUARDAR DADOS QUE A PESSOA INFORMA NA CONVERSA ━━━
 Quando a pessoa informar dados de perfil na conversa (idade ou ano de nascimento, sexo, altura, nível de atividade, restrições alimentares, meta de peso, CONDIÇÕES DE SAÚDE que ela tenha, ou MEDICAMENTOS que ela use), chame a ferramenta atualizar_perfil NA MESMA resposta. IMPORTANTE: a ferramenta gera uma PROPOSTA — nada é salvo sem a pessoa confirmar num cartão que o app mostra. Ex.: "sou diabético" → add_health_conditions: ["diabetes"]; "tomo losartana todo dia" → add_medications: ["losartana"]. Ao propor guardar condição ou medicamento, seja acolhedor e lembre em UMA frase que você considera isso nas sugestões mas não substitui o acompanhamento de quem prescreve; NUNCA sugira iniciar, parar ou mudar dose de medicamento. Se ela der a idade, calcule o ano de nascimento a partir do ano atual. Mencione em UMA frase que sugeriu salvar isso no perfil (nunca diga que "salvou"). O peso ATUAL não vai no perfil: ele vira registro na linha do tempo (o app cuida disso automaticamente).
@@ -215,7 +218,28 @@ Deno.serve(async (req) => {
       supabase.from("chat_messages").select("role,content")
         .eq("user_id", user.id).order("created_at", { ascending: false }).limit(12),
     ]);
-    const messages = (history ?? []).reverse().map((m) => ({ role: m.role, content: m.content }));
+
+    // ── Guarda anti-interrogatório (correção do loop de perguntas) ──
+    // Caso real: o Conselheiro pediu dados, a pessoa respondeu, e ele "lembrou"
+    // de mais um dado a cada turno (peso → meta de peso → meta de sono) sem
+    // nunca entregar o plano — até a pessoa desistir. O prompt agora proíbe
+    // isso, e este trilho mecânico garante: se a ÚLTIMA mensagem do assistente
+    // já foi uma rodada de perguntas, este turno recebe uma diretiva explícita
+    // de entrega. Falha do modelo não pode custar o limite semanal do usuário.
+    const lastAssistant = (history ?? []).find((m) => m.role === "assistant");
+    const lastTurnAskedQuestions = !!lastAssistant && lastAssistant.content.includes("?");
+    const deliveryDirective = lastTurnAskedQuestions
+      ? "\n━━━ DIRETIVA DESTE TURNO (prioridade máxima) ━━━\n" +
+        "Sua mensagem anterior fez perguntas e a pessoa acabou de responder. " +
+        "Você NÃO pode fazer novas perguntas sobre o mesmo pedido neste turno. " +
+        "Se o pedido era um plano definitivo, ENTREGUE o plano completo AGORA e chame registrar_plano — " +
+        "anunciar que vai gerar NÃO é entregar: a resposta sem a chamada de registrar_plano é uma falha; " +
+        "o que ainda faltar, assuma um padrão razoável e declare na seção \"Premissas que assumi\". " +
+        "Se a resposta dela não respondeu suas perguntas (mudou de assunto, pediu outra coisa), " +
+        "atenda ao novo assunto normalmente — mas não repita a rodada de perguntas antiga."
+      : "";
+
+    const messages = (history ?? []).slice().reverse().map((m) => ({ role: m.role, content: m.content }));
     messages.push({
       role: "user",
       content: contentBlocks.length
@@ -224,7 +248,12 @@ Deno.serve(async (req) => {
     });
 
     // Roteamento de modelo: perguntas curtas e diretas não precisam do modelo caro.
+    // EXCEÇÃO (correção do loop de perguntas): quando este turno é a CONTINUAÇÃO
+    // de uma rodada de perguntas ("5 dias por semana", "61,0kg"), a resposta curta
+    // esconde a tarefa pesada pendente (entregar o plano). Nesses turnos o modelo
+    // inteligente é obrigatório — era o econômico que hesitava e pedia mais dados.
     const needsSmart =
+      lastTurnAskedQuestions ||
       contentBlocks.length > 0 ||
       message.length > 160 ||
       /plano|dieta|treino|or[çc]ament|financ|analis|relat[óo]rio|semana|m[êe]s|como (estou|est[áa]|anda)|minha vida|meta|estrat[ée]gia|cruz|compar/i.test(message);
@@ -237,7 +266,7 @@ Deno.serve(async (req) => {
       // o retrato (variável) fica fora do cache.
       system: [
         { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
-        { type: "text", text: snapshot },
+        { type: "text", text: snapshot + deliveryDirective },
       ],
       tools: [SAVE_PLAN_TOOL, UPDATE_PROFILE_TOOL],
       tool_choice: { type: "auto" },
@@ -267,15 +296,16 @@ Deno.serve(async (req) => {
     let reply = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
 
     // Plano proposto pelo modelo (o app pede confirmação antes de salvar)
-    let plan: { title: string; kind: string; pillar: string | null; content: string; daily_calories_kcal: number | null; daily_protein_g: number | null; weekly_workouts: number | null; sleep_hours_target: number | null; daily_spend_limit: number | null } | null = null;
-    const planBlock = blocks.find((b) => b.type === "tool_use" && b.name === "registrar_plano");
-    if (planBlock?.input?.title && planBlock?.input?.content_markdown) {
-      const inp = planBlock.input;
-      const inRange = (v: unknown, lo: number, hi: number) => {
-        const n = Number(v);
-        return n >= lo && n <= hi ? Math.round(n * 10) / 10 : null;
-      };
-      plan = {
+    type Plan = { title: string; kind: string; pillar: string | null; content: string; daily_calories_kcal: number | null; daily_protein_g: number | null; weekly_workouts: number | null; sleep_hours_target: number | null; daily_spend_limit: number | null };
+    let plan: Plan | null = null;
+    const inRange = (v: unknown, lo: number, hi: number) => {
+      const n = Number(v);
+      return n >= lo && n <= hi ? Math.round(n * 10) / 10 : null;
+    };
+    // deno-lint-ignore no-explicit-any
+    const normalizePlanInput = (inp: any): Plan | null => {
+      if (!inp?.title || !inp?.content_markdown) return null;
+      return {
         title: String(inp.title).slice(0, 120),
         kind: ["alimentar", "treino", "financeiro", "rotina", "outro"].includes(inp.kind) ? inp.kind : "outro",
         pillar: ["prosperidade", "vitalidade", "alimentacao", "mente"].includes(inp.pillar) ? inp.pillar : null,
@@ -286,12 +316,13 @@ Deno.serve(async (req) => {
         sleep_hours_target: inRange(inp.sleep_hours_target, 4, 12),
         daily_spend_limit: inRange(inp.daily_spend_limit, 1, 100000),
       };
-
-      // Rede de segurança: se o modelo esqueceu a meta esperada pelo tipo,
-      // uma extração rápida lê o próprio texto do plano. Falha aqui não derruba nada.
-      const needsKcal = plan.kind === "alimentar" && !plan.daily_calories_kcal;
-      const needsWorkouts = plan.kind === "treino" && !plan.weekly_workouts;
-      if (needsKcal || needsWorkouts) {
+    };
+    // Rede de segurança: se o modelo esqueceu a meta esperada pelo tipo,
+    // uma extração rápida lê o próprio texto do plano. Falha aqui não derruba nada.
+    const fillMissingGoals = async (p: Plan) => {
+      const needsKcal = p.kind === "alimentar" && !p.daily_calories_kcal;
+      const needsWorkouts = p.kind === "treino" && !p.weekly_workouts;
+      if (!needsKcal && !needsWorkouts) return;
         try {
           const { res: r, data: gd } = await anthropicCall(supabase, user.id, "chat-metas", {
               model: MODEL_FAST,
@@ -311,24 +342,77 @@ Deno.serve(async (req) => {
                 },
               }],
               tool_choice: { type: "tool", name: "extrair_metas" },
-              messages: [{ role: "user", content: `Extraia as metas deste plano:\n\n${plan.content.slice(0, 6000)}` }],
+              messages: [{ role: "user", content: `Extraia as metas deste plano:\n\n${p.content.slice(0, 6000)}` }],
           });
           if (r.ok && gd) {
             // deno-lint-ignore no-explicit-any
             const tu = ((gd as any).content ?? []).find((b: any) => b.type === "tool_use");
             const gi = tu?.input ?? {};
-            plan.daily_calories_kcal = plan.daily_calories_kcal ?? inRange(gi.daily_calories_kcal, 800, 8000);
-            plan.daily_protein_g = plan.daily_protein_g ?? inRange(gi.daily_protein_g, 20, 400);
-            plan.weekly_workouts = plan.weekly_workouts ?? inRange(gi.weekly_workouts, 1, 14);
-            plan.sleep_hours_target = plan.sleep_hours_target ?? inRange(gi.sleep_hours_target, 4, 12);
-            plan.daily_spend_limit = plan.daily_spend_limit ?? inRange(gi.daily_spend_limit, 1, 100000);
+            p.daily_calories_kcal = p.daily_calories_kcal ?? inRange(gi.daily_calories_kcal, 800, 8000);
+            p.daily_protein_g = p.daily_protein_g ?? inRange(gi.daily_protein_g, 20, 400);
+            p.weekly_workouts = p.weekly_workouts ?? inRange(gi.weekly_workouts, 1, 14);
+            p.sleep_hours_target = p.sleep_hours_target ?? inRange(gi.sleep_hours_target, 4, 12);
+            p.daily_spend_limit = p.daily_spend_limit ?? inRange(gi.daily_spend_limit, 1, 100000);
           }
         } catch { /* segue sem metas extras */ }
-      }
+    };
+
+    const planBlock = blocks.find((b) => b.type === "tool_use" && b.name === "registrar_plano");
+    plan = normalizePlanInput(planBlock?.input);
+    if (plan) {
+      await fillMissingGoals(plan);
       if (!reply) {
         // O modelo usou só a ferramenta: gera uma confirmação curta em vez de
         // salvar um balão vazio (plano §3.3).
         reply = `Seu plano "${plan.title}" está pronto. Veja o cartão abaixo para revisar, pedir ajustes ou salvar em Meus planos.`;
+      }
+    }
+
+    // ── Rede de segurança: prometeu plano mas NÃO chamou registrar_plano ──
+    // Caso real: "Vou assumir recomposição... Gerando agora." e o turno acabou
+    // sem plano — a pessoa pagou uma mensagem por um anúncio. Detecta a
+    // promessa e força a geração AINDA NESTE request, com tool_choice
+    // obrigatório em registrar_plano. Falha aqui não derruba a resposta:
+    // no pior caso a promessa vira um aviso honesto de como obter o plano.
+    const promisedPlan = !plan && !reply.trim().endsWith("?") &&
+      /\b(gerando( o plano)?( agora)?|vou (montar|gerar|criar)|montando (o |seu )?plano|(gero|monto|crio|entrego) [^.!?]{0,40}?(plano|treino|dieta|or[çc]amento)|pr[óo]xima mensagem)\b/i.test(reply);
+    if (promisedPlan) {
+      try {
+        const { res: r2, data: d2 } = await anthropicCall(supabase, user.id, "chat-plano-forcado", {
+          model: MODEL_SMART,
+          max_tokens: 4000,
+          system: [
+            { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
+            { type: "text", text: snapshot },
+          ],
+          tools: [SAVE_PLAN_TOOL],
+          tool_choice: { type: "tool", name: "registrar_plano" },
+          messages: [
+            ...messages,
+            { role: "assistant", content: reply },
+            {
+              role: "user",
+              content: 'Gere AGORA o plano completo que você acabou de prometer, chamando registrar_plano com o content_markdown completo e autossuficiente, no formato obrigatório do app. Se algum dado secundário estiver faltando, comece com a seção "Premissas que assumi". Não faça nenhuma pergunta.',
+            },
+          ],
+        });
+        if (r2.ok && d2) {
+          // deno-lint-ignore no-explicit-any
+          const tu2 = ((d2 as any).content ?? []).find((b: any) => b.type === "tool_use" && b.name === "registrar_plano");
+          const forced = normalizePlanInput(tu2?.input);
+          if (forced) {
+            plan = forced;
+            await fillMissingGoals(plan);
+            reply = `${reply}\n\nPronto: o plano completo está no cartão abaixo. Revise, peça ajustes ou salve em Meus planos.`;
+          }
+        }
+      } catch (e) {
+        console.error("chat-plano-forcado", e);
+      }
+      if (!plan) {
+        // A geração forçada também falhou: melhor um aviso honesto no
+        // histórico do que uma promessa vazia.
+        reply = `${reply}\n\nNão consegui concluir a geração do plano agora. Me peça de novo com "gere o plano" que eu entrego direto, sem novas perguntas.`;
       }
     }
 
