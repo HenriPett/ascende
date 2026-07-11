@@ -36,6 +36,7 @@ export async function saveProposedEvents(userId: string, events: ProposedEvent[]
         category: ev.category ?? "Outros",
         description: ev.description ?? ev.summary,
         occurred_at: todayISO(),
+        source: "capture",
       });
       if (error) throw error;
     } else {

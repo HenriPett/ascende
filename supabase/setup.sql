@@ -786,3 +786,193 @@ update public.app_settings
 -- 4. Confira manualmente alguns usuários (transações × eventos × XP).
 -- 5. Valide: excluir transação remove evento e XP; desfazer hábito idem;
 --    registros repetidos não criam XP duplicado (índices únicos garantem).
+-- ─── 22. PROSPERIDADE EM CAMADAS (estimado → recorrente → real) ──
+-- Refatoração do cold start financeiro (proposta aprovada):
+-- o mês passa a ter três camadas. Gráficos e Conselheiro funcionam desde o
+-- dia 1 com estimativas declaradas; recorrentes eliminam o grosso do registro
+-- manual; o real refina (substitui, nunca soma) o estimado.
+
+-- 22.1 Origem do lançamento: manual | capture | import | recurring.
+--      Permite XP justo (importação/recorrência não geram XP por item) e
+--      gráficos que distinguem real digitado de materializado.
+alter table public.transactions
+  add column if not exists source text not null default 'manual';
+do $$ begin
+  alter table public.transactions
+    add constraint transactions_source_check
+    check (source in ('manual','capture','import','recurring'));
+exception when duplicate_object then null; end $$;
+
+alter table public.transactions
+  add column if not exists recurring_id uuid;
+
+-- 22.2 Estimativas por categoria (camada 1 — o "Raio-X de 60 segundos").
+--      Valores aproximados declarados pela pessoa. São PREMISSAS, não
+--      registros: entram no retrato do Conselheiro marcadas como estimativa.
+create table if not exists public.category_estimates (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  category text not null,
+  amount numeric not null check (amount >= 0),
+  updated_at timestamptz not null default now(),
+  unique (user_id, category)
+);
+alter table public.category_estimates enable row level security;
+drop policy if exists "est_select_own" on public.category_estimates;
+create policy "est_select_own" on public.category_estimates for select using (auth.uid() = user_id);
+drop policy if exists "est_insert_own" on public.category_estimates;
+create policy "est_insert_own" on public.category_estimates for insert with check (auth.uid() = user_id);
+drop policy if exists "est_update_own" on public.category_estimates;
+create policy "est_update_own" on public.category_estimates for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "est_delete_own" on public.category_estimates;
+create policy "est_delete_own" on public.category_estimates for delete using (auth.uid() = user_id);
+
+-- 22.3 Recorrentes (camada 2): cadastra uma vez, materializa todo mês.
+create table if not exists public.recurring_transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  kind text not null check (kind in ('income','expense')),
+  amount numeric not null check (amount > 0),
+  category text not null default 'Outros',
+  description text,
+  day_of_month int not null default 1 check (day_of_month between 1 and 28),
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table public.recurring_transactions enable row level security;
+drop policy if exists "rec_select_own" on public.recurring_transactions;
+create policy "rec_select_own" on public.recurring_transactions for select using (auth.uid() = user_id);
+drop policy if exists "rec_insert_own" on public.recurring_transactions;
+create policy "rec_insert_own" on public.recurring_transactions for insert with check (auth.uid() = user_id);
+drop policy if exists "rec_update_own" on public.recurring_transactions;
+create policy "rec_update_own" on public.recurring_transactions for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "rec_delete_own" on public.recurring_transactions;
+create policy "rec_delete_own" on public.recurring_transactions for delete using (auth.uid() = user_id);
+
+do $$ begin
+  alter table public.transactions
+    add constraint transactions_recurring_fk
+    foreign key (recurring_id) references public.recurring_transactions(id) on delete set null;
+exception when duplicate_object then null; end $$;
+
+-- Cinto e suspensório contra materialização dupla no mesmo mês.
+create unique index if not exists tx_recurring_month_unique
+  on public.transactions (recurring_id, date_trunc('month', occurred_at::timestamp))
+  where recurring_id is not null;
+
+-- 22.4 Ledger de materialização: a função roda NO MÁXIMO uma vez por
+--      usuário/mês. Assim, excluir um lançamento materializado não o faz
+--      "renascer" no próximo acesso (a exclusão da pessoa é respeitada).
+--      Recorrência criada no meio do mês: o app materializa o mês corrente
+--      na hora da criação, direto no cliente.
+create table if not exists public.recurrence_runs (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  month_key text not null,             -- 'YYYY-MM' no fuso America/Sao_Paulo
+  ran_at timestamptz not null default now(),
+  primary key (user_id, month_key)
+);
+alter table public.recurrence_runs enable row level security;
+drop policy if exists "runs_select_own" on public.recurrence_runs;
+create policy "runs_select_own" on public.recurrence_runs for select using (auth.uid() = user_id);
+-- (sem insert/update/delete: só a função security definer escreve aqui)
+
+-- Materialização lazy: chamada pelo app ao abrir a Prosperidade / tela Hoje.
+-- Zero infraestrutura de cron; funciona para quem só abre o app no dia 15.
+create or replace function public.ensure_month_recurrences()
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid();
+  sp_today date := (now() at time zone 'America/Sao_Paulo')::date;
+  mkey text;
+  inserted int := 0;
+begin
+  if uid is null then return 0; end if;
+  mkey := to_char(sp_today, 'YYYY-MM');
+
+  -- Já rodou este mês? Então a palavra final é da pessoa (exclusões valem).
+  if exists (select 1 from public.recurrence_runs where user_id = uid and month_key = mkey) then
+    return 0;
+  end if;
+
+  insert into public.transactions (user_id, kind, amount, category, description, occurred_at, source, recurring_id)
+  select r.user_id, r.kind, r.amount, r.category,
+         coalesce(r.description, r.category),
+         make_date(extract(year from sp_today)::int, extract(month from sp_today)::int, r.day_of_month),
+         'recurring', r.id
+  from public.recurring_transactions r
+  where r.user_id = uid and r.active
+  on conflict (recurring_id, (date_trunc('month', occurred_at::timestamp)))
+    where recurring_id is not null do nothing;
+  get diagnostics inserted = row_count;
+
+  insert into public.recurrence_runs (user_id, month_key) values (uid, mkey)
+  on conflict (user_id, month_key) do nothing;
+
+  return inserted;
+end; $$;
+grant execute on function public.ensure_month_recurrences() to authenticated;
+
+-- 22.5 XP justo: lançamento materializado/importado NÃO gera XP por item
+--      (um PDF de fatura não pode inflar nível — "XP só por ação na vida
+--      real"). O gatilho tx_to_life_event passa a carregar a origem no
+--      payload e o award_xp_for_event pula essas origens.
+create or replace function public.tx_to_life_event()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.life_events (user_id, pillar, kind, occurred_at, payload, source, source_table, source_id)
+  values (new.user_id, 'prosperidade', 'transaction', new.occurred_at::timestamptz,
+    jsonb_build_object('amount', new.amount, 'tx_kind', new.kind, 'category', new.category,
+                       'description', new.description, 'tx_source', new.source),
+    'system', 'transactions', new.id)
+  on conflict (source_table, source_id) where source_id is not null do nothing;
+  return new;
+end; $$;
+
+create or replace function public.award_xp_for_event()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare pts int;
+begin
+  -- Recorrência e importação registram a vida sem esforço da pessoa hoje:
+  -- não valem XP por item (o marco da importação tem XP próprio, abaixo).
+  if new.kind = 'transaction'
+     and coalesce(new.payload->>'tx_source', 'manual') in ('recurring','import') then
+    return new;
+  end if;
+  pts := case new.kind
+    when 'habit_done' then 10 when 'workout' then 8 when 'practice' then 8
+    when 'mood' then 5 when 'sleep' then 5 when 'nap' then 2 when 'meal' then 4
+    when 'water' then 2 when 'journal' then 6 when 'weight' then 3 when 'body' then 4
+    when 'gratitude' then 5 when 'transaction' then 2 else 3 end;
+  insert into public.xp_log (user_id, points, reason, event_id)
+  values (new.user_id, pts, case new.kind
+    when 'habit_done' then 'Hábito concluído' when 'workout' then 'Treino registrado'
+    when 'practice' then 'Prática registrada' when 'mood' then 'Humor registrado'
+    when 'sleep' then 'Sono registrado' when 'nap' then 'Soneca registrada'
+    when 'meal' then 'Refeição registrada' when 'water' then 'Hidratação registrada'
+    when 'journal' then 'Entrada no diário' when 'weight' then 'Peso registrado'
+    when 'body' then 'Composição corporal registrada' when 'gratitude' then 'Gratidão registrada'
+    when 'transaction' then 'Lançamento financeiro' else 'Registro: ' || new.kind end,
+    new.id)
+  on conflict (event_id) where event_id is not null do nothing;
+  return new;
+end; $$;
+
+-- 22.6 XP de marco: "mês mapeado" — um único bônus por mês quando a pessoa
+--      importa a fatura (a ação real foi UMA: trazer o documento).
+create or replace function public.award_import_milestone()
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid();
+  mkey text := to_char((now() at time zone 'America/Sao_Paulo')::date, 'YYYY-MM');
+begin
+  if uid is null then return false; end if;
+  if exists (
+    select 1 from public.xp_log
+    where user_id = uid and reason = 'Fatura importada: mês mapeado'
+      and to_char((created_at at time zone 'America/Sao_Paulo')::date, 'YYYY-MM') = mkey
+  ) then return false; end if;
+  insert into public.xp_log (user_id, points, reason)
+  values (uid, 15, 'Fatura importada: mês mapeado');
+  return true;
+end; $$;
+grant execute on function public.award_import_milestone() to authenticated;

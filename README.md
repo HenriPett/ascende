@@ -43,7 +43,7 @@ Este guia leva você do zero ao app no ar, **mesmo que você nunca tenha feito i
 
 ## Passo 4 — Publicar as funções de IA
 
-As funções de IA (Conselheiro, Captura, Briefing e Foto da Refeição) rodam dentro do Supabase. Para publicá-las:
+As funções de IA (Conselheiro, Captura, Briefing, Foto da Refeição e Importação de Fatura) rodam dentro do Supabase. Para publicá-las:
 
 1. Crie sua chave da Anthropic em [console.anthropic.com](https://console.anthropic.com) → **API Keys** → **Create Key** (adicione créditos em Billing, US$ 5 já dá para muito uso).
 2. Abra o **terminal** (Prompt de Comando no Windows) **dentro desta pasta** e rode, um por vez:
@@ -55,7 +55,7 @@ npx supabase login
 (vai abrir o navegador para você autorizar)
 
 ```bash
-npx supabase functions deploy ai-chat capture briefing analyze-meal analyze-body --project-ref SEU_REFERENCE_ID
+npx supabase functions deploy ai-chat capture briefing analyze-meal analyze-body import-statement --project-ref SEU_REFERENCE_ID
 ```
 
 ```bash

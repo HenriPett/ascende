@@ -17,6 +17,7 @@ const FEATURE_LABEL: Record<string, string> = {
   "analyze-meal": "Análise de refeição por foto",
   "analyze-body": "Análise de composição corporal",
   document_analysis: "Análise de documentos (PDF)",
+  statement_import: "Importação de fatura",
   plans: "Planos ativos",
 };
 

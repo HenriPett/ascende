@@ -90,7 +90,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   const todaySpIso = spParts().dateIso;
   const monthStartSpIso = spMonthStartUtc().slice(0, 10);
 
-  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, xpTotalRes, { data: battles }, { data: bCheckins }, { data: plans }, { data: memories }] =
+  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, xpTotalRes, { data: battles }, { data: bCheckins }, { data: plans }, { data: memories }, { data: estimates }, { data: recurrings }] =
     await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       supabase.from("life_events").select("pillar,kind,occurred_at,payload")
@@ -110,6 +110,9 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
         .order("created_at", { ascending: false }).limit(3),
       supabase.from("ai_memories").select("content,category")
         .eq("user_id", userId).order("created_at", { ascending: false }).limit(50),
+      supabase.from("category_estimates").select("category,amount").eq("user_id", userId),
+      supabase.from("recurring_transactions").select("kind,amount,category,description,active")
+        .eq("user_id", userId).eq("active", true),
     ]);
 
   const lines: string[] = [];
@@ -185,6 +188,28 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     .map(([c, v]) => `${c} ${BRL(v)}`).join(", ");
   lines.push(`FINANÇAS (mês atual): entradas ${BRL(income)}, saídas ${BRL(expense)}, saldo ${BRL(income - expense)}.` +
     (topCats ? ` Maiores gastos: ${topCats}.` : ""));
+
+  // Camada 2: fixos recorrentes (compromissos do mês, cadastrados uma vez)
+  const recs = (recurrings ?? []) as { kind: string; amount: number; category: string; description: string | null }[];
+  if (recs.length) {
+    const recTotal = recs.filter((r) => r.kind === "expense").reduce((s, r) => s + Number(r.amount), 0);
+    const recList = recs.filter((r) => r.kind === "expense").slice(0, 8)
+      .map((r) => `${r.description || r.category} ${BRL(Number(r.amount))}`).join(", ");
+    lines.push(`GASTOS FIXOS RECORRENTES: ${BRL(recTotal)}/mês comprometidos (${recList}). Já estão materializados nas saídas do mês.`);
+  }
+
+  // Camada 1: estimativas declaradas pela pessoa (Raio-X). São PREMISSAS,
+  // não registros — o real do mês substitui a estimativa, nunca soma.
+  const ests = (estimates ?? []) as { category: string; amount: number }[];
+  if (ests.length) {
+    const estList = ests.slice(0, 8).map((e) => `${e.category} ~${BRL(Number(e.amount))}/mês`).join(", ");
+    lines.push(
+      `ESTIMATIVAS DECLARADAS PELA PESSOA (não são registros): ${estList}. ` +
+      `Use-as como premissas quando os registros reais do mês forem escassos, citando a origem ("com base na sua estimativa de mercado..."), em vez de dizer que faltam dados. ` +
+      `Regra de composição por categoria: considere max(gasto real do mês, estimativa) — nunca some os dois. ` +
+      `Para o "plano alimentar que cabe no bolso", a estimativa de Mercado/Alimentação fora é base suficiente para uma primeira versão com premissas declaradas.`
+    );
+  }
   }
 
   // Hábitos e consistência (últimos 30 dias)
