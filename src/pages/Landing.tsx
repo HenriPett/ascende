@@ -342,7 +342,7 @@ export default function Landing() {
                 recomenda investimentos — ele organiza, conecta e aponta o próximo degrau.
               </p>
               <p className="mt-2 text-xs text-white/50">
-                No plano gratuito: 5 mensagens por semana. A análise de PDFs e o briefing diário
+                No plano gratuito: 15 mensagens por semana. A análise de PDFs e o briefing diário
                 fazem parte do Ascende+ — a comparação completa está mais abaixo.
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
@@ -406,7 +406,7 @@ export default function Landing() {
                 "Registros manuais, hábitos e batalhas sem limite",
                 "Diário, hidratação, XP, níveis e gráficos básicos",
                 "Captura inteligente: 3 por dia",
-                "Conselheiro: 5 mensagens por semana",
+                "Conselheiro: 15 mensagens por semana",
                 "2 análises de refeição por mês",
                 "Retrospectiva da semana todo domingo",
                 "1 plano ativo · 20 memórias do Conselheiro",

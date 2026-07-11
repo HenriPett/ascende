@@ -15,7 +15,7 @@ const FREE_FEATURES = [
   "Registros manuais, hábitos e batalhas sem limite",
   "Diário, hidratação, XP e níveis, gráficos básicos",
   "Captura inteligente: 3 por dia",
-  "Conselheiro: 5 mensagens por semana",
+  "Conselheiro: 15 mensagens por semana",
   "2 análises de refeição por mês",
   "Retrospectiva toda semana (domingo)",
   "1 plano ativo · 20 memórias do Conselheiro",
