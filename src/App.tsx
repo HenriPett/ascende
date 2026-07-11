@@ -23,6 +23,7 @@ const Score = lazy(() => import("@/pages/Score"));
 const Batalhas = lazy(() => import("@/pages/Batalhas"));
 const Planos = lazy(() => import("@/pages/Planos"));
 const Legal = lazy(() => import("@/pages/Legal"));
+const Recusas = lazy(() => import("@/pages/Recusas"));
 const Ajustes = lazy(() => import("@/pages/Ajustes"));
 const Assinatura = lazy(() => import("@/pages/Assinatura"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="/privacidade" element={<Legal doc="privacidade" />} />
             <Route path="/termos" element={<Legal doc="termos" />} />
             <Route path="/aviso-legal" element={<Legal doc="aviso-legal" />} />
+            <Route path="/recusas" element={<Recusas />} />
             <Route
               path="/onboarding"
               element={<RequireAuth><Onboarding /></RequireAuth>}

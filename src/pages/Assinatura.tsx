@@ -1,7 +1,7 @@
 // Página da assinatura: plano atual, comparação Gratuito × Ascende+,
 // checkout do Stripe e portal do cliente. Limites reais vêm do servidor.
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -89,6 +89,11 @@ export default function Assinatura() {
         <p className="text-sm text-muted-foreground">
           O Ascende é gratuito para sempre no essencial. O Ascende+ amplia os recursos de IA.
         </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Por que existe um plano pago? Porque a alternativa seria vender seus dados ou a sua
+          atenção — e essas duas portas{" "}
+          <Link to="/recusas" className="underline underline-offset-2">estão fechadas</Link>.
+        </p>
       </div>
 
       {/* Estado atual */}
@@ -167,6 +172,8 @@ export default function Assinatura() {
         Ao encerrar a assinatura você não perde nada: seus registros, relatórios e memórias
         continuam com você; planos e memórias além do limite gratuito ficam arquivados
         (somente leitura) e voltam ao reativar. Cancelamento a qualquer momento pelo portal.
+        Sem chantagem — está assinado na nossa página{" "}
+        <Link to="/recusas" className="underline underline-offset-2">O que o Ascende recusa</Link>.
       </p>
     </div>
   );

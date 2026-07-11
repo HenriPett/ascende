@@ -35,6 +35,8 @@ function CreateBattle({ onCreated }: { onCreated: () => void }) {
   const [saving, setSaving] = useState(false);
 
   const foodWarning = isFoodBattle(name);
+  // O "não às bets" dito no ponto de contato onde ele custa (página /recusas, item 2).
+  const betsBattle = /apost|\bbets?\b|raspadinha|tigrinho/i.test(name);
 
   const applyTemplate = (t: (typeof BATTLE_TEMPLATES)[number]) => {
     setName(t.name);
@@ -127,6 +129,17 @@ function CreateBattle({ onCreated }: { onCreated: () => void }) {
               <Button asChild size="sm" variant="outline">
                 <Link to="/app/vitalidade">Criar hábito positivo</Link>
               </Button>
+            </div>
+          )}
+
+          {betsBattle && !foodWarning && (
+            <div className="rounded-md border border-gold/40 bg-gold/5 p-3 text-sm space-y-1">
+              <p className="font-medium">Você não está sozinho nessa</p>
+              <p className="text-muted-foreground text-xs">
+                O Ascende jamais aceitará anúncio de casa de aposta — seria lucrar duas vezes
+                com a sua queda. Esta batalha é sua, e nós estamos do seu lado dela. É promessa
+                pública, assinada na nossa página <a href="/recusas" target="_blank" rel="noreferrer" className="underline underline-offset-2">O que o Ascende recusa</a>.
+              </p>
             </div>
           )}
 

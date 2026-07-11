@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { PILLARS } from "@/lib/pillars";
 import {
   ArrowRight, Lock, Sparkles, MessageCircle, TrendingUp, Moon,
-  UtensilsCrossed, Check, Camera, LineChart, BookOpen, Mic, ScanLine, Paperclip,
+  UtensilsCrossed, Check, Camera, Mic, ScanLine, Paperclip, Swords, ShieldCheck,
 } from "lucide-react";
 import Logo from "@/components/core/Logo";
 
 /* ─────────────────────────────────────────────────────────────────
    Demo animado da captura: a frase é "digitada" e vira registros
    nos pilares certos. É o produto real, mostrado — não prometido.
+   Os dois primeiros ciclos são a cena do cliente-alavanca:
+   corpo + dinheiro, no orçamento real.
 ────────────────────────────────────────────────────────────────── */
 const DEMOS = [
   {
@@ -20,6 +23,13 @@ const DEMOS = [
       { label: "Gasto de R$ 47 · Mercado", pillar: "prosperidade" },
       { label: "Treino de pernas", pillar: "vitalidade" },
       { label: "Sono: 6h", pillar: "vitalidade" },
+    ],
+  },
+  {
+    text: "Recebi 800 de um freela, tô me sentindo ótimo hoje",
+    events: [
+      { label: "Entrada de R$ 800 · Extra", pillar: "prosperidade" },
+      { label: "Humor: ótimo", pillar: "mente" },
     ],
   },
   {
@@ -34,13 +44,6 @@ const DEMOS = [
     events: [
       { label: "Refeição: frango com salada", pillar: "alimentacao" },
       { label: "Prática: oração", pillar: "mente" },
-    ],
-  },
-  {
-    text: "Recebi 800 de um freela, tô me sentindo ótimo hoje",
-    events: [
-      { label: "Entrada de R$ 800 · Extra", pillar: "prosperidade" },
-      { label: "Humor: ótimo", pillar: "mente" },
     ],
   },
 ];
@@ -107,6 +110,113 @@ function CaptureDemo() {
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   Demo INTERATIVA sem login: a pessoa digita a própria frase e um
+   parser local (heurístico, roda no navegador — nenhuma chamada de
+   IA, nenhum dado sai da página) separa os registros. Serve para
+   "sentir" o produto em 30 segundos; a IA de verdade entende muito
+   mais e é apresentada como o passo seguinte.
+────────────────────────────────────────────────────────────────── */
+interface LocalEvent { label: string; pillar: string }
+
+function parseLocalEvents(raw: string): LocalEvent[] {
+  const t = raw.toLowerCase();
+  const events: LocalEvent[] = [];
+  const money = (m: RegExpMatchArray | null) => (m ? m[1].replace(".", ",") : null);
+
+  const gasto = money(t.match(/(?:gastei|paguei|comprei|torrei)[^\d]{0,24}(\d+(?:[.,]\d{1,2})?)/));
+  if (gasto) events.push({ label: `Gasto de R$ ${gasto}`, pillar: "prosperidade" });
+
+  const entrada = money(t.match(/(?:recebi|ganhei|caiu|entrou)[^\d]{0,24}(\d+(?:[.,]\d{1,2})?)/));
+  if (entrada) events.push({ label: `Entrada de R$ ${entrada}`, pillar: "prosperidade" });
+
+  if (/trein|academ|corri\b|corrida|caminhad|pedal|muscula|nata[çc][ãa]o|yoga|alonga|alongu/.test(t))
+    events.push({ label: "Treino registrado", pillar: "vitalidade" });
+
+  const sono = t.match(/dormi[^\d]{0,10}(\d+(?:[.,]\d)?)\s*h?/);
+  if (sono) events.push({ label: `Sono: ${sono[1].replace(".", ",")}h`, pillar: "vitalidade" });
+
+  if (/almo[çc]|jant|lanch|caf[ée] da manh|refei[çc]|comi\b/.test(t))
+    events.push({ label: "Refeição registrada", pillar: "alimentacao" });
+
+  const agua = t.match(/(\d+(?:[.,]\d+)?)\s*l(?:itros?)?\b/);
+  if (/[áa]gua/.test(t))
+    events.push({ label: agua ? `Água: ${agua[1].replace(".", ",")}L` : "Hidratação registrada", pillar: "alimentacao" });
+
+  if (/or(?:ei|a[çc][ãa]o)|medit|culto|devocional|ter[çc]o|gratid[ãa]o/.test(t))
+    events.push({ label: "Prática registrada", pillar: "mente" });
+
+  if (/me sentindo|humor|ansios|estressad|feliz|triste|cansad|[óo]timo|exaust/.test(t))
+    events.push({ label: "Humor registrado", pillar: "mente" });
+
+  return events;
+}
+
+function TryItDemo() {
+  const [text, setText] = useState("");
+  const [result, setResult] = useState<LocalEvent[] | null>(null);
+
+  const run = () => {
+    if (!text.trim()) return;
+    setResult(parseLocalEvents(text));
+  };
+
+  return (
+    <div className="rounded-2xl border bg-card p-5 text-left max-w-md w-full mx-auto mt-4">
+      <p className="text-xs font-medium text-muted-foreground mb-3">
+        Agora tente com o <strong>seu</strong> dia — direto aqui, sem conta:
+      </p>
+      <div className="flex gap-2">
+        <Input
+          value={text}
+          maxLength={140}
+          onChange={(e) => { setText(e.target.value); setResult(null); }}
+          onKeyDown={(e) => { if (e.key === "Enter") run(); }}
+          placeholder="gastei 62 no mercado e fiz 40min de treino"
+          aria-label="Escreva uma frase sobre o seu dia"
+        />
+        <Button type="button" onClick={run} className="shrink-0">Separar</Button>
+      </div>
+
+      {result !== null && (
+        <div className="mt-3 space-y-1.5">
+          {result.length > 0 ? (
+            <>
+              {result.map((ev, i) => {
+                const meta = PILLARS.find((p) => p.id === ev.pillar)!;
+                return (
+                  <div key={i} className="flex items-center gap-2.5 rounded-md border p-2.5 animate-fade-up">
+                    <Check className="w-4 h-4 text-success shrink-0" />
+                    <span className="text-sm flex-1">{ev.label}</span>
+                    <span
+                      className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                      style={{ background: `hsl(var(${meta.colorVar}) / 0.12)`, color: `hsl(var(${meta.colorVar}))` }}
+                    >
+                      {meta.name}
+                    </span>
+                  </div>
+                );
+              })}
+              <p className="text-[11px] text-muted-foreground pt-1">
+                Prévia simplificada, feita no seu navegador. A IA completa entende valores,
+                categorias, macros e contexto — e registra de verdade.{" "}
+                <Link to="/auth" className="underline underline-offset-2 text-foreground">Criar conta grátis</Link>
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground rounded-md border p-2.5">
+              Essa frase a prévia local não pegou — mas a IA completa entende. Conte ações do dia
+              (gastos, treino, sono, refeições, humor) ou{" "}
+              <Link to="/auth" className="underline underline-offset-2 text-foreground">crie a conta grátis</Link>{" "}
+              e teste com a frase que quiser.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Landing() {
   return (
     <div className="min-h-dvh bg-background bg-ether overflow-x-clip">
@@ -143,9 +253,9 @@ export default function Landing() {
             em aplicativos.
           </h1>
           <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto animate-fade-up">
-            Sua dieta depende do seu orçamento. Seu gasto por impulso depende do seu sono.
-            Sua paz depende de tudo isso junto. O Ascende é o único lugar onde essas peças
-            se encontram — com uma IA que conhece o quadro inteiro.
+            Sua dieta depende do seu salário. Seu gasto por impulso depende do seu sono.
+            O Ascende monta o plano do seu corpo dentro do seu orçamento — porque é o
+            único app que vê a sua vida inteira.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up">
             <Button asChild size="lg" className="px-9 h-12 text-base">
@@ -156,6 +266,7 @@ export default function Landing() {
 
           <div className="mt-12 md:mt-16">
             <CaptureDemo />
+            <TryItDemo />
           </div>
           <div className="ascend-line mt-14 max-w-lg mx-auto" aria-hidden />
         </div>
@@ -170,8 +281,9 @@ export default function Landing() {
         </h2>
         <p className="mt-5 text-muted-foreground max-w-2xl mx-auto">
           O app de dieta não sabe quanto você ganha. O de finanças não sabe que você dormiu mal.
-          O de meditação não sabe que a fatura chegou. Cada um enxerga um pedaço — e as decisões
-          que realmente mudam sua vida acontecem exatamente nas conexões que eles não veem.
+          E nenhum dos dois sabe que a academia e o mercado disputam o mesmo salário. Cada um
+          enxerga um pedaço — e as decisões que realmente mudam sua vida acontecem exatamente
+          nas conexões que eles não veem.
         </p>
 
         <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
@@ -240,63 +352,51 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Ferramentas que fazem o trabalho pesado ─── */}
-      <section className="container py-16 md:py-24 max-w-4xl">
-        <h2 className="font-display text-3xl md:text-4xl font-semibold text-center">
-          Registrar não pode ser um segundo emprego.
+      {/* ─── A contradição rica, nomeada ─── */}
+      <section id="10segundos" className="container py-16 md:py-24 max-w-3xl text-center">
+        <h2 className="font-display text-3xl md:text-4xl font-semibold leading-tight">
+          Feito para você usar 10 segundos por dia.
+          <br />
+          <span className="text-gold">E ir viver.</span>
         </h2>
-        <p className="text-center text-muted-foreground mt-3 mb-10 max-w-xl mx-auto">
-          Por isso o Ascende faz o trabalho chato por você — de foto, de voz ou de conversa.
+        <p className="mt-5 text-muted-foreground max-w-2xl mx-auto">
+          Todo app quer mais do seu tempo. O Ascende foi desenhado para o contrário:
+          briefing 1 vez por dia, sequência com dia de descanso embutido, XP que premia
+          constância e não perfeição. A gente ganha quando a sua vida melhora — nunca
+          quando você fica mais tempo na tela.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {[
-            {
-              icon: Camera,
-              title: "Foto do prato → calorias",
-              desc: "Tire uma foto da refeição e a IA estima calorias e macros na hora. Você ajusta, confirma, pronto.",
-            },
-            {
-              icon: ScanLine,
-              title: "Composição corporal por foto",
-              desc: "Uma foto de corpo inteiro gera uma estimativa honesta (em faixa) de gordura e massa magra. A foto não fica salva.",
-            },
-            {
-              icon: LineChart,
-              title: "Gráficos que contam sua história",
-              desc: "Evolução do peso com meta e tendência, finanças mês a mês, projeção do seu próprio padrão e o mapa do corpo treinado.",
-            },
-            {
-              icon: Mic,
-              title: "Fale, anexe, pergunte",
-              desc: "O Conselheiro aceita voz, fotos, PDFs e documentos. Mande a fatura do cartão e pergunte o que quiser.",
-            },
-            {
-              icon: BookOpen,
-              title: "Diário com a sua cara",
-              desc: "Um espaço para os pensamentos do dia, na cor que você escolher. Escrever também sobe a montanha.",
-            },
-            {
-              icon: Moon,
-              title: "Claro ou escuro",
-              desc: "Amanhecer ou noite na montanha — o tema acompanha o sistema ou o seu gosto.",
-            },
-          ].map((c) => (
-            <div key={c.title} className="rounded-xl border bg-card p-5">
-              <c.icon className="w-5 h-5 text-gold mb-3" />
-              <h3 className="font-semibold text-sm">{c.title}</h3>
-              <p className="text-sm text-muted-foreground mt-1">{c.desc}</p>
-            </div>
-          ))}
+      </section>
+
+      {/* ─── Batalhas ─── */}
+      <section className="border-y bg-card/50">
+        <div className="container py-16 md:py-24 max-w-3xl text-center">
+          <Swords className="w-7 h-7 text-gold mx-auto mb-4" />
+          <h2 className="font-display text-3xl md:text-4xl font-semibold">
+            Batalhas: para o que rouba
+            <br />
+            seu dinheiro e sua energia.
+          </h2>
+          <p className="mt-5 text-muted-foreground max-w-2xl mx-auto">
+            Compras por impulso, apostas, redes sociais, álcool. Você declara a batalha
+            (com nome discreto, se quiser), define seus gatilhos e tem um plano de
+            emergência a um toque. Dias limpos acumulam para sempre: uma recaída não
+            apaga a subida.
+          </p>
+          <p className="mt-4 text-sm italic text-muted-foreground max-w-xl mx-auto">
+            E uma promessa: jamais aceitaremos anúncio de casa de aposta. Seria lucrar
+            duas vezes com a sua queda.
+          </p>
         </div>
       </section>
 
       {/* ─── Pilares ─── */}
       <section className="container py-16 md:py-24 max-w-4xl">
         <h2 className="font-display text-3xl md:text-4xl font-semibold text-center">
-          Quatro pilares. Uma vida só.
+          Uma vida só. Quatro pilares.
         </h2>
         <p className="text-center text-muted-foreground mt-3 mb-10 max-w-xl mx-auto">
-          Comece por um, por dois ou pelos quatro — o tamanho do primeiro passo é seu.
+          A maioria entra pelo corpo e pelo dinheiro. O resto você descobre no caminho:
+          quando o sono aparece nos seus gastos, o Ascende já estava vendo.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {PILLARS.map((p) => (
@@ -334,12 +434,14 @@ export default function Landing() {
                 Uma IA que conhece a sua vida — não a média das vidas.
               </h2>
               <p className="mt-4 text-white/75">
-                Pergunte "quanto posso gastar com lazer sem me apertar?" ou "monte um treino
-                que respeite meu sono desta semana". As respostas vêm dos seus números, dos seus
-                hábitos e do seu momento. Fale por voz, anexe fotos e PDFs — e se você contar
+                Peça "monte um plano alimentar para ganho de massa que caiba no meu orçamento"
+                e a resposta vem dos seus números: sua meta, seus gastos com comida, sua renda.
+                Nenhum nutricionista de app e nenhum app de finanças faz isso sozinho — porque
+                nenhum deles vê os dois lados. Fale por voz, anexe fotos e PDFs; se você contar
                 que treinou costas ou gastou 30 no almoço, ele já separa os registros para você
-                confirmar. Com limites claros: o Conselheiro não diagnostica, não prescreve e não
-                recomenda investimentos — ele organiza, conecta e aponta o próximo degrau.
+                confirmar. E com limites que são princípio, não letra miúda: o Conselheiro não
+                diagnostica, não prescreve e não recomenda investimentos — ele organiza, conecta
+                e aponta o próximo degrau.
               </p>
               <p className="mt-2 text-xs text-white/50">
                 No plano gratuito: 15 mensagens por semana. A análise de PDFs e o briefing diário
@@ -360,7 +462,7 @@ export default function Landing() {
             <div className="space-y-2.5">
               {[
                 "Monte um plano alimentar para ganho de massa que caiba no meu orçamento",
-                "Como está minha vida esta semana?",
+                "Onde meu plano alimentar pode ficar mais barato este mês?",
                 "O que meus dados dizem que eu deveria melhorar primeiro?",
               ].map((q) => (
                 <div key={q} className="flex items-start gap-2.5 rounded-xl bg-white/10 border border-white/15 p-4">
@@ -373,7 +475,42 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── Privacidade ─── */}
+      {/* ─── Registrar sem esforço (3 provas do "inteiro") ─── */}
+      <section className="container py-16 md:py-24 max-w-4xl">
+        <h2 className="font-display text-3xl md:text-4xl font-semibold text-center">
+          Registrar não pode ser um segundo emprego.
+        </h2>
+        <p className="text-center text-muted-foreground mt-3 mb-10 max-w-xl mx-auto">
+          Por isso o Ascende faz o trabalho chato por você — de foto, de voz ou de conversa.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            {
+              icon: Camera,
+              title: "Foto do prato → calorias",
+              desc: "Tire uma foto da refeição e a IA estima calorias e macros na hora. Você ajusta, confirma, pronto.",
+            },
+            {
+              icon: ScanLine,
+              title: "Composição corporal por foto",
+              desc: "Uma foto de corpo inteiro gera uma estimativa honesta (em faixa) de gordura e massa magra. A foto não fica salva.",
+            },
+            {
+              icon: Mic,
+              title: "Fale, anexe, pergunte",
+              desc: "O Conselheiro aceita voz, fotos, PDFs e documentos. Mande a fatura do cartão e pergunte: \u201Conde meu plano alimentar pode ficar mais barato?\u201D",
+            },
+          ].map((c) => (
+            <div key={c.title} className="rounded-xl border bg-card p-5">
+              <c.icon className="w-5 h-5 text-gold mb-3" />
+              <h3 className="font-semibold text-sm">{c.title}</h3>
+              <p className="text-sm text-muted-foreground mt-1">{c.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ─── Privacidade + os nossos "nãos" ─── */}
       <section className="container py-16 md:py-24 max-w-3xl text-center">
         <Lock className="w-7 h-7 text-gold mx-auto mb-4" />
         <h2 className="font-display text-3xl md:text-4xl font-semibold">
@@ -387,6 +524,20 @@ export default function Landing() {
           é dela — e você pode apagar tudo, de verdade, quando quiser. Fotos enviadas para
           análise são processadas e descartadas, não armazenadas.
         </p>
+        <div className="mt-8 rounded-xl border bg-card p-5 text-left max-w-xl mx-auto">
+          <p className="flex items-center gap-2 text-sm font-semibold">
+            <ShieldCheck className="w-4 h-4 text-gold" /> Três "nãos" que assinamos em público
+          </p>
+          <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+            <li className="flex gap-2"><Check className="w-4 h-4 text-success shrink-0 mt-0.5" /><span>Nunca venderemos seus dados — nem "anonimizados".</span></li>
+            <li className="flex gap-2"><Check className="w-4 h-4 text-success shrink-0 mt-0.5" /><span>Nunca aceitaremos anúncios. De ninguém. Muito menos de bets.</span></li>
+            <li className="flex gap-2"><Check className="w-4 h-4 text-success shrink-0 mt-0.5" /><span>Nunca usaremos notificação de culpa nem streak que pune sua semana ruim.</span></li>
+          </ul>
+          <p className="mt-3 text-xs text-muted-foreground">
+            A lista completa, com o porquê de cada um, está em{" "}
+            <Link to="/recusas" className="underline underline-offset-2 text-foreground">O que o Ascende recusa</Link>.
+          </p>
+        </div>
       </section>
 
       {/* ─── Planos: o que é grátis e o que é Ascende+ ─── */}
@@ -394,8 +545,12 @@ export default function Landing() {
         <h2 className="font-display text-3xl md:text-4xl font-semibold text-center">
           Grátis para sempre no essencial.
         </h2>
-        <p className="text-center text-muted-foreground mt-3 mb-10 max-w-xl mx-auto">
+        <p className="text-center text-muted-foreground mt-3 max-w-xl mx-auto">
           Registrar a vida nunca terá preço. O Ascende+ amplia os recursos de inteligência artificial.
+        </p>
+        <p className="text-center text-xs text-muted-foreground mt-2 mb-10 max-w-xl mx-auto">
+          Por que existe um plano pago? Porque a alternativa seria vender seus dados ou a sua
+          atenção — e essas duas portas <Link to="/recusas" className="underline underline-offset-2">estão fechadas</Link>.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="rounded-xl border bg-card p-6">
@@ -470,8 +625,9 @@ export default function Landing() {
             <AccordionItem value="q2">
               <AccordionTrigger className="text-left">Preciso organizar a vida inteira de uma vez?</AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
-                Não — e é melhor que não. Você escolhe por onde começar (de um pilar aos quatro) e ativa o
-                resto quando fizer sentido. O Ascende premia consistência, não ambição de primeiro dia.
+                Não. A maioria começa pelo corpo e pelo dinheiro — o plano alimentar dentro do orçamento
+                é o primeiro "uau" de quase todo mundo. Os outros pilares você ativa quando fizer sentido.
+                O Ascende premia consistência, não ambição de primeiro dia.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="q3">
@@ -495,7 +651,8 @@ export default function Landing() {
               <AccordionContent className="text-muted-foreground">
                 Seus registros são seus. Cada conta só acessa os próprios dados, nada é vendido ou usado para
                 anúncios, fotos analisadas pela IA não são armazenadas — e você pode solicitar a exclusão
-                total da conta quando quiser, sem cópias.
+                total da conta quando quiser, sem cópias. Nossos compromissos públicos estão em{" "}
+                <Link to="/recusas" className="underline underline-offset-2 text-foreground">O que o Ascende recusa</Link>.
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -525,6 +682,7 @@ export default function Landing() {
             difícil, o CVV atende 24h pelo telefone 188.
           </p>
           <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-4 text-xs">
+            <Link to="/recusas" className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">O que o Ascende recusa</Link>
             <Link to="/privacidade" className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">Política de Privacidade</Link>
             <Link to="/termos" className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">Termos e Condições</Link>
             <Link to="/aviso-legal" className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">Aviso Legal</Link>

@@ -1,6 +1,6 @@
-# Ascende — Suba de nível na vida real
+# Ascende — O app que vê a sua vida inteira
 
-Hub de qualidade de vida com IA: Prosperidade, Vitalidade, Alimentação e Mente & Espírito no mesmo lugar, com um Conselheiro que enxerga tudo isso ao mesmo tempo.
+Você conta seu dia numa frase ("gastei 47 no mercado, treinei pernas e dormi 6h") e o Ascende registra tudo nos lugares certos. Corpo, dinheiro, alimentação e mente no mesmo lugar, com um Conselheiro que monta, por exemplo, o plano alimentar que cabe no seu orçamento — porque é o único que conhece os dois lados.
 
 Este guia leva você do zero ao app no ar, **mesmo que você nunca tenha feito isso antes**. São 5 passos. Reserve ~30 minutos.
 

@@ -47,12 +47,18 @@ export default function Paywall({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-gold" /> Limite de hoje atingido
+            <Sparkles className="w-5 h-5 text-gold" /> Você chegou no limite de hoje — e ele existe de propósito
           </DialogTitle>
           <DialogDescription>
             {info.error} {resetLabel && <>Renova em <strong>{resetLabel}</strong>.</>}
           </DialogDescription>
         </DialogHeader>
+
+        <p className="text-sm text-muted-foreground">
+          O Ascende não vive da sua atenção infinita nem dos seus dados. Vive de assinatura.
+          É por isso que os limites existem — e é por isso que dá para confiar no que o
+          Conselheiro diz.
+        </p>
 
         <div className="rounded-lg border p-3 space-y-1.5 text-sm">
           <p><span className="text-muted-foreground">Recurso:</span> <strong>{label}</strong></p>
@@ -80,6 +86,10 @@ export default function Paywall({
         </div>
         <p className="text-[11px] text-muted-foreground">
           Registros manuais, hábitos, exportação e privacidade continuam sempre gratuitos.
+          Nossos compromissos públicos estão em{" "}
+          <a href="/recusas" target="_blank" rel="noreferrer" className="underline underline-offset-2">
+            O que o Ascende recusa
+          </a>.
         </p>
       </DialogContent>
     </Dialog>
