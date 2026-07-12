@@ -11,6 +11,7 @@ import AppLayout from "@/components/core/AppLayout";
 // (primeira visita); cada página do app vira um chunk próprio.
 import Landing from "@/pages/Landing";
 import Auth from "@/pages/Auth";
+const AuthCallback = lazy(() => import("@/pages/AuthCallback"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
 const Hoje = lazy(() => import("@/pages/Hoje"));
 const Chat = lazy(() => import("@/pages/Chat"));
@@ -64,6 +65,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/privacidade" element={<Legal doc="privacidade" />} />
             <Route path="/termos" element={<Legal doc="termos" />} />
             <Route path="/aviso-legal" element={<Legal doc="aviso-legal" />} />

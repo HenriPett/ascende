@@ -58,6 +58,18 @@ npx supabase login
 npx supabase functions deploy ai-chat capture briefing analyze-meal analyze-body import-statement --project-ref SEU_REFERENCE_ID
 ```
 
+### Login com Google (opcional, recomendado)
+
+O app tem o botão "Continuar com Google" pronto — ele só aparece funcional depois desta configuração (sem ela, o botão mostra um erro amigável ao ser tocado):
+
+1. **Google Cloud Console** ([console.cloud.google.com](https://console.cloud.google.com)) → crie/selecione um projeto → **APIs & Services → OAuth consent screen**: tipo _External_, nome "Ascende", seu e-mail de suporte e domínio; em _Scopes_ não adicione nada além do básico (`email`/`profile` já são padrão); publique (_Publish app_).
+2. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → tipo _Web application_. Em **Authorized redirect URIs**, cole a URL de callback exibida no painel do Supabase (formato `https://SEU_REFERENCE_ID.supabase.co/auth/v1/callback`). Guarde o **Client ID** e o **Client Secret**.
+3. **Supabase → Authentication → Providers → Google**: ative, cole Client ID e Client Secret, salve.
+4. **Supabase → Authentication → URL Configuration**: em _Site URL_, seu domínio de produção; em _Redirect URLs_, adicione `https://SEU_DOMINIO/auth/callback` e, para desenvolvimento, `http://localhost:5173/auth/callback`.
+5. Pronto — o consentimento LGPD é coletado pelo próprio app na volta do Google (rota `/auth/callback`), e contas Google com o mesmo e-mail de uma conta e-mail/senha verificada são vinculadas automaticamente pelo Supabase.
+
+_(Apple Sign-In fica para uma fase futura: exige Apple Developer Program — US$ 99/ano — e o client secret expira a cada 6 meses. O código já está preparado; basta configurar o provider e ligar o botão em `Auth.tsx`.)_
+
 > **Confirmação de e-mail (decisão de fundador):** com a confirmação ativa no Supabase
 > (Authentication → Providers → Email), o app mostra uma tela dedicada de "confirme seu
 > e-mail" com reenvio. Para signup sem fricção (o usuário cai direto no onboarding),

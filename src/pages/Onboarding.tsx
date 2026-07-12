@@ -54,12 +54,17 @@ function consumeLandingPhrase(): string {
 export default function Onboarding() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { profile, refresh } = useProfile();
+  const { profile, refresh, loading: profileLoading } = useProfile();
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
   const [goal, setGoal] = useState("");
+  // Login social pode chegar sem nome (a Apple, por ex., nem sempre envia).
+  // Só mostramos o campo quando o perfil está vazio — quem veio do Google
+  // (nome automático) ou do cadastro por e-mail não vê fricção nova.
+  const [displayName, setDisplayName] = useState("");
+  const needsName = !profileLoading && !(profile?.name ?? "").trim();
   const [selected, setSelected] = useState<PillarId[]>(DEFAULT_PILLARS);
   const [landingPhrase] = useState(consumeLandingPhrase);
   const [captured, setCaptured] = useState(false);
@@ -72,12 +77,14 @@ export default function Onboarding() {
     setSaving(true);
     try {
       const withMente = selected.includes("mente");
-      const { error } = await supabase.from("profiles").update({
+      const patch: Record<string, unknown> = {
         goal: goal.trim() || null,
         pillars: selected,
         spirituality_label: withMente ? DEFAULT_PRACTICE : null,
         onboarded: true,
-      }).eq("user_id", user.id);
+      };
+      if (needsName && displayName.trim()) patch.name = displayName.trim().slice(0, 80);
+      const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
       if (error) throw error;
 
       // Atualiza o cache do perfil na hora, para o guard já ler onboarded=true
@@ -90,6 +97,7 @@ export default function Onboarding() {
               pillars: selected,
               spirituality_label: withMente ? DEFAULT_PRACTICE : null,
               onboarded: true,
+              ...(needsName && displayName.trim() ? { name: displayName.trim().slice(0, 80) } : {}),
             }
           : old
       );
@@ -113,6 +121,15 @@ export default function Onboarding() {
           Em uma frase, no seu jeito. A IA vai usar isso como bússola em tudo que sugerir.
         </p>
       </div>
+      {needsName && (
+        <Input
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          maxLength={80}
+          placeholder="Antes: como você quer ser chamado(a)?"
+          aria-label="Seu nome ou apelido"
+        />
+      )}
       <Input
         value={goal}
         onChange={(e) => setGoal(e.target.value)}
