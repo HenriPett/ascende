@@ -66,7 +66,11 @@ O app tem o botão "Continuar com Google" pronto — ele só aparece funcional d
 2. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → tipo _Web application_. Em **Authorized redirect URIs**, cole a URL de callback exibida no painel do Supabase (formato `https://SEU_REFERENCE_ID.supabase.co/auth/v1/callback`). Guarde o **Client ID** e o **Client Secret**.
 3. **Supabase → Authentication → Providers → Google**: ative, cole Client ID e Client Secret, salve.
 4. **Supabase → Authentication → URL Configuration**: em _Site URL_, seu domínio de produção; em _Redirect URLs_, adicione `https://SEU_DOMINIO/auth/callback` e, para desenvolvimento, `http://localhost:5173/auth/callback`.
-5. Pronto — o consentimento LGPD é coletado pelo próprio app na volta do Google (rota `/auth/callback`), e contas Google com o mesmo e-mail de uma conta e-mail/senha verificada são vinculadas automaticamente pelo Supabase.
+5. **No mesmo OAuth Client do passo 2**, preencha também **Authorized JavaScript origins** com as origens do app: `https://SEU_DOMINIO` e `http://localhost:5173`. Isso habilita o modo **sem redirect** (Google Identity Services), que é o que funciona dentro do app instalado (PWA).
+6. **No `.env` do projeto**, adicione `VITE_GOOGLE_CLIENT_ID` com o Client ID do passo 2 (é público por natureza — não é segredo). Com ele presente, o app usa o botão oficial do Google com `signInWithIdToken` (a sessão nasce na própria janela — sem redirect, sem sair do app instalado). Sem ele, o app cai no fluxo de redirect, que funciona no navegador mas **não** no PWA instalado (a volta do Google abre no navegador em vez do app; no iOS a sessão nem chega, pois o storage é separado).
+7. Pronto — o consentimento LGPD é coletado pelo próprio app (rota `/auth/callback`), e contas Google com o mesmo e-mail de uma conta e-mail/senha verificada são vinculadas automaticamente pelo Supabase.
+
+> Nota iOS: PWA instalado no iOS é o terreno mais hostil do ecossistema para OAuth. O fluxo por ID token é o que tem melhor comportamento; se o popup do Google for bloqueado em algum iOS antigo, oriente o login uma vez pelo Safari — a conta é a mesma.
 
 _(Apple Sign-In fica para uma fase futura: exige Apple Developer Program — US$ 99/ano — e o client secret expira a cada 6 meses. O código já está preparado; basta configurar o provider e ligar o botão em `Auth.tsx`.)_
 

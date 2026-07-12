@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,6 +12,8 @@ import { LEGAL_VERSION } from "@/lib/legal";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2, MailCheck, Sparkles, Check } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { loadGis, makeNoncePair } from "@/lib/googleIdentity";
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -41,13 +43,84 @@ export default function Auth() {
   };
 
   useEffect(() => {
-    if (!authLoading && user) navigate("/app", { replace: true });
+    // Já logado visitando /auth: rota pelo /auth/callback, que aplica o gate
+    // de consentimento quando faltar e decide onboarding × app.
+    if (!authLoading && user) navigate("/auth/callback", { replace: true });
   }, [user, authLoading, navigate]);
 
   // ── Login social (Fase 1: Google; Apple pronto para ligar na Fase 2) ──
   // O consentimento LGPD acontece no /auth/callback (gate) — por isso o
   // botão NÃO depende do checkbox de termos desta tela.
+  //
+  // MÉTODO PRINCIPAL: GIS + signInWithIdToken (sem redirect de página).
+  // Motivo: no app instalado (PWA), o redirect volta no NAVEGADOR e não na
+  // janela do app — a sessão nunca chega (iOS separa até o storage) e o
+  // botão ficava carregando para sempre. Com o GIS, o ID token chega na
+  // MESMA janela e a sessão nasce aqui. O redirect fica como fallback para
+  // quando VITE_GOOGLE_CLIENT_ID não está configurado ou o script não carrega.
+  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
   const [oauthLoading, setOauthLoading] = useState<"google" | "apple" | null>(null);
+  const [gisState, setGisState] = useState<"loading" | "ready" | "fallback">(
+    GOOGLE_CLIENT_ID ? "loading" : "fallback"
+  );
+  const gisButtonRef = useRef<HTMLDivElement>(null);
+  const nonceRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    let cancelled = false;
+    (async () => {
+      const ok = await loadGis();
+      if (cancelled) return;
+      if (!ok || !window.google?.accounts?.id) { setGisState("fallback"); return; }
+      try {
+        const { nonce, hashedNonce } = await makeNoncePair();
+        nonceRef.current = nonce;
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          nonce: hashedNonce,
+          callback: async (resp: { credential?: string }) => {
+            if (!resp?.credential) return;
+            setOauthLoading("google");
+            const { error } = await supabase.auth.signInWithIdToken({
+              provider: "google",
+              token: resp.credential,
+              nonce: nonceRef.current ?? undefined,
+            });
+            if (error) {
+              setOauthLoading(null);
+              toast.error("Não consegui entrar com o Google. Tente de novo.");
+              return;
+            }
+            // Sessão criada NESTA janela: o callback decide gate de
+            // consentimento → onboarding → app.
+            navigate("/auth/callback", { replace: true });
+          },
+        });
+        setGisState("ready");
+      } catch {
+        setGisState("fallback");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [GOOGLE_CLIENT_ID, navigate]);
+
+  // Renderiza o botão oficial do Google quando o GIS fica pronto.
+  useEffect(() => {
+    if (gisState !== "ready" || !gisButtonRef.current || !window.google?.accounts?.id) return;
+    gisButtonRef.current.innerHTML = "";
+    window.google.accounts.id.renderButton(gisButtonRef.current, {
+      type: "standard",
+      theme: "outline",
+      size: "large",
+      text: "continue_with",
+      shape: "rectangular",
+      logo_alignment: "left",
+      width: Math.min(400, Math.max(200, gisButtonRef.current.offsetWidth || 336)),
+    });
+  }, [gisState]);
+
+  // Fallback (redirect): usado só sem VITE_GOOGLE_CLIENT_ID / script bloqueado.
   const signInWithProvider = async (provider: "google" | "apple") => {
     setOauthLoading(provider);
     const { error } = await supabase.auth.signInWithOAuth({
@@ -60,6 +133,21 @@ export default function Auth() {
     }
     // Sucesso: o navegador navega para o provedor — não resetar o loading.
   };
+
+  // Anti-spinner-infinito: se a pessoa saiu para o provedor e VOLTOU sem
+  // sessão (abandonou, ou o retorno caiu em outra janela — o bug do PWA),
+  // reabilita o botão em vez de girar para sempre. pageshow cobre o bfcache.
+  useEffect(() => {
+    const reset = () => {
+      if (document.visibilityState === "visible" && !user) setOauthLoading(null);
+    };
+    window.addEventListener("pageshow", reset);
+    document.addEventListener("visibilitychange", reset);
+    return () => {
+      window.removeEventListener("pageshow", reset);
+      document.removeEventListener("visibilitychange", reset);
+    };
+  }, [user]);
 
   const signIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,7 +166,7 @@ export default function Auth() {
       );
       return;
     }
-    navigate("/app", { replace: true });
+    navigate("/auth/callback", { replace: true });
   };
 
   const signUp = async (e: React.FormEvent) => {
@@ -176,7 +264,21 @@ export default function Auth() {
 
         <Card className="p-6">
           {/* Login social: um botão serve entrar E criar conta — o Supabase
-              vincula automaticamente identidades com o mesmo e-mail verificado. */}
+              vincula automaticamente identidades com o mesmo e-mail verificado.
+              GIS pronto → botão oficial do Google (ID token, sem redirect);
+              senão → fallback de redirect. */}
+          {gisState === "loading" && <Skeleton className="h-10 w-full mb-3 rounded-md" />}
+          {gisState === "ready" && (
+            <div className="mb-3 flex justify-center min-h-10 relative">
+              <div ref={gisButtonRef} className="w-full flex justify-center" />
+              {oauthLoading === "google" && (
+                <div className="absolute inset-0 grid place-items-center bg-background/70 rounded-md">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                </div>
+              )}
+            </div>
+          )}
+          {gisState === "fallback" && (
           <Button
             type="button"
             variant="outline"
@@ -198,6 +300,7 @@ export default function Auth() {
               </>
             )}
           </Button>
+          )}
           {/* Fase 2 (Apple): mesmo fluxo — signInWithProvider("apple") — ligar
               quando o Services ID estiver configurado no Supabase. */}
           <div className="flex items-center gap-3 mb-4" aria-hidden>
