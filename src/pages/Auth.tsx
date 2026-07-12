@@ -390,7 +390,7 @@ export default function Auth() {
                     value={email} onChange={(e) => setEmail(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pass-up">Senha (mínimo 6 caracteres)</Label>
+                  <Label htmlFor="pass-up">Senha (mínimo 8 caracteres)</Label>
                   <Input id="pass-up" type="password" required autoComplete="new-password"
                     value={password} onChange={(e) => setPassword(e.target.value)} />
                 </div>
