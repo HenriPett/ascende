@@ -59,25 +59,34 @@ export default function Auth() {
   // MESMA janela e a sessão nasce aqui. O redirect fica como fallback para
   // quando VITE_GOOGLE_CLIENT_ID não está configurado ou o script não carrega.
   const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+  // iOS + app instalado: o popup do GIS perde o vínculo com a janela
+  // (standalone), então lá o caminho DETERMINÍSTICO é o redirect + handoff
+  // (fluxo implícito: quem recebe o retorno se basta; no iOS moderno o
+  // overlay compartilha o data store com o app, que entra ao ganhar foco).
+  const iosStandalone = isStandalone() && /iP(hone|ad|od)/.test(navigator.userAgent);
   const [oauthLoading, setOauthLoading] = useState<"google" | "apple" | null>(null);
   const [gisState, setGisState] = useState<"loading" | "ready" | "fallback">(
-    GOOGLE_CLIENT_ID ? "loading" : "fallback"
+    GOOGLE_CLIENT_ID && !iosStandalone ? "loading" : "fallback"
   );
 
   useEffect(() => {
     if (gisState !== "fallback") return;
+    if (iosStandalone) {
+      console.info("[Ascende] iOS instalado: login Google via redirect + handoff (deliberado).");
+      return;
+    }
     console.warn(
       GOOGLE_CLIENT_ID
         ? "[Ascende] Script do Google (GIS) não carregou — login Google caiu no modo redirect."
-        : "[Ascende] VITE_GOOGLE_CLIENT_ID ausente NO BUILD — login Google está em modo redirect, " +
-          "que NÃO funciona no app instalado (PWA). Configure a env no provedor de deploy e refaça o build."
+        : "[Ascende] VITE_GOOGLE_CLIENT_ID ausente NO BUILD — login Google está em modo redirect. " +
+          "Configure a env no provedor de deploy e refaça o build."
     );
-  }, [gisState, GOOGLE_CLIENT_ID]);
+  }, [gisState, GOOGLE_CLIENT_ID, iosStandalone]);
   const gisButtonRef = useRef<HTMLDivElement>(null);
   const nonceRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID) return;
+    if (!GOOGLE_CLIENT_ID || iosStandalone) return;
     let cancelled = false;
     (async () => {
       const ok = await loadGis();
@@ -133,13 +142,18 @@ export default function Auth() {
   // Fallback (redirect): usado só sem VITE_GOOGLE_CLIENT_ID / script bloqueado.
   const signInWithProvider = async (provider: "google" | "apple") => {
     setOauthLoading(provider);
-    // Saindo do app instalado para o navegador: marca o handoff para a
-    // página de callback (que vai abrir no NAVEGADOR) orientar a volta.
-    // No Android o localStorage é compartilhado entre PWA e Chrome.
-    try { if (isStandalone()) localStorage.setItem("ascende-oauth-handoff", "1"); } catch { /* noop */ }
+    // Saindo do app instalado para o navegador: sinaliza o handoff para a
+    // página de callback orientar a volta. O sinal vai na PRÓPRIA URL de
+    // retorno (query param) porque no iOS o overlay pode ser outro container
+    // de storage — localStorage não atravessa. (No Android mantemos também a
+    // flag local, redundância inofensiva.)
+    const standalone = isStandalone();
+    try { if (standalone) localStorage.setItem("ascende-oauth-handoff", "1"); } catch { /* noop */ }
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback${standalone ? "?handoff=pwa" : ""}`,
+      },
     });
     if (error) {
       setOauthLoading(null);

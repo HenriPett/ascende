@@ -46,9 +46,12 @@ export default function AuthCallback() {
   // ganhar foco (ele re-checa a sessão no storage compartilhado).
   const [handoff, setHandoff] = useState(() => {
     try {
+      // O sinal principal vem na URL (?handoff=pwa) — atravessa qualquer
+      // container de storage. A flag local é o reforço do Android.
+      const fromUrl = new URLSearchParams(window.location.search).get("handoff") === "pwa";
       const flagged = localStorage.getItem("ascende-oauth-handoff") === "1";
       localStorage.removeItem("ascende-oauth-handoff"); // consome sempre (evita falso positivo depois)
-      return flagged && !isStandalone();
+      return (fromUrl || flagged) && !isStandalone();
     } catch { return false; }
   });
 
