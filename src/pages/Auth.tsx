@@ -13,7 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2, MailCheck, Sparkles, Check } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { loadGis, makeNoncePair } from "@/lib/googleIdentity";
+import { loadGis, makeNoncePair, isStandalone } from "@/lib/googleIdentity";
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -63,6 +63,16 @@ export default function Auth() {
   const [gisState, setGisState] = useState<"loading" | "ready" | "fallback">(
     GOOGLE_CLIENT_ID ? "loading" : "fallback"
   );
+
+  useEffect(() => {
+    if (gisState !== "fallback") return;
+    console.warn(
+      GOOGLE_CLIENT_ID
+        ? "[Ascende] Script do Google (GIS) não carregou — login Google caiu no modo redirect."
+        : "[Ascende] VITE_GOOGLE_CLIENT_ID ausente NO BUILD — login Google está em modo redirect, " +
+          "que NÃO funciona no app instalado (PWA). Configure a env no provedor de deploy e refaça o build."
+    );
+  }, [gisState, GOOGLE_CLIENT_ID]);
   const gisButtonRef = useRef<HTMLDivElement>(null);
   const nonceRef = useRef<string | null>(null);
 
@@ -123,6 +133,10 @@ export default function Auth() {
   // Fallback (redirect): usado só sem VITE_GOOGLE_CLIENT_ID / script bloqueado.
   const signInWithProvider = async (provider: "google" | "apple") => {
     setOauthLoading(provider);
+    // Saindo do app instalado para o navegador: marca o handoff para a
+    // página de callback (que vai abrir no NAVEGADOR) orientar a volta.
+    // No Android o localStorage é compartilhado entre PWA e Chrome.
+    try { if (isStandalone()) localStorage.setItem("ascende-oauth-handoff", "1"); } catch { /* noop */ }
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: `${window.location.origin}/auth/callback` },
@@ -134,20 +148,36 @@ export default function Auth() {
     // Sucesso: o navegador navega para o provedor — não resetar o loading.
   };
 
-  // Anti-spinner-infinito: se a pessoa saiu para o provedor e VOLTOU sem
-  // sessão (abandonou, ou o retorno caiu em outra janela — o bug do PWA),
-  // reabilita o botão em vez de girar para sempre. pageshow cobre o bfcache.
+  // Volta ao app depois do fluxo externo: 1) re-checa a sessão direto no
+  // storage — se o login foi concluído no overlay do navegador (Android
+  // compartilha o storage entre Chrome e PWA), o app entra sozinho ao
+  // ganhar foco; 2) senão, destrava o botão em vez de girar para sempre.
+  // pageshow cobre o bfcache.
   useEffect(() => {
-    const reset = () => {
-      if (document.visibilityState === "visible" && !user) setOauthLoading(null);
+    let checking = false;
+    const onReturn = async () => {
+      if (document.visibilityState !== "visible" || checking) return;
+      checking = true;
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          navigate("/auth/callback", { replace: true });
+          return;
+        }
+        setOauthLoading(null);
+      } finally {
+        checking = false;
+      }
     };
-    window.addEventListener("pageshow", reset);
-    document.addEventListener("visibilitychange", reset);
+    window.addEventListener("pageshow", onReturn);
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
     return () => {
-      window.removeEventListener("pageshow", reset);
-      document.removeEventListener("visibilitychange", reset);
+      window.removeEventListener("pageshow", onReturn);
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
     };
-  }, [user]);
+  }, [navigate]);
 
   const signIn = async (e: React.FormEvent) => {
     e.preventDefault();

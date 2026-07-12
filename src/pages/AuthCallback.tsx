@@ -20,7 +20,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import Logo from "@/components/core/Logo";
 import { LEGAL_VERSION } from "@/lib/legal";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2 } from "lucide-react";
+import { isStandalone } from "@/lib/googleIdentity";
 
 /** Erro vindo do provedor pode chegar na query (?error=...) ou no hash (#error=...). */
 function readOAuthError(): string | null {
@@ -39,6 +40,17 @@ export default function AuthCallback() {
   const [accepted, setAccepted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  // Handoff PWA: o login começou no app instalado e o redirect abriu AQUI,
+  // no navegador. Em vez de carregar o app inteiro no lugar errado, esta
+  // página confirma o login e orienta a volta — o app entra sozinho ao
+  // ganhar foco (ele re-checa a sessão no storage compartilhado).
+  const [handoff, setHandoff] = useState(() => {
+    try {
+      const flagged = localStorage.getItem("ascende-oauth-handoff") === "1";
+      localStorage.removeItem("ascende-oauth-handoff"); // consome sempre (evita falso positivo depois)
+      return flagged && !isStandalone();
+    } catch { return false; }
+  });
 
   const oauthError = readOAuthError();
   const hasConsent = Boolean(user?.user_metadata?.accepted_terms_at);
@@ -64,11 +76,12 @@ export default function AuthCallback() {
     navigate("/auth", { replace: true });
   }, [timedOut, user, navigate]);
 
-  // Sessão pronta + consentimento já registrado → segue o fluxo normal.
+  // Sessão pronta + consentimento já registrado → segue o fluxo normal
+  // (exceto no handoff: aí a instrução é voltar para o app).
   useEffect(() => {
-    if (authLoading || !user || !hasConsent || profileLoading) return;
+    if (authLoading || !user || !hasConsent || profileLoading || handoff) return;
     navigate(profile?.onboarded ? "/app" : "/onboarding", { replace: true });
-  }, [authLoading, user, hasConsent, profile?.onboarded, profileLoading, navigate]);
+  }, [authLoading, user, hasConsent, profile?.onboarded, profileLoading, handoff, navigate]);
 
   const confirmConsent = async () => {
     if (!accepted || saving) return;
@@ -84,6 +97,7 @@ export default function AuthCallback() {
       toast.error("Não consegui registrar o aceite. Tente de novo.");
       return;
     }
+    if (handoff) return; // a tela de handoff assume — o app abre já logado
     navigate(profile?.onboarded ? "/app" : "/onboarding", { replace: true });
   };
 
@@ -93,6 +107,31 @@ export default function AuthCallback() {
     await supabase.auth.signOut();
     navigate("/auth", { replace: true });
   };
+
+  // ── Handoff: login concluído no navegador; a casa é o app ──
+  if (user && hasConsent && handoff) {
+    return (
+      <div className="min-h-dvh grid place-items-center bg-background px-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="flex items-center justify-center mb-6"><Logo size="lg" /></div>
+          <Card className="p-6 space-y-3">
+            <CheckCircle2 className="w-10 h-10 text-success mx-auto" />
+            <h1 className="font-display text-xl font-semibold">Login concluído!</h1>
+            <p className="text-sm text-muted-foreground">
+              Agora é só <strong className="text-foreground">voltar para o app Ascende</strong> —
+              você já vai estar dentro. Pode fechar esta aba.
+            </p>
+            <button
+              className="text-xs text-muted-foreground underline"
+              onClick={() => { setHandoff(false); }}
+            >
+              Prefiro continuar aqui no navegador
+            </button>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   // ── Gate de consentimento (primeiro login social) ──
   if (user && !hasConsent) {
