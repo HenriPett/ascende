@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, FileText, Image as ImageIcon, Check, ClipboardList, Eye, Wand2 } from "lucide-react";
+import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, FileText, Image as ImageIcon, Check, ClipboardList, Eye, Wand2, CircleCheckBig } from "lucide-react";
 import { Markdown } from "@/components/core/Markdown";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -32,6 +32,14 @@ interface ProfileSuggestion {
 }
 
 interface Msg { id?: string; role: "user" | "assistant"; content: string; pending?: boolean }
+
+/** Compromisso diário proposto pelo Conselheiro — a pessoa escolhe quais
+ *  criar; nada é criado automaticamente (hábito imposto é régua genérica). */
+interface ProposedHabit {
+  name: string;
+  pillar: string;
+  why?: string | null;
+}
 
 interface ProposedPlan {
   title: string;
@@ -120,6 +128,9 @@ export default function Chat() {
   const [captured, setCaptured] = useState<ProposedEvent[] | null>(null);
   const [learned, setLearned] = useState<LearnedMemory[] | null>(null);
   const [proposedPlan, setProposedPlan] = useState<ProposedPlan | null>(null);
+  const [proposedHabits, setProposedHabits] = useState<ProposedHabit[] | null>(null);
+  const [habitsChecked, setHabitsChecked] = useState<boolean[]>([]);
+  const [savingHabits, setSavingHabits] = useState(false);
   const [limitInfo, setLimitInfo] = useState<PlanLimitError | null>(null);
   const [profileSuggestion, setProfileSuggestion] = useState<ProfileSuggestion | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -247,6 +258,11 @@ export default function Chat() {
       if (data?.plan?.title && data?.plan?.content) {
         setProposedPlan(data.plan as ProposedPlan);
       }
+      const habits = (data?.habit_proposal ?? null) as ProposedHabit[] | null;
+      if (habits?.length) {
+        setProposedHabits(habits);
+        setHabitsChecked(habits.map(() => true));
+      }
       const insights = (data?.learned ?? []) as LearnedMemory[];
       if (insights.length) {
         setLearned(insights);
@@ -303,6 +319,31 @@ export default function Chat() {
   };
 
   // ── Confirmação dos registros detectados na conversa ─────────
+  const confirmHabits = async () => {
+    if (!user || !proposedHabits) return;
+    const selected = proposedHabits.filter((_, i) => habitsChecked[i]);
+    if (!selected.length) { setProposedHabits(null); return; }
+    setSavingHabits(true);
+    try {
+      const { error } = await supabase.from("habits").insert(
+        selected.map((h) => ({ user_id: user.id, name: h.name, pillar: h.pillar }))
+      );
+      if (error) throw error;
+      toast.success(
+        selected.length === 1
+          ? `Compromisso criado: "${selected[0].name}". Acompanhe na tela Hoje — cada dia feito vale +10 XP.`
+          : `${selected.length} compromissos criados. Acompanhe na tela Hoje — cada dia feito vale +10 XP.`
+      );
+      setProposedHabits(null);
+      qc.invalidateQueries({ queryKey: ["habits-today"] });
+      qc.invalidateQueries({ queryKey: ["first-steps"] });
+    } catch {
+      toast.error("Não consegui criar os compromissos. Tente de novo.");
+    } finally {
+      setSavingHabits(false);
+    }
+  };
+
   const confirmCaptured = async () => {
     if (!user || !captured) return;
     markSeen("confirmar-registros");
@@ -445,6 +486,46 @@ export default function Chat() {
         )}
 
         {/* Plano pronto para salvar fora do chat */}
+        {/* Compromissos diários propostos: a pessoa escolhe — nada de hábito
+            imposto. Cada um vem com o "porquê" ligado à meta dela. */}
+        {proposedHabits && !sending && (
+          <div className="rounded-xl border border-gold/40 bg-card p-3 space-y-2 animate-fade-up">
+            <p className="text-sm font-medium flex items-center gap-1.5">
+              <CircleCheckBig className="w-4 h-4 text-gold" />
+              Compromissos diários a partir da sua meta — quais fazem sentido?
+            </p>
+            {proposedHabits.map((h, i) => {
+              const meta = pillarById(h.pillar);
+              return (
+                <label key={i} className="flex items-start gap-3 rounded-md border p-2.5 cursor-pointer">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={habitsChecked[i]}
+                    onCheckedChange={(v) => setHabitsChecked((c) => c.map((x, j) => (j === i ? !!v : x)))}
+                  />
+                  <span className="flex-1 min-w-0">
+                    <span className="text-sm block break-words">{h.name}</span>
+                    {h.why && <span className="text-xs text-muted-foreground block mt-0.5">{h.why}</span>}
+                  </span>
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0 mt-1.5"
+                    style={{ background: meta ? `hsl(var(${meta.colorVar}))` : "hsl(var(--muted-foreground))" }}
+                    aria-hidden
+                  />
+                </label>
+              );
+            })}
+            <div className="flex gap-2 justify-end pt-0.5">
+              <Button variant="ghost" size="sm" onClick={() => setProposedHabits(null)} disabled={savingHabits}>
+                <X className="w-4 h-4 mr-1" /> Agora não
+              </Button>
+              <Button size="sm" onClick={confirmHabits} disabled={savingHabits}>
+                {savingHabits ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Criar selecionados</>)}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {proposedPlan && !sending && (
           <div className="rounded-xl border border-gold/40 bg-card p-3 space-y-2 animate-fade-up">
             <p className="text-sm font-medium flex items-center gap-1.5">

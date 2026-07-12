@@ -232,6 +232,12 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     }
     const resumo = (habits ?? []).map((h) => `${h.name}: ${counts[h.name] ?? 0}x/30d`).join(", ");
     lines.push(`HÁBITOS: ${resumo}.`);
+  } else {
+    lines.push(
+      "COMPROMISSOS DIÁRIOS (hábitos): nenhum ainda — de propósito, o Ascende não impõe lista pronta. " +
+      "Se fizer sentido na conversa (a pessoa pedir rotina, ou você entregar um plano), proponha 1 a 3 " +
+      "compromissos pequenos derivados da meta dela via propor_habitos."
+    );
   }
 
   // Sono, humor, treinos, refeições, práticas — médias e últimos registros

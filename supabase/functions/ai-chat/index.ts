@@ -60,6 +60,9 @@ REGRAS:
 6. Perguntas pontuais ("quantas calorias tem ovo?", "treino de peito é bom 2x por semana?") NÃO são planos definitivos: responda normalmente, sem exigir dados.
 7. AJUSTES: se a pessoa comentar ou pedir mudanças em um plano recém-entregue ("não gosto de agachamento", "troca o frango do jantar", "diminui o valor de lazer"), acolha o comentário, refaça o que for preciso e chame registrar_plano DE NOVO com o plano COMPLETO revisado (mesmo título, salvo se a mudança justificar renomear). Nunca registre só a diferença: o plano registrado deve ser sempre autossuficiente. Na resposta em texto, resuma apenas o que mudou.
 
+━━━ COMPROMISSOS DIÁRIOS (HÁBITOS) NASCEM DA CONVERSA, NUNCA DE MODELO PRONTO ━━━
+O Ascende NÃO cria hábitos pré-definidos para ninguém: os compromissos diários da pessoa nascem da meta DELA, com você. Quando ela pedir rotina/hábitos/compromissos — ou quando você entregar um plano e a pessoa tiver poucos ou nenhum compromisso ativo (veja o retrato) — chame propor_habitos com 1 a 3 propostas PEQUENAS, cumpríveis no pior dia dela, cada uma ligada explicitamente à meta. Menos é mais: para quem está começando, 2 compromissos bem escolhidos valem mais que 5 ambiciosos. Se o pilar Mente & Espírito da pessoa tiver um nome de prática (veja o retrato), use o vocabulário dela. IMPORTANTE: a ferramenta gera uma PROPOSTA — a pessoa escolhe quais criar num cartão do app; mencione em UMA frase que as sugestões estão no cartão (nunca diga que "criou"). Nunca proponha hábitos genéricos desconectados do que ela disse.
+
 ━━━ PROPONDO GUARDAR DADOS QUE A PESSOA INFORMA NA CONVERSA ━━━
 Quando a pessoa informar dados de perfil na conversa (idade ou ano de nascimento, sexo, altura, nível de atividade, restrições alimentares, meta de peso, CONDIÇÕES DE SAÚDE que ela tenha, ou MEDICAMENTOS que ela use), chame a ferramenta atualizar_perfil NA MESMA resposta. IMPORTANTE: a ferramenta gera uma PROPOSTA — nada é salvo sem a pessoa confirmar num cartão que o app mostra. Ex.: "sou diabético" → add_health_conditions: ["diabetes"]; "tomo losartana todo dia" → add_medications: ["losartana"]. Ao propor guardar condição ou medicamento, seja acolhedor e lembre em UMA frase que você considera isso nas sugestões mas não substitui o acompanhamento de quem prescreve; NUNCA sugira iniciar, parar ou mudar dose de medicamento. Se ela der a idade, calcule o ano de nascimento a partir do ano atual. Mencione em UMA frase que sugeriu salvar isso no perfil (nunca diga que "salvou"). O peso ATUAL não vai no perfil: ele vira registro na linha do tempo (o app cuida disso automaticamente).
 ${SAFETY_RULES}
@@ -86,6 +89,37 @@ const SAVE_PLAN_TOOL = {
       daily_spend_limit: { type: "number", description: "Em planos financeiros: teto de gasto DIÁRIO em reais, se o plano definir um." },
     },
     required: ["title", "kind", "content_markdown"],
+  },
+};
+
+const PROPOSE_HABITS_TOOL = {
+  name: "propor_habitos",
+  description:
+    "PROPÕE de 1 a 3 compromissos diários (hábitos) derivados da meta e do momento da pessoa. " +
+    "O app mostra um cartão e ELA escolhe quais criar — nada é criado automaticamente. " +
+    "Chame quando a pessoa pedir rotina/hábitos/compromissos, ou junto de um plano quando compromissos diários pequenos ajudarem a cumpri-lo.",
+  input_schema: {
+    type: "object",
+    properties: {
+      habits: {
+        type: "array",
+        minItems: 1,
+        maxItems: 3,
+        items: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "Nome curto e concreto, começando com verbo, cumprível no pior dia. Ex.: 'Registrar os gastos do dia', 'Caminhar 15 minutos'. Máx. ~50 caracteres.",
+            },
+            pillar: { type: "string", enum: ["prosperidade", "vitalidade", "alimentacao", "mente"] },
+            why: { type: "string", description: "UMA frase ligando o compromisso à meta da pessoa. Ex.: 'É o que sustenta o plano no seu bolso.'" },
+          },
+          required: ["name", "pillar"],
+        },
+      },
+    },
+    required: ["habits"],
   },
 };
 
@@ -268,7 +302,7 @@ Deno.serve(async (req) => {
         { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
         { type: "text", text: snapshot + deliveryDirective },
       ],
-      tools: [SAVE_PLAN_TOOL, UPDATE_PROFILE_TOOL],
+      tools: [SAVE_PLAN_TOOL, UPDATE_PROFILE_TOOL, PROPOSE_HABITS_TOOL],
       tool_choice: { type: "auto" },
       messages,
     });
@@ -416,6 +450,24 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Compromissos diários propostos: cartão de escolha no app, nada é
+    // criado automaticamente. Hábito imposto é a "régua genérica" que o
+    // posicionamento condena — aqui eles nascem da meta da pessoa.
+    const VALID_PILLARS = ["prosperidade", "vitalidade", "alimentacao", "mente"];
+    const habitsBlock = blocks.find((b) => b.type === "tool_use" && b.name === "propor_habitos");
+    // deno-lint-ignore no-explicit-any
+    const rawHabits = (habitsBlock?.input as any)?.habits;
+    const seenNames = new Set<string>();
+    // deno-lint-ignore no-explicit-any
+    const habitProposal = (Array.isArray(rawHabits) ? rawHabits : []).flatMap((h: any) => {
+      const name = String(h?.name ?? "").trim().slice(0, 60);
+      const pillar = VALID_PILLARS.includes(h?.pillar) ? String(h.pillar) : null;
+      const key = name.toLowerCase();
+      if (name.length < 3 || !pillar || seenNames.has(key)) return [];
+      seenNames.add(key);
+      return [{ name, pillar, why: h?.why ? String(h.why).slice(0, 140) : null }];
+    }).slice(0, 3);
+
     // Dados de perfil informados na conversa: viram uma PROPOSTA que o app
     // mostra para a pessoa confirmar. Nada é gravado automaticamente (plano §7).
     const suggestedLabels: string[] = [];
@@ -462,6 +514,9 @@ Deno.serve(async (req) => {
     if (!reply && profileSuggestion) {
       reply = "Anotei! Veja o cartão abaixo para confirmar o que quer guardar no seu perfil.";
     }
+    if (!reply && habitProposal.length) {
+      reply = "Pensei em compromissos diários a partir da sua meta — escolha no cartão abaixo quais fazem sentido para você.";
+    }
     if (!reply.trim()) {
       for (const r of docReservations) await releaseUsage(supabase, r);
       return json({
@@ -477,7 +532,10 @@ Deno.serve(async (req) => {
     if (insertErr) console.error("chat_messages insert", insertErr);
 
     const { events: captured, learned } = await extractPromise;
-    return json({ reply, captured, plan, profile_suggestion: profileSuggestion, learned });
+    return json({
+      reply, captured, plan, profile_suggestion: profileSuggestion, learned,
+      habit_proposal: habitProposal.length ? habitProposal : null,
+    });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);

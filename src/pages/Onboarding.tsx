@@ -30,13 +30,10 @@ import CaptureBar from "@/components/core/CaptureBar";
 import { Check, Loader2, ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Hábitos iniciais sugeridos por pilar (a pessoa pode mudar depois)
-const SEED_HABITS: Record<PillarId, string[]> = {
-  prosperidade: ["Registrar os gastos do dia"],
-  vitalidade: ["Movimentar o corpo", "Dormir antes das 23h"],
-  alimentacao: ["Fazer uma refeição de verdade"],
-  mente: ["Momento de prática"],
-};
+// Compromissos diários NÃO são semeados aqui: hábito imposto no dia 1 é a
+// "régua genérica" que o posicionamento condena. Eles nascem da meta da
+// pessoa, na conversa com o Conselheiro (ferramenta propor_habitos, com
+// cartão de escolha) — ou manualmente, em Vitalidade, para quem preferir.
 
 // Nome padrão da prática do pilar Mente & Espírito. Não perguntamos na porta:
 // a pessoa renomeia em Ajustes ou na primeira conversa com o Conselheiro.
@@ -82,16 +79,6 @@ export default function Onboarding() {
         onboarded: true,
       }).eq("user_id", user.id);
       if (error) throw error;
-
-      // Hábitos iniciais dos pilares escolhidos
-      const habits = selected.flatMap((p) =>
-        SEED_HABITS[p].map((name) => ({
-          user_id: user.id,
-          name,
-          pillar: p,
-        }))
-      );
-      if (habits.length) await supabase.from("habits").insert(habits);
 
       // Atualiza o cache do perfil na hora, para o guard já ler onboarded=true
       // (evita o redirecionamento de volta ao onboarding).
@@ -179,9 +166,9 @@ export default function Onboarding() {
         })}
       </div>
       <p className="text-xs text-muted-foreground rounded-lg border p-3">
-        Renda, altura, metas? O Conselheiro pergunta quando precisar — nada de formulário
-        na porta. E uma promessa: o Ascende nunca vai te dar bronca por notificação.
-        Semana ruim não apaga a subida.
+        Renda, altura, metas, compromissos diários? Nada vem pré-definido: o Conselheiro
+        constrói com você, a partir da SUA meta, quando fizer sentido. E uma promessa:
+        o Ascende nunca vai te dar bronca por notificação. Semana ruim não apaga a subida.
       </p>
       <div className="flex gap-2">
         <Button variant="ghost" onClick={() => setStep(0)}><ArrowLeft className="w-4 h-4" /></Button>

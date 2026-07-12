@@ -759,12 +759,21 @@ function HabitsToday() {
 
   if (isLoading) return <Skeleton className="h-24 w-full" />;
   if (!data?.habits.length) {
+    // Sem compromissos ainda — de propósito: nada vem pré-definido. Eles
+    // nascem da meta da pessoa, com o Conselheiro (cartão de escolha).
     return (
-      <Card className="p-5">
+      <Card className="p-5 space-y-1.5">
+        <p className="text-sm font-medium">Seus compromissos diários nascem da sua meta.</p>
         <p className="text-sm text-muted-foreground">
-          Você ainda não tem compromissos diários.{" "}
-          <Link to="/app/vitalidade" className="underline text-foreground">Crie seu primeiro hábito</Link> — é
-          ele que constrói a subida.
+          Nada de lista pronta:{" "}
+          <Link
+            className="underline text-foreground"
+            to={`/app/conselheiro?q=${encodeURIComponent("A partir da minha meta, proponha 2 ou 3 compromissos diários pequenos para eu começar")}`}
+          >
+            construa com o Conselheiro
+          </Link>{" "}
+          — ou <Link to="/app/vitalidade" className="underline text-foreground">crie manualmente</Link>, do seu jeito.
+          É o compromisso cumprido, dia após dia, que constrói a subida (+10 XP cada).
         </p>
       </Card>
     );
