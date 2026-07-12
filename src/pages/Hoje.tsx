@@ -10,8 +10,10 @@ import BattleCheckinCard from "@/components/core/BattleCheckin";
 import { toast } from "sonner";
 import {
   Sunrise, ChevronRight, CircleCheck, Circle, Flame, Droplet, Dumbbell, Moon, Smile,
-  BookOpen, Camera, X, UserRound, ListChecks, MessageCircle,
+  BookOpen, Camera, X, UserRound, ListChecks, MessageCircle, Trophy, CalendarHeart,
 } from "lucide-react";
+import { xpToastSuffix } from "@/components/core/CaptureBar";
+import { levelFromXp, levelTitle } from "@/lib/xp";
 import { DEFAULT_WATER_GOAL_ML, DEFAULT_WATER_BOTTLES } from "@/hooks/useProfile";
 import { useEffect, useRef, useState } from "react";
 import { greet, todayISO } from "@/lib/format";
@@ -78,7 +80,7 @@ function QuickActions() {
     const { error } = await supabase.from("life_events").insert({ user_id: user.id, source: "form", ...row });
     setSavingKey(null);
     if (error) { toast.error("Não consegui registrar."); return; }
-    toast.success(okMsg);
+    toast.success(okMsg + xpToastSuffix());
     qc.invalidateQueries();
   };
 
@@ -175,37 +177,86 @@ function ProfileCompleteness() {
   );
 }
 
-/* ── Primeiros passos (2.1): checklist da primeira semana ── */
+/* ── Primeiros passos (2.1 + análise UX P1.1): trilha da primeira semana.
+   Ordem pensada para que, ao chegar na pergunta-assinatura do Conselheiro,
+   o Raio-X já exista — e a resposta venha de primeira, sem anticlímax.
+   Ao completar: clímax com XP de marco em vez de sumir em silêncio. ── */
+const SIGNATURE_QUESTION = "Monte um plano alimentar para o meu objetivo que caiba no meu orçamento";
+
 function FirstSteps() {
   const { user } = useAuth();
+  const { profile } = useProfile();
+  const qc = useQueryClient();
   const [dismissed, setDismissed] = useState(() => localStorage.getItem("ascend-firststeps-done") === "1");
+  const awarded = useRef(false);
 
   const { data } = useQuery({
     queryKey: ["first-steps", user?.id],
     enabled: !!user && !dismissed,
     staleTime: 1000 * 60,
     queryFn: async () => {
-      const [{ count: events }, { count: mealCount }, { count: plansCount }] = await Promise.all([
+      const [{ count: events }, { count: mealCount }, { count: plansCount }, { count: estCount }, { count: recCount }] = await Promise.all([
         supabase.from("life_events").select("id", { count: "exact", head: true }).eq("user_id", user!.id),
         supabase.from("life_events").select("id", { count: "exact", head: true }).eq("user_id", user!.id).eq("kind", "meal"),
         supabase.from("plans").select("id", { count: "exact", head: true }).eq("user_id", user!.id),
+        supabase.from("category_estimates").select("id", { count: "exact", head: true }).eq("user_id", user!.id),
+        supabase.from("recurring_transactions").select("id", { count: "exact", head: true }).eq("user_id", user!.id),
       ]);
-      return { events: events ?? 0, meals: mealCount ?? 0, plans: plansCount ?? 0 };
+      return {
+        events: events ?? 0, meals: mealCount ?? 0, plans: plansCount ?? 0,
+        raiox: (estCount ?? 0) + (recCount ?? 0),
+      };
     },
   });
 
+  const raioxDone = (data?.raiox ?? 0) > 0 || Number(profile?.monthly_income ?? 0) > 0;
+
+  const steps = data ? [
+    { label: "Conte seu dia na captura abaixo", xp: "+XP por registro", done: data.events >= 1, to: null },
+    { label: "Mapeie seu mês em 60 segundos (Raio-X)", xp: "destrava o plano no seu bolso", done: raioxDone, to: "/app/prosperidade" },
+    { label: "Registre uma refeição (vale foto do prato)", xp: "+4 XP", done: data.meals > 0, to: "/app/alimentacao" },
+    { label: "Peça o plano que cabe no seu bolso", xp: "vira meta viva", done: data.plans > 0, to: `/app/conselheiro?q=${encodeURIComponent(SIGNATURE_QUESTION)}` },
+  ] : [];
+  const allDone = steps.length > 0 && steps.every((st) => st.done);
+
+  // Clímax: XP de marco, uma vez por conta (o servidor garante a unicidade).
+  useEffect(() => {
+    if (!allDone || awarded.current || dismissed) return;
+    awarded.current = true;
+    supabase.rpc("award_first_steps_milestone").then(({ data: ok }) => {
+      if (ok) {
+        toast.success("Base montada · +20 XP. Agora é um degrau por dia. ✨");
+        qc.invalidateQueries({ queryKey: ["xp"] });
+      }
+    });
+  }, [allDone, dismissed, qc]);
+
   if (dismissed || !data) return null;
 
-  const steps = [
-    { label: "Registre sua primeira refeição", xp: "+4 XP", done: data.meals > 0, to: "/app/alimentacao" },
-    { label: "Conte como foi seu dia na captura acima", xp: "+XP por registro", done: data.events >= 3, to: null },
-    { label: "Peça um plano ao Conselheiro", xp: "vira meta viva", done: data.plans > 0, to: "/app/conselheiro" },
-  ];
-  const allDone = steps.every((st) => st.done);
-  if (allDone || data.events >= 15) {
-    if (!dismissed) localStorage.setItem("ascend-firststeps-done", "1");
-    return null;
+  const dismiss = () => { localStorage.setItem("ascend-firststeps-done", "1"); setDismissed(true); };
+
+  // Estado de conclusão: despedida com a próxima promessa (retrospectiva)
+  if (allDone) {
+    return (
+      <Card className="p-4 border-success/40 bg-success/5">
+        <div className="flex items-start gap-3">
+          <Trophy className="w-5 h-5 text-gold-ink shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">Base montada — primeiros passos concluídos (+20 XP)</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Você já viveu o essencial: contar, mapear e planejar. Domingo chega a sua
+              primeira retrospectiva da semana — quanto mais dias registrados, melhor ela fica.
+            </p>
+          </div>
+          <button onClick={dismiss} className="text-muted-foreground hover:text-foreground" aria-label="Concluir primeiros passos">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </Card>
+    );
   }
+
+  if (data.events >= 25) { dismiss(); return null; }
 
   return (
     <Card className="p-4">
@@ -214,7 +265,7 @@ function FirstSteps() {
           <ListChecks className="w-4 h-4 text-gold-ink" /> Primeiros passos
         </p>
         <button
-          onClick={() => { localStorage.setItem("ascend-firststeps-done", "1"); setDismissed(true); }}
+          onClick={dismiss}
           className="text-muted-foreground hover:text-foreground" aria-label="Dispensar primeiros passos"
         >
           <X className="w-4 h-4" />
@@ -239,6 +290,63 @@ function FirstSteps() {
             <div key={st.label} className="flex items-center gap-2.5 rounded-md border p-2.5">{inner}</div>
           );
         })}
+      </div>
+    </Card>
+  );
+}
+
+/* ── Sua primeira retrospectiva (análise UX P1.3): dias 2–6 de conta.
+   Transforma a espera por domingo em preparação — sem culpa: mostra o que
+   JÁ foi registrado e uma única sugestão, dispensável a qualquer momento. ── */
+function RetroCountdown() {
+  const { user } = useAuth();
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem("ascend-retro-preview-done") === "1");
+
+  const createdAt = user?.created_at ? new Date(user.created_at).getTime() : 0;
+  const ageDays = createdAt ? Math.floor((Date.now() - createdAt) / 864e5) : 0;
+  const isSunday = new Date().getDay() === 0;
+  const eligible = !dismissed && !isSunday && ageDays >= 1 && ageDays <= 6;
+
+  const { data } = useQuery({
+    queryKey: ["retro-preview", user?.id, todayISO()],
+    enabled: !!user && eligible,
+    staleTime: 1000 * 60 * 10,
+    queryFn: async () => {
+      const monday = new Date();
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+      monday.setHours(0, 0, 0, 0);
+      const { count } = await supabase.from("life_events")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id).gte("occurred_at", monday.toISOString());
+      return { weekEvents: count ?? 0 };
+    },
+  });
+
+  if (!eligible || !data) return null;
+  const daysToSunday = (7 - new Date().getDay()) % 7 || 7;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-full grid place-items-center shrink-0 bg-gold/10">
+          <CalendarHeart className="w-5 h-5 text-gold-ink" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">
+            Sua primeira retrospectiva chega {daysToSunday === 1 ? "amanhã" : `em ${daysToSunday} dias`} (domingo)
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {data.weekEvents > 0
+              ? `A IA vai cruzar os ${data.weekEvents} registro${data.weekEvents > 1 ? "s" : ""} da sua semana e contar a história dela. Cada dia registrado deixa a leitura mais nítida.`
+              : "Ela nasce do que você registrar até lá — uma frase por dia já rende uma boa história."}
+          </p>
+        </div>
+        <button
+          onClick={() => { localStorage.setItem("ascend-retro-preview-done", "1"); setDismissed(true); }}
+          className="text-muted-foreground hover:text-foreground" aria-label="Dispensar aviso da retrospectiva"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
     </Card>
   );
@@ -356,6 +464,8 @@ function DayProgress() {
     );
   }
 
+  const hasAnyGoal = kcalGoal > 0 || protGoal > 0 || spendLimit > 0 || workoutsGoal > 0 || sleepGoal > 0;
+
   return (
     <Card className="p-4 space-y-3.5">
       <div className="flex items-center justify-between">
@@ -364,6 +474,20 @@ function DayProgress() {
           {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" })}
         </span>
       </div>
+
+      {/* Sem nenhuma meta: convite único em vez de silêncio (análise UX P2.1).
+          O Conselheiro já sabe propor as metas e gravar com confirmação. */}
+      {!hasAnyGoal && (
+        <p className="text-xs text-muted-foreground rounded-md border p-2.5">
+          Metas deixam este painel vivo — e você define todas em uma frase:{" "}
+          <Link
+            className="underline text-foreground"
+            to={`/app/conselheiro?q=${encodeURIComponent("Me ajude a definir minhas metas diárias (calorias, proteína, água, treinos na semana, sono e teto de gasto) a partir do meu objetivo")}`}
+          >
+            definir com o Conselheiro
+          </Link>.
+        </p>
+      )}
 
       {/* Calorias */}
       <div className="space-y-1">
@@ -508,22 +632,38 @@ function DayProgress() {
   );
 }
 
+/** Sugestão local do dia (custo zero, determinística por dia da semana):
+ *  quando o briefing com IA não está disponível, o card muda de assunto em
+ *  vez de mostrar cadeado (análise UX P0.1). */
+const DAILY_FOCUS = [
+  "Domingo é dia da sua retrospectiva — ela nasce do que você registrou na semana.",
+  "Uma frase na captura abaixo registra o dia inteiro: gasto, treino, sono, humor.",
+  "Foto do prato → calorias na hora. O registro mais rápido do app.",
+  "Água e humor em 1 toque, logo abaixo. Dez segundos e o dia está vivo.",
+  "Conte um gasto de hoje — o retrato do seu mês fica mais nítido a cada real.",
+  "Marque um compromisso de hoje como feito: é isso que constrói a sequência.",
+  "Semana fechando: cada registro de hoje aparece na retrospectiva de domingo.",
+];
+
 function Briefing() {
+  const { profile } = useProfile();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["briefing", todayISO()],
     staleTime: 1000 * 60 * 60,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("briefing", { body: {} });
       if (error || data?.error) throw new Error(data?.error ?? "erro");
-      return data as { briefing: string | null; locked?: boolean; reason?: string };
+      return data as { briefing: string | null; locked?: boolean; reason?: string; courtesy?: boolean };
     },
   });
+
+  const locked = !!data?.locked;
 
   return (
     <Card className="p-5 bg-primary text-primary-foreground">
       <div className="flex items-center gap-2 text-sm font-medium mb-2 opacity-90">
         <Sunrise className="w-4 h-4" />
-        {new Date().getDay() === 0 ? "Retrospectiva da semana" : "Seu briefing de hoje"}
+        {locked ? "Foco de hoje" : new Date().getDay() === 0 ? "Retrospectiva da semana" : "Seu briefing de hoje"}
       </div>
       {isLoading && (
         <div className="space-y-2">
@@ -539,15 +679,34 @@ function Briefing() {
           de IA foram publicadas — passo 4 do README.)
         </p>
       )}
-      {data?.locked && (
+      {/* Sem cadeado como primeira mensagem: o card muda de assunto e entrega
+          conteúdo local — a meta da pessoa + o foco do dia. O Ascende+ vira
+          uma linha discreta de rodapé, não a manchete. */}
+      {locked && (
         <div className="space-y-2">
-          <p className="text-sm opacity-90">{data.reason ?? "O briefing diário faz parte do Ascende+."}</p>
-          <Link to="/app/assinatura" className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4">
-            Conhecer o Ascende+
-          </Link>
+          {profile?.goal && (
+            <p className="text-sm leading-relaxed">
+              Sua bússola: <em>"{profile.goal}"</em>
+            </p>
+          )}
+          <p className="text-sm leading-relaxed opacity-90">{DAILY_FOCUS[new Date().getDay()]}</p>
+          <p className="text-[11px] opacity-70 pt-1">
+            {data?.reason ?? "O briefing diário com IA vive no Ascende+."}{" "}
+            <Link to="/app/assinatura" className="underline underline-offset-2">Conhecer</Link>
+          </p>
         </div>
       )}
-      {data?.briefing && <p className="text-sm leading-relaxed whitespace-pre-line">{data.briefing}</p>}
+      {data?.briefing && (
+        <div className="space-y-2">
+          <p className="text-sm leading-relaxed whitespace-pre-line">{data.briefing}</p>
+          {data.courtesy && (
+            <p className="text-[11px] opacity-70">
+              Seus primeiros briefings são por nossa conta ✨ — depois, ele chega todo dia
+              no Ascende+ e toda semana na sua retrospectiva gratuita de domingo.
+            </p>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
@@ -654,8 +813,22 @@ function HabitsToday() {
 
 export default function Hoje() {
   const { profile } = useProfile();
+  const { user } = useAuth();
   const firstName = (profile?.name ?? "").split(" ")[0];
   const streak = useActiveStreak();
+
+  // Nível com significado desde o dia 1 (análise UX P2.3): os títulos
+  // poéticos são um ativo de marca — mostrá-los, não escondê-los.
+  const { data: xpTotal } = useQuery({
+    queryKey: ["xp", "total", user?.id],
+    enabled: !!user,
+    staleTime: 1000 * 60,
+    queryFn: async () => {
+      const { data } = await supabase.rpc("xp_total", { uid: user!.id });
+      return Number(data) || 0;
+    },
+  });
+  const level = levelFromXp(xpTotal ?? 0).level;
 
   return (
     <div className="max-w-2xl lg:max-w-4xl mx-auto space-y-4 animate-fade-up">
@@ -665,15 +838,31 @@ export default function Hoje() {
             {greet()}{firstName ? `, ${firstName}` : ""}.
           </h1>
           <p className="text-sm text-muted-foreground">Um dia de cada vez. Um degrau de cada vez.</p>
+          {streak === 2 && (
+            <p className="text-[11px] text-gold-ink mt-0.5">
+              Sua primeira sequência começou — e um dia de descanso por semana não quebra.
+            </p>
+          )}
         </div>
-        {streak >= 2 && (
-          <span
-            className="shrink-0 flex items-center gap-1 rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-xs font-semibold text-gold-ink"
-            title={`${streak} dias ativos seguidos (1 descanso por semana não quebra a sequência)`}
-          >
-            <Flame className="w-3.5 h-3.5" /> {streak} dias
-          </span>
-        )}
+        <div className="shrink-0 flex flex-col items-end gap-1.5">
+          {xpTotal !== undefined && (
+            <Link
+              to="/app/score"
+              className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title="Ver sua jornada de níveis"
+            >
+              Nv. {level} · {levelTitle(level)}
+            </Link>
+          )}
+          {streak >= 2 && (
+            <span
+              className="flex items-center gap-1 rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-xs font-semibold text-gold-ink"
+              title={`${streak} dias ativos seguidos (1 descanso por semana não quebra a sequência)`}
+            >
+              <Flame className="w-3.5 h-3.5" /> {streak} dias
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Ordem da tela Hoje (plano §5.5): prioridade do dia (briefing/primeiros
@@ -682,6 +871,7 @@ export default function Hoje() {
       <Briefing />
       <FirstSteps />
       <CaptureBar />
+      <RetroCountdown />
       <HabitsToday />
       <DayProgress />
       <QuickActions />

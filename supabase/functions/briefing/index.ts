@@ -46,16 +46,32 @@ Deno.serve(async (req) => {
     const today = spParts().dateIso; // data no fuso de São Paulo (era UTC: corrigido)
     const sunday = isSundayInSP();
 
+    // Primeiro Amanhecer (análise UX P0.1): nas primeiras 72h de conta o
+    // briefing diário é por nossa conta, em qualquer plano — o dia 1 nunca
+    // abre com cadeado, e os dias 2–3 ganham motivo de retorno. Custo: uma
+    // chamada Haiku/dia por usuário novo (o roteador abaixo usa MODEL_FAST
+    // para retratos curtos, que é o caso de contas novas).
+    const createdAt = new Date(user.created_at ?? 0).getTime();
+    const firstDawn = Number.isFinite(createdAt) && createdAt > 0 &&
+      Date.now() - createdAt <= 72 * 3600 * 1000;
+
+    const ent = await getEntitlements(supabase, user.id);
+    const freeWeekday = ent.flags.premium_limits_enabled && !ent.limits.briefing_daily && !sunday;
+    // Cortesia: gratuito, dia de semana, dentro das 72h — o app mostra
+    // "por nossa conta" e prepara a transição honesta do dia 4.
+    const courtesy = freeWeekday && firstDawn;
+
     const { data: cached } = await supabase.from("briefings")
       .select("content").eq("user_id", user.id).eq("brief_date", today).maybeSingle();
-    if (cached?.content) return json({ briefing: cached.content, cached: true });
+    if (cached?.content) return json({ briefing: cached.content, cached: true, courtesy });
 
-    // Plano gratuito: briefing diário é do Ascende+; a retrospectiva de domingo é de todos.
-    const ent = await getEntitlements(supabase, user.id);
-    if (ent.flags.premium_limits_enabled && !ent.limits.briefing_daily && !sunday) {
+    // Plano gratuito após o Primeiro Amanhecer: briefing diário é do
+    // Ascende+; a retrospectiva de domingo é de todos. A mensagem é de
+    // transição, não de cadeado — e o app troca o card por conteúdo local.
+    if (freeWeekday && !firstDawn) {
       return json({
         briefing: null, locked: true, feature: "briefing",
-        reason: "O briefing diário faz parte do Ascende+. Sua retrospectiva da semana chega todo domingo.",
+        reason: "Foi bom te acompanhar de manhã nos seus primeiros dias. O briefing diário vive no Ascende+ — e a sua retrospectiva gratuita continua chegando todo domingo.",
         reset_at: nextSpDayStartUtc(), upgrade_available: true,
       });
     }
@@ -82,7 +98,7 @@ Deno.serve(async (req) => {
       { user_id: user.id, brief_date: today, content: briefing },
       { onConflict: "user_id,brief_date" }
     );
-    return json({ briefing, cached: false });
+    return json({ briefing, cached: false, courtesy });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);

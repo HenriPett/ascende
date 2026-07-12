@@ -24,10 +24,28 @@ const EXAMPLES = [
   "Almocei frango com arroz, orei de manhã",
 ];
 
-export default function CaptureBar() {
+/** Explica o XP uma única vez, no primeiro registro da vida do usuário
+ *  (análise UX P2.3): "+4 XP" sem contexto não significa nada no dia 1. */
+export function xpToastSuffix(): string {
+  try {
+    if (localStorage.getItem("ascend-xp-explained")) return "";
+    localStorage.setItem("ascend-xp-explained", "1");
+    return " — cada registro sobe seu nível de vida real";
+  } catch { return ""; }
+}
+
+export default function CaptureBar({
+  initialText,
+  onConfirmed,
+}: {
+  /** Pré-preenche a frase (ex.: continuidade da demo da landing no onboarding). */
+  initialText?: string;
+  /** Chamado após uma confirmação bem-sucedida (o onboarding usa para celebrar). */
+  onConfirmed?: (count: number) => void;
+} = {}) {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText ?? "");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [proposed, setProposed] = useState<ProposedEvent[] | null>(null);
@@ -86,13 +104,14 @@ export default function CaptureBar() {
       await saveProposedEvents(user.id, selected);
       const gained = selected.reduce((sum, ev) => sum + xpForKind(ev.kind), 0);
       toast.success(
-        selected.length === 1
+        (selected.length === 1
           ? `${selected[0].summary} · +${gained} XP`
-          : `${selected.length} registros feitos de uma vez · +${gained} XP`
+          : `${selected.length} registros feitos de uma vez · +${gained} XP`) + xpToastSuffix()
       );
       setText("");
       setProposed(null);
       qc.invalidateQueries();
+      onConfirmed?.(selected.length);
     } catch {
       toast.error("Não consegui salvar. Tente de novo.");
     } finally {

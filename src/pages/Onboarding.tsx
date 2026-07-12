@@ -1,4 +1,7 @@
-// Onboarding mínimo (2 passos): meta + porta de entrada.
+// Onboarding mínimo (2 passos + 1 vivencial): meta + porta de entrada +
+// PRIMEIRA CAPTURA GUIADA (análise UX P0.2) — o "uau" prometido na landing
+// acontece DENTRO do onboarding, não depois dele. Se a pessoa testou a demo
+// da landing, a frase dela vem pré-preenchida (continuidade via sessionStorage).
 //
 // Decisão de posicionamento (POSICIONAMENTO.md): a porta de entrada padrão é
 // o cliente-alavanca "corpo + dinheiro" (Prosperidade, Vitalidade e
@@ -23,7 +26,8 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { PILLARS, type PillarId } from "@/lib/pillars";
-import { Check, Loader2, ArrowRight, ArrowLeft } from "lucide-react";
+import CaptureBar from "@/components/core/CaptureBar";
+import { Check, Loader2, ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Hábitos iniciais sugeridos por pilar (a pessoa pode mudar depois)
@@ -41,6 +45,15 @@ const DEFAULT_PRACTICE = "Momento de prática";
 // A porta de entrada da maioria: corpo + dinheiro (cliente-alavanca).
 const DEFAULT_PILLARS: PillarId[] = ["prosperidade", "vitalidade", "alimentacao"];
 
+/** Frase digitada na demo da landing (TryItDemo) — lida uma vez e descartada. */
+function consumeLandingPhrase(): string {
+  try {
+    const v = sessionStorage.getItem("ascende-landing-phrase") ?? "";
+    sessionStorage.removeItem("ascende-landing-phrase");
+    return v;
+  } catch { return ""; }
+}
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -51,6 +64,8 @@ export default function Onboarding() {
 
   const [goal, setGoal] = useState("");
   const [selected, setSelected] = useState<PillarId[]>(DEFAULT_PILLARS);
+  const [landingPhrase] = useState(consumeLandingPhrase);
+  const [captured, setCaptured] = useState(false);
 
   const togglePillar = (id: PillarId) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -92,8 +107,9 @@ export default function Onboarding() {
           : old
       );
       refresh();
-      toast.success("Tudo pronto. Bem-vindo(a) à subida!");
-      navigate("/app", { replace: true });
+      // Perfil salvo e onboarded=true: se a pessoa abandonar aqui, já está
+      // dentro. O passo 3 é o momento de valor, não mais um formulário.
+      setStep(2);
     } catch {
       toast.error("Algo deu errado ao salvar. Tente de novo.");
     } finally {
@@ -170,17 +186,45 @@ export default function Onboarding() {
       <div className="flex gap-2">
         <Button variant="ghost" onClick={() => setStep(0)}><ArrowLeft className="w-4 h-4" /></Button>
         <Button className="flex-1" disabled={!selected.length || saving} onClick={finish}>
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Começar minha subida"}
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (<>Continuar <ArrowRight className="w-4 h-4 ml-1" /></>)}
         </Button>
       </div>
+    </div>,
+    // 2 — a mágica: primeira captura guiada (o "uau" da landing, garantido)
+    <div key="capture" className="space-y-4">
+      <div>
+        <h1 className="font-display text-2xl font-semibold flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-gold" /> Agora, a mágica
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1.5">
+          {landingPhrase
+            ? "Sua frase da página inicial está aqui — agora é de verdade: a IA separa e registra nos pilares certos."
+            : "Conte como foi seu dia até agora, numa frase — a IA separa e registra tudo nos pilares certos. É assim que o Ascende funciona todo dia, em 10 segundos."}
+        </p>
+      </div>
+      <CaptureBar initialText={landingPhrase || undefined} onConfirmed={() => setCaptured(true)} />
+      {captured && (
+        <p className="text-sm rounded-lg border border-success/40 bg-success/5 p-3 animate-fade-up">
+          Primeiro registro feito — sua subida começou. É só isso, todo dia. ✨
+        </p>
+      )}
+      <Button className="w-full" onClick={() => { toast.success("Bem-vindo(a) à subida!"); navigate("/app", { replace: true }); }}>
+        {captured ? "Começar minha subida" : "Ir para o app"} <ArrowRight className="w-4 h-4 ml-1" />
+      </Button>
+      {!captured && (
+        <button className="w-full text-xs text-muted-foreground underline"
+          onClick={() => navigate("/app", { replace: true })}>
+          Prefiro explorar primeiro, sem registrar agora
+        </button>
+      )}
     </div>,
   ];
 
   return (
     <div className="min-h-dvh grid place-items-center bg-background px-4 py-8">
       <Card className="w-full max-w-md p-6">
-        <div className="flex gap-1.5 mb-6" aria-label={`Passo ${step + 1} de 2`}>
-          {[0, 1].map((i) => (
+        <div className="flex gap-1.5 mb-6" aria-label={`Passo ${step + 1} de 3`}>
+          {[0, 1, 2].map((i) => (
             <div key={i} className={cn("h-1 flex-1 rounded-full", i <= step ? "bg-gold" : "bg-muted")} />
           ))}
         </div>

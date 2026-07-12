@@ -159,6 +159,9 @@ function TryItDemo() {
   const run = () => {
     if (!text.trim()) return;
     setResult(parseLocalEvents(text));
+    // Continuidade landing → onboarding (análise UX P0.2): a frase que a
+    // pessoa testou aqui reaparece na primeira captura guiada, de verdade.
+    try { sessionStorage.setItem("ascende-landing-phrase", text.trim()); } catch { /* noop */ }
   };
 
   return (

@@ -58,6 +58,16 @@ npx supabase login
 npx supabase functions deploy ai-chat capture briefing analyze-meal analyze-body import-statement --project-ref SEU_REFERENCE_ID
 ```
 
+> **Confirmação de e-mail (decisão de fundador):** com a confirmação ativa no Supabase
+> (Authentication → Providers → Email), o app mostra uma tela dedicada de "confirme seu
+> e-mail" com reenvio. Para signup sem fricção (o usuário cai direto no onboarding),
+> desative "Confirm email" — trade-off explícito: menos atrito × mais contas com e-mail
+> falso/spam. O funil de ativação foi desenhado para funcionar bem nos dois modos.
+
+```bash
+
+```
+
 ```bash
 npx supabase secrets set ANTHROPIC_API_KEY=sua-chave-da-anthropic --project-ref SEU_REFERENCE_ID
 ```

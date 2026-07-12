@@ -976,3 +976,22 @@ begin
   return true;
 end; $$;
 grant execute on function public.award_import_milestone() to authenticated;
+
+-- ─── 23. XP DE MARCO: PRIMEIROS PASSOS (análise UX P1.1) ──
+-- Quando o usuário conclui a trilha inicial (captura, Raio-X, refeição e
+-- primeiro plano), o checklist termina em clímax em vez de sumir em
+-- silêncio: +20 XP, uma única vez por conta.
+create or replace function public.award_first_steps_milestone()
+returns boolean language plpgsql security definer set search_path = public as $$
+declare uid uuid := auth.uid();
+begin
+  if uid is null then return false; end if;
+  if exists (
+    select 1 from public.xp_log
+    where user_id = uid and reason = 'Primeiros passos concluídos: base montada'
+  ) then return false; end if;
+  insert into public.xp_log (user_id, points, reason)
+  values (uid, 20, 'Primeiros passos concluídos: base montada');
+  return true;
+end; $$;
+grant execute on function public.award_first_steps_milestone() to authenticated;

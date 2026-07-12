@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { LEGAL_VERSION } from "@/lib/legal";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, MailCheck, Sparkles, Check } from "lucide-react";
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -21,6 +21,24 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  // Tela de confirmação de e-mail (análise UX P1.2): o ponto de maior
+  // motivação do funil não pode morrer num toast de 4 segundos.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [resendIn, setResendIn] = useState(0);
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((v) => v - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
+  const resend = async () => {
+    if (!pendingEmail || resendIn > 0) return;
+    const { error } = await supabase.auth.resend({ type: "signup", email: pendingEmail });
+    if (error) { toast.error("Não consegui reenviar agora. Tente em instantes."); return; }
+    toast.success("Link reenviado! Confira também a caixa de spam.");
+    setResendIn(30);
+  };
 
   useEffect(() => {
     if (!authLoading && user) navigate("/app", { replace: true });
@@ -32,6 +50,10 @@ export default function Auth() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
+      if (error.message.toLowerCase().includes("not confirmed")) {
+        setPendingEmail(email);
+        return;
+      }
       toast.error(
         error.message.includes("Invalid login")
           ? "E-mail ou senha incorretos."
@@ -73,9 +95,60 @@ export default function Auth() {
     if (data.session) {
       navigate("/onboarding", { replace: true });
     } else {
-      toast.success("Conta criada! Confira seu e-mail para confirmar o cadastro e depois entre.");
+      setPendingEmail(email);
+      setResendIn(30);
     }
   };
+
+  // Tela dedicada: enquanto o link não é clicado, mostramos o que espera
+  // do outro lado — a motivação continua viva até o e-mail chegar.
+  if (pendingEmail) {
+    return (
+      <div className="min-h-dvh grid place-items-center bg-background px-4">
+        <div className="w-full max-w-sm">
+          <Link to="/" className="flex items-center justify-center mb-6"><Logo size="lg" /></Link>
+          <Card className="p-6 space-y-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-gold/10 grid place-items-center mx-auto">
+              <MailCheck className="w-6 h-6 text-gold-ink" />
+            </div>
+            <div>
+              <h1 className="font-display text-xl font-semibold">Confirme seu e-mail</h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Enviamos um link para <strong className="text-foreground">{pendingEmail}</strong>.
+                Toque nele e volte aqui — sua conta já está reservada.
+              </p>
+            </div>
+            <div className="rounded-lg border p-3 text-left space-y-1.5">
+              <p className="text-xs font-medium flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-gold" /> O que te espera do outro lado (2 minutos):
+              </p>
+              {[
+                "Sua meta, no seu jeito — a bússola da IA",
+                "Corpo + dinheiro como porta de entrada",
+                "A mágica: uma frase e o dia inteiro registrado",
+              ].map((t) => (
+                <p key={t} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                  <Check className="w-3.5 h-3.5 text-success shrink-0 mt-px" /> {t}
+                </p>
+              ))}
+            </div>
+            <Button className="w-full" variant="outline" onClick={resend} disabled={resendIn > 0}>
+              {resendIn > 0 ? `Reenviar link (${resendIn}s)` : "Reenviar link"}
+            </Button>
+            <button
+              className="text-xs text-muted-foreground underline"
+              onClick={() => setPendingEmail(null)}
+            >
+              E-mail errado? Corrigir e tentar de novo
+            </button>
+          </Card>
+          <p className="text-center text-xs text-muted-foreground mt-4">
+            Não chegou? Confira a caixa de spam — o remetente é o seu projeto Supabase.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh grid place-items-center bg-background px-4">

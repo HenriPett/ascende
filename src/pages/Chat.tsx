@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -56,7 +57,10 @@ const MAX_ATTACHMENTS = 4;
 const MAX_PDF_BYTES = 4 * 1024 * 1024;   // 4 MB
 const MAX_TEXT_CHARS = 20_000;
 
-const SUGGESTIONS = [
+// Sugestões-base do estado vazio. A primeira é personalizada com a meta do
+// onboarding quando ela existe (análise UX P2.2): a IA "já conhece" a pessoa
+// antes da primeira mensagem — que é a promessa central da marca.
+const BASE_SUGGESTIONS = [
   "Monte um plano alimentar para ganho de massa que caiba no meu orçamento",
   "Como está minha vida esta semana?",
   "O que meus dados dizem que eu deveria melhorar primeiro?",
@@ -107,6 +111,7 @@ function fileToText(file: File): Promise<string> {
 
 export default function Chat() {
   const { user } = useAuth();
+  const { profile } = useProfile();
   const qc = useQueryClient();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -384,10 +389,19 @@ export default function Chat() {
 
         {!isLoading && messages.length === 0 && (
           <div className="space-y-2 pt-4">
+            {profile?.goal && (
+              <p className="text-sm">
+                Oi{profile?.name ? `, ${String(profile.name).split(" ")[0]}` : ""}. Já sei sua meta:{" "}
+                <em>"{String(profile.goal).slice(0, 120)}"</em>. Por onde começamos?
+              </p>
+            )}
             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-gold" /> Algumas coisas que só eu consigo responder:
             </p>
-            {SUGGESTIONS.map((s) => (
+            {(profile?.goal
+              ? [`Monte um plano para "${String(profile.goal).slice(0, 80)}" — que caiba no meu orçamento`, ...BASE_SUGGESTIONS.slice(1)]
+              : BASE_SUGGESTIONS
+            ).map((s) => (
               <button
                 key={s}
                 onClick={() => send(s)}
