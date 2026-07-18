@@ -3,11 +3,13 @@
 // acontece DENTRO do onboarding, não depois dele. Se a pessoa testou a demo
 // da landing, a frase dela vem pré-preenchida (continuidade via sessionStorage).
 //
-// Decisão de posicionamento (POSICIONAMENTO.md): a porta de entrada padrão é
-// o cliente-alavanca "corpo + dinheiro" (Prosperidade, Vitalidade e
-// Alimentação pré-selecionados; Mente & Espírito é opt-in). A pessoa ajusta
-// como quiser aqui e depois em Ajustes — foco radical é de marca/discurso,
-// não mutilação do produto.
+// Decisão revista (plano de feedbacks, Sugestão 1): a porta de entrada agora
+// é UM pilar — o que a meta digitada no passo 1 revela (inferPillarFromGoal).
+// Os feedbacks mostraram que pré-selecionar 3 pilares cobra o preço do
+// "inteiro" no dia 1, antes de entregar o benefício. Os outros pilares
+// nascem do uso (ativação em 1 toque na tela Pilares), não do checkbox.
+// Sem meta ou meta não inferível, o padrão é Prosperidade (o pilar com
+// maior valor no dia 1: Raio-X de 60s).
 //
 // Coleta progressiva: renda, teto de gastos, ano de nascimento, sexo, altura,
 // nível de atividade e o nome da prática espiritual NÃO são pedidos na porta.
@@ -25,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { PILLARS, type PillarId } from "@/lib/pillars";
+import { PILLARS, inferPillarFromGoal, type PillarId } from "@/lib/pillars";
 import CaptureBar from "@/components/core/CaptureBar";
 import { Check, Loader2, ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -39,8 +41,8 @@ import { cn } from "@/lib/utils";
 // a pessoa renomeia em Ajustes ou na primeira conversa com o Conselheiro.
 const DEFAULT_PRACTICE = "Momento de prática";
 
-// A porta de entrada da maioria: corpo + dinheiro (cliente-alavanca).
-const DEFAULT_PILLARS: PillarId[] = ["prosperidade", "vitalidade", "alimentacao"];
+// Padrão quando a meta não revela um pilar: Prosperidade (valor no dia 1).
+const FALLBACK_PILLAR: PillarId = "prosperidade";
 
 /** Frase digitada na demo da landing (TryItDemo) — lida uma vez e descartada. */
 function consumeLandingPhrase(): string {
@@ -65,12 +67,22 @@ export default function Onboarding() {
   // (nome automático) ou do cadastro por e-mail não vê fricção nova.
   const [displayName, setDisplayName] = useState("");
   const needsName = !profileLoading && !(profile?.name ?? "").trim();
-  const [selected, setSelected] = useState<PillarId[]>(DEFAULT_PILLARS);
+  // Começa vazio: a seleção nasce da meta ao avançar do passo 0 (goToPillars).
+  const [selected, setSelected] = useState<PillarId[]>([]);
+  const [inferred, setInferred] = useState<PillarId | null>(null);
   const [landingPhrase] = useState(consumeLandingPhrase);
   const [captured, setCaptured] = useState(false);
 
   const togglePillar = (id: PillarId) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  // Passo 0 → 1: a meta já revela o pilar; começamos com ELE, só ele.
+  const goToPillars = () => {
+    const fromGoal = inferPillarFromGoal(goal);
+    setInferred(fromGoal);
+    setSelected((cur) => (cur.length ? cur : [fromGoal ?? FALLBACK_PILLAR]));
+    setStep(1);
+  };
 
   const finish = async () => {
     if (!user) return;
@@ -136,10 +148,10 @@ export default function Onboarding() {
         maxLength={200}
         placeholder='Ex.: "Ganhar massa muscular sem estourar o orçamento"'
       />
-      <Button className="w-full" onClick={() => setStep(1)}>
+      <Button className="w-full" onClick={goToPillars}>
         Continuar <ArrowRight className="w-4 h-4 ml-1" />
       </Button>
-      <button className="w-full text-xs text-muted-foreground underline" onClick={() => setStep(1)}>
+      <button className="w-full text-xs text-muted-foreground underline" onClick={goToPillars}>
         Prefiro pular por enquanto
       </button>
     </div>,
@@ -149,9 +161,14 @@ export default function Onboarding() {
       <div>
         <h1 className="font-display text-2xl font-semibold">Por onde você quer começar?</h1>
         <p className="text-sm text-muted-foreground mt-1.5">
-          A maioria começa por <strong>corpo + dinheiro</strong> (já deixamos selecionado) —
-          é onde o Ascende faz o que nenhum outro app faz. Ajuste como quiser; dá para
-          ativar ou pausar qualquer pilar depois, em Ajustes.
+          {inferred ? (
+            <>Sua meta aponta para <strong>{PILLARS.find((x) => x.id === inferred)?.name}</strong> —
+            já deixamos ativo. Comece por UM pilar: os outros nascem do uso, quando você
+            quiser, em 1 toque.</>
+          ) : (
+            <>Comece por UM pilar — o que mais importa agora. Os outros nascem do uso,
+            quando você quiser, em 1 toque.</>
+          )}
         </p>
       </div>
       <div className="grid grid-cols-1 gap-2.5">

@@ -38,6 +38,11 @@ alter table public.profiles add column if not exists protein_goal_g int;       -
 alter table public.profiles add column if not exists daily_spend_limit numeric;  -- teto de gasto diário (R$)
 alter table public.profiles add column if not exists weekly_workouts_goal int;   -- treinos por semana
 alter table public.profiles add column if not exists sleep_goal_h numeric;       -- horas de sono por noite
+-- Raio-X de Vitalidade (plano de feedbacks, Sugestões 2 e 4): estimativas
+-- declaradas em 60s no dia 1 — premissas honestas, cruzáveis pelo briefing
+-- antes de existirem semanas de registro. Registro real substitui, nunca soma.
+alter table public.profiles add column if not exists est_workouts_week int;      -- treinos/semana (estimativa)
+alter table public.profiles add column if not exists est_sleep_h numeric;        -- sono médio/noite (estimativa)
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles for select using (auth.uid() = user_id);

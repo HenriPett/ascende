@@ -5,7 +5,7 @@
 > ninguém pensa com clareza. Cada resposta abaixo já está decidida. A reunião em que
 > o dilema aparecer não é uma reunião de decisão: é uma reunião de leitura deste arquivo.
 
-**A régua que gera todas as respostas:** *o Ascende ganha dinheiro quando a vida do usuário melhora — nunca quando ele fica mais tempo no app.* Modelo de negócio (assinatura) e valores no mesmo eixo; o que desalinha um, mata o outro.
+**A régua que gera todas as respostas:** _o Ascende ganha dinheiro quando a vida do usuário melhora — nunca quando ele fica mais tempo no app._ Modelo de negócio (assinatura) e valores no mesmo eixo; o que desalinha um, mata o outro.
 
 ---
 
@@ -31,7 +31,7 @@ Nós temos uma Batalha contra apostas dentro do produto. Aceitar dinheiro de bet
 
 **Resposta decidida: NÃO.**
 
-Retenção vem de vida melhorando, não de culpa. O produto inteiro foi desenhado ao contrário do growth padrão: briefing 1x/dia, limites de mensagens, dia de descanso que preserva a sequência, XP por constância. Investidor que exige o oposto está comprando outra empresa — que ele vá comprá-la. (Corolário: métricas de "tempo no app" nunca entram no dashboard de sucesso; a métrica é vida registrada em <10s/dia e resultados reais.)
+Retenção vem de vida melhorando, não de culpa. O produto inteiro foi desenhado ao contrário do growth padrão: briefing 1x/dia, limites de mensagens, dia de descanso que preserva a sequência, XP por constância. Investidor que exige o oposto está comprando outra empresa — que ele vá comprá-la. (Corolário: métricas de "tempo no app" nunca entram no dashboard de sucesso. A métrica de sucesso é **1 insight cruzado útil por semana** — algo que nenhum app de nicho conseguiria dizer — e resultados reais na vida. Registrar em <10s/dia continua sendo requisito de experiência, mas é o _custo_ que o usuário paga, não o valor que ele recebe: otimizar o custo sem medir o valor foi o erro que os primeiros feedbacks expuseram.)
 
 ## Dilema 5 — Ads dobrariam a receita
 
@@ -49,7 +49,7 @@ O modelo de ads incentiva engajamento, até vício — e entra em conflito front
 
 ## Micro-incoerências sob vigilância (Festinger: um ato incoerente saca a conta toda)
 
-1. **XP:** hoje premia ações na vida real. Se algum dia premiar *abrir o app* ou *tempo de tela*, a contradição rica vira incoerência na hora. Proibido.
+1. **XP:** hoje premia ações na vida real. Se algum dia premiar _abrir o app_ ou _tempo de tela_, a contradição rica vira incoerência na hora. Proibido.
 2. **Paywall:** pode mostrar limites e preços, mas o framing carrega o valor ("os limites existem porque vivemos de assinatura, não da sua atenção"). Vocabulário de operadora de celular é regressão.
 3. **Notificações:** qualquer push futuro passa pelo teste "isso é serviço ou é culpa?". Culpa não passa.
 4. **Novos pilares/features "para todo mundo":** dopamina de roadmap ≠ progresso. Cada adição responde primeiro: "isso serve o cliente-alavanca ou dilui a caixinha?"

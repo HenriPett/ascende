@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Moon, Dumbbell, CircleCheck, Circle, BarChart3, HeartPulse, X } from "lucide-react";
+import { Plus, Trash2, Moon, Dumbbell, CircleCheck, Circle, BarChart3, HeartPulse, X, Zap } from "lucide-react";
 import { todayISO } from "@/lib/format";
 import { PILLARS } from "@/lib/pillars";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,117 @@ interface HLog { id: string; habit_id: string; log_date: string }
 interface WorkoutEvent { id: string; occurred_at: string; payload: { description?: string; muscles?: string[] } }
 
 const MUSCLES = ["Peito", "Costas", "Pernas", "Ombros", "Braços", "Core", "Cardio"] as const;
+
+/* ── Raio-X de Vitalidade — 60 segundos (plano de feedbacks, Sug. 2 e 4) ──
+   O equivalente ao Raio-X de Prosperidade: valor no dia 1, sem depender de
+   semanas de registro. Duas perguntas (quantos treinos por semana hoje,
+   quantas horas de sono em média) viram um retrato estimado e honesto —
+   marcado como estimativa — que o briefing e o Conselheiro já cruzam com
+   dinheiro e alimentação desde o primeiro dia. O registro real do dia a
+   dia substitui a estimativa, nunca soma. */
+function RaioXVitalidade() {
+  const { user } = useAuth();
+  const { profile, refresh } = useProfile();
+  const [open, setOpen] = useState(false);
+  const [workoutsWeek, setWorkoutsWeek] = useState("");
+  const [sleepAvg, setSleepAvg] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  if (!profile) return null;
+  const hasEstimates = profile.est_workouts_week != null || profile.est_sleep_h != null;
+
+  const save = async () => {
+    if (!user) return;
+    const w = Math.round(Number(workoutsWeek));
+    const sHours = Number(sleepAvg.replace(",", "."));
+    const patch: Record<string, number> = {};
+    if (workoutsWeek !== "" && w >= 0 && w <= 14) patch.est_workouts_week = w;
+    if (sleepAvg !== "" && sHours >= 3 && sHours <= 14) patch.est_sleep_h = sHours;
+    if (!Object.keys(patch).length) {
+      toast.error("Preencha pelo menos um dos dois campos. Ex.: 3 treinos, 6,5 horas.");
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
+    setSaving(false);
+    if (error) { toast.error("Não consegui salvar o Raio-X."); return; }
+    toast.success("Retrato de Vitalidade pronto. O Conselheiro e o briefing já cruzam isso com os outros pilares.");
+    setOpen(false);
+    setWorkoutsWeek("");
+    setSleepAvg("");
+    refresh();
+  };
+
+  // Já respondido: mostra o retrato estimado, editável em 1 toque.
+  if (hasEstimates && !open) {
+    const parts: string[] = [];
+    if (profile.est_workouts_week != null) parts.push(`~${profile.est_workouts_week} treino${profile.est_workouts_week === 1 ? "" : "s"}/semana`);
+    if (profile.est_sleep_h != null) parts.push(`~${String(profile.est_sleep_h).replace(".", ",")}h de sono/noite`);
+    return (
+      <Card className="p-4 flex items-start gap-3">
+        <div className="w-9 h-9 rounded-full grid place-items-center shrink-0" style={{ background: "hsl(var(--vitalidade) / 0.12)" }}>
+          <Zap className="w-5 h-5" style={{ color: "hsl(var(--vitalidade))" }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">Seu retrato estimado: {parts.join(" · ")}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Estimativa declarada por você — os registros reais vão substituindo aos poucos.{" "}
+            <button className="underline text-foreground" onClick={() => setOpen(true)}>Refazer</button>
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  if (!open && !hasEstimates) {
+    return (
+      <Card className="p-4 flex items-start gap-3 border-gold/30">
+        <div className="w-9 h-9 rounded-full grid place-items-center shrink-0" style={{ background: "hsl(var(--vitalidade) / 0.12)" }}>
+          <Zap className="w-5 h-5" style={{ color: "hsl(var(--vitalidade))" }} />
+        </div>
+        <div className="flex-1 min-w-0 space-y-2">
+          <div>
+            <p className="text-sm font-semibold">Raio-X de Vitalidade — 60 segundos</p>
+            <p className="text-xs text-muted-foreground">
+              Duas perguntas e o seu corpo entra no retrato hoje mesmo — sem esperar
+              semanas de registro. É estimativa, e a gente diz que é.
+            </p>
+          </div>
+          <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>Responder agora</Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-4 space-y-3 border-gold/30">
+      <div>
+        <p className="text-sm font-semibold flex items-center gap-1.5">
+          <Zap className="w-4 h-4" style={{ color: "hsl(var(--vitalidade))" }} /> Raio-X de Vitalidade
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Como está HOJE, na média — não a meta, o real. Vale chutar honesto.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <p className="text-xs font-medium">Treinos por semana, hoje</p>
+          <Input inputMode="numeric" placeholder="Ex.: 3 (0 se parou)" value={workoutsWeek}
+            onChange={(e) => setWorkoutsWeek(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs font-medium">Horas de sono por noite, em média</p>
+          <Input inputMode="decimal" placeholder="Ex.: 6,5" value={sleepAvg}
+            onChange={(e) => setSleepAvg(e.target.value)} />
+        </div>
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={saving}>Depois</Button>
+        <Button size="sm" onClick={save} disabled={saving}>Salvar retrato</Button>
+      </div>
+    </Card>
+  );
+}
 
 export default function Vitalidade() {
   const { user } = useAuth();
@@ -232,8 +343,14 @@ export default function Vitalidade() {
         <h1 className="font-display text-2xl font-semibold" style={{ color: "hsl(var(--vitalidade))" }}>
           Vitalidade
         </h1>
-        <p className="text-sm text-muted-foreground">Corpo, sono e energia. O degrau mais físico da subida.</p>
+        <p className="text-sm text-muted-foreground">
+          Corpo, sono e energia. O degrau mais físico da subida. Usa Strava ou outro
+          app de treino? Continue: aqui basta contar numa frase — nós cruzamos com o resto.
+        </p>
       </div>
+
+      {/* Valor no dia 1 (Sugestões 2 e 4): o equivalente ao Raio-X */}
+      <RaioXVitalidade />
 
       {/* Registro rápido: sono e treino */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

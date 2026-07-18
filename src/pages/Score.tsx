@@ -6,7 +6,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useXp } from "@/hooks/useXp";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { PILLARS } from "@/lib/pillars";
+import { PILLARS, activePillarSet } from "@/lib/pillars";
 import { levelTitle, nextTitle, xpReasonLabel } from "@/lib/xp";
 import { monthStartISO } from "@/lib/format";
 import { daysAgoISOInSP } from "@/lib/dates";
@@ -134,7 +134,12 @@ export default function Score() {
     }
   }
 
-  const activePillars = new Set(profile?.pillars ?? []);
+  // Modularidade real (Sugestão 1): os indicadores mostram só os pilares
+  // ativos — antes, o pilar "inativo" aparecia esmaecido, e quem escolheu
+  // "só dinheiro" continuava vendo um app de quatro áreas.
+  const activePillars = activePillarSet(profile?.pillars);
+  const shownPillars = PILLARS.filter((p) => activePillars.has(p.id));
+  const pausedPillars = PILLARS.filter((p) => !activePillars.has(p.id));
 
   // Tendência por pilar: atividade dos últimos 7 dias × 7 dias anteriores.
   const trendByPillar: Record<string, "up" | "down" | "flat" | null> = {};
@@ -245,13 +250,12 @@ export default function Score() {
           diferentes em um único número escondia mais do que mostrava. Cada
           pilar tem seu indicador e sua tendência, separados. */}
 
-      {/* Por pilar */}
+      {/* Por pilar (só os ativos) */}
       <div className="space-y-2.5">
-        {PILLARS.map((p) => {
+        {shownPillars.map((p) => {
           const s = scores[p.id];
-          const inactive = !activePillars.has(p.id);
           return (
-            <Card key={p.id} className={inactive && s.value === null ? "p-4 opacity-60" : "p-4"}>
+            <Card key={p.id} className="p-4">
               <div className="flex items-center gap-3 mb-2">
                 <p.icon className="w-4 h-4" style={{ color: `hsl(var(${p.colorVar}))` }} />
                 <p className="text-sm font-semibold flex-1">{p.attribute}</p>
@@ -288,6 +292,14 @@ export default function Score() {
           );
         })}
       </div>
+
+      {/* Pilares pausados: uma linha discreta, não três cards apagados */}
+      {pausedPillars.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Pausados: {pausedPillars.map((p) => p.attribute).join(", ")} — sem indicador
+          de propósito. <Link to="/app/pilares" className="underline">Ativar quando quiser</Link>.
+        </p>
+      )}
 
       <p className="text-xs text-muted-foreground">
         Semana ruim não apaga a subida: os indicadores olham 14 dias, e o XP nunca diminui.

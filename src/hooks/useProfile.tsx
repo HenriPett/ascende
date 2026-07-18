@@ -52,6 +52,9 @@ export interface Profile {
   daily_spend_limit: number | null;
   weekly_workouts_goal: number | null;
   sleep_goal_h: number | null;
+  /** Raio-X de Vitalidade: estimativas declaradas (não são registros). */
+  est_workouts_week: number | null;
+  est_sleep_h: number | null;
   guides_seen: string[] | null;
 }
 

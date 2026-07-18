@@ -9,8 +9,8 @@
 ## A) A posição
 
 - **A palavra (a caixinha):** "**inteiro**". O Ascende é o único app que vê a sua vida inteira.
-- **A porta de entrada (o cliente-alavanca):** quem quer arrumar **o corpo e o dinheiro ao mesmo tempo, com orçamento apertado**. A prova nº 1: *o plano alimentar que cabe no seu bolso*.
-- **A régua (princípio-mãe):** *o Ascende ganha dinheiro quando a sua vida melhora — nunca quando você fica mais tempo no app.* Assinatura alinhada com libertação.
+- **A porta de entrada (o cliente-alavanca):** quem quer arrumar **o corpo e o dinheiro ao mesmo tempo, com orçamento apertado**. A prova nº 1: _o plano alimentar que cabe no seu bolso_.
+- **A régua (princípio-mãe):** _o Ascende ganha dinheiro quando a sua vida melhora — nunca quando você fica mais tempo no app._ Assinatura alinhada com libertação.
 - **Hierarquia das mensagens (ordem de precedência em qualquer peça):**
   1. **Posição** (o que somos): o único app que vê a sua vida inteira.
   2. **Porta** (por quem começamos): corpo + dinheiro, no orçamento real.
@@ -37,7 +37,7 @@ Todas já sinalizadas pelo próprio código:
 3. **O caçador de streak perfeito.** O produto premia consistência, não perfeição; dias limpos nunca zeram.
 4. **O comprador corporativo/B2B de "wellness empresarial".** Mataria a intimidade que é a alma do app (dinheiro, corpo, fé e emoções não coexistem com o RH olhando).
 
-*Se esta segunda lista algum dia esvaziar, perdemos o foco.*
+_Se esta segunda lista algum dia esvaziar, perdemos o foco._
 
 ## D) O gatilho de tentação (decidido no frio)
 
@@ -57,14 +57,14 @@ Todas já sinalizadas pelo próprio código:
 
 O paper manda **mapear, não forçar**. Atenção pública aparece de repente e some rápido; quem tem a resposta pronta colhe. Para cada gatilho plausível no Brasil, a resposta pronta e o caminho de conversão:
 
-| # | Gatilho plausível | Resposta pronta | Landing/caminho de entrada | Quem aperta o botão |
-|---|---|---|---|---|
-| 1 | **Inflação de alimentos** (o gatilho da Candidata A) | "O plano alimentar que cabe no seu bolso" | Herói da landing + demo interativa (frase de mercado + preço); avaliar rota dedicada `/dieta-no-orcamento` | fundador |
-| 2 | **Epidemia das bets** | Batalha contra apostas + "jamais aceitaremos anúncio de bet" (dito na landing e dentro da própria batalha) | Seção Batalhas da landing; avaliar vitrine pública `/batalhas` | fundador |
-| 3 | **Escândalo de privacidade em apps de saúde/dados vendidos** | A página de recusas | `/recusas` (já no ar, linkada no rodapé, paywall e cancelamento) | fundador |
-| 4 | **Debate "a IA está nos viciando"** | A contradição rica: "feito para 10 segundos por dia. E ir viver." | Âncora `/#10segundos` na landing | fundador |
+| #   | Gatilho plausível                                            | Resposta pronta                                                                                            | Landing/caminho de entrada                                                                                 | Quem aperta o botão |
+| --- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------- |
+| 1   | **Inflação de alimentos** (o gatilho da Candidata A)         | "O plano alimentar que cabe no seu bolso"                                                                  | Herói da landing + demo interativa (frase de mercado + preço); avaliar rota dedicada `/dieta-no-orcamento` | fundador            |
+| 2   | **Epidemia das bets**                                        | Batalha contra apostas + "jamais aceitaremos anúncio de bet" (dito na landing e dentro da própria batalha) | Seção Batalhas da landing; avaliar vitrine pública `/batalhas`                                             | fundador            |
+| 3   | **Escândalo de privacidade em apps de saúde/dados vendidos** | A página de recusas                                                                                        | `/recusas` (já no ar, linkada no rodapé, paywall e cancelamento)                                           | fundador            |
+| 4   | **Debate "a IA está nos viciando"**                          | A contradição rica: "feito para 10 segundos por dia. E ir viver."                                          | Âncora `/#10segundos` na landing                                                                           | fundador            |
 
-**Teste de prontidão (rodar a cada trimestre):** *"se 1 milhão de pessoas chegassem amanhã, eu converteria ou desperdiçaria?"* Checklist: demo sem login funcionando (✔ implementada), onboarding em 2 passos (✔), PWA instalável com um toque (validar service worker), deploy via Git conectado (conectar `ci.yml`), presença em loja (TWA — próximo ciclo).
+**Teste de prontidão (rodar a cada trimestre):** _"se 1 milhão de pessoas chegassem amanhã, eu converteria ou desperdiçaria?"_ Checklist: demo sem login funcionando (✔ implementada), onboarding em 2 passos (✔), PWA instalável com um toque (validar service worker), deploy via Git conectado (conectar `ci.yml`), presença em loja (TWA — próximo ciclo).
 
 ---
 
@@ -80,3 +80,30 @@ O paper manda **mapear, não forçar**. Atenção pública aparece de repente e 
 8. Perseguir o público B2B/wellness corporativo antes de vencer o cliente-alavanca.
 
 Cada item desta lista tem uma versão pública em `/recusas`. Quebrar um deles não é "pivotar": é sacar a conta de confiança inteira (Festinger — um único ato incoerente derruba tudo).
+
+---
+
+## H) Emendas dos primeiros feedbacks (decisão de fundador, por escrito)
+
+Os três primeiros feedbacks reais ("muitas áreas", "parei de treinar, então desisti",
+"pilares rasos vs. apps específicos") não pediram trair este documento — pediram
+levá-lo mais a sério do que o código levava. Três emendas:
+
+1. **Foco radical também é de produto, não só de marca/discurso.** O usuário não lê
+   o posicionamento; ele abre a tela Hoje. A modularidade de pilares agora é real:
+   quem ativa um pilar só vê um app excelente daquela área que, discretamente, sabe
+   que existe mais vida ali. O onboarding começa com **1 pilar** (o que a meta da
+   pessoa revela); os outros nascem do uso, em 1 toque, não do checkbox.
+
+2. **Divisão de trabalho declarada com os apps de nicho.** O Ascende não substitui
+   Strava, MyFitnessPal ou o app do banco — ele é a **camada acima** deles: "use o
+   seu app de nicho; aqui você conta numa frase e nós cruzamos". Não competimos em
+   profundidade pilar a pilar (perderíamos por definição); competimos no "inteiro",
+   que só nós temos. Exceção: profundidade que serve o cliente-alavanca (Raio-X de
+   Prosperidade e de Vitalidade) é investimento, não dispersão.
+
+3. **O momento do churn é o momento do produto.** "Ganhamos quando a vida melhora"
+   implica sermos mais úteis quando a vida piora. Voltar depois do silêncio é o
+   momento mais bem desenhado do app (ritual de retorno, briefing que acolhe o
+   vazio, "nada aqui expirou") — nunca o mais constrangedor. Detecção de silêncio é
+   serviço; culpa continua proibida (PRINCIPIOS.md, Dilema 4).

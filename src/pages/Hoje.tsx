@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import {
   Sunrise, ChevronRight, CircleCheck, Circle, Flame, Droplet, Dumbbell, Moon, Smile,
   BookOpen, Camera, X, UserRound, ListChecks, MessageCircle, Trophy, CalendarHeart,
+  HandHeart,
 } from "lucide-react";
 import { xpToastSuffix } from "@/components/core/CaptureBar";
 import { levelFromXp, levelTitle } from "@/lib/xp";
@@ -18,7 +19,7 @@ import { DEFAULT_WATER_GOAL_ML, DEFAULT_WATER_BOTTLES } from "@/hooks/useProfile
 import { useEffect, useRef, useState } from "react";
 import { greet, todayISO } from "@/lib/format";
 import { dateISOInSP, daysAgoISOInSP } from "@/lib/dates";
-import { pillarById } from "@/lib/pillars";
+import { pillarById, activePillarSet } from "@/lib/pillars";
 import { cn } from "@/lib/utils";
 
 /** Sequência de dias ativos. Regra gentil: 1 dia de descanso por semana não quebra. */
@@ -58,6 +59,105 @@ function useActiveStreak() {
   return streak;
 }
 
+/* ── Ritual de retorno (plano de feedbacks, Sugestão 3) ──────────────────
+   "O momento do churn é o momento do produto": voltar depois de dias de
+   silêncio deveria ser o momento mais bem desenhado do app, não o mais
+   constrangedor. Quando detectamos silêncio (>= 7 dias sem registro, com
+   histórico anterior), a tela Hoje troca o painel — sem dashboard vazio na
+   cara, sem streak em destaque — por uma única pergunta: "conta numa frase
+   o que aconteceu". A CaptureBar absorve. E, como serviço (não culpa),
+   mostramos que NADA expirou: compromissos e planos continuam valendo. */
+const RETURN_GAP_DAYS = 7;
+
+function useReturnGap() {
+  const { user } = useAuth();
+  const { data } = useQuery({
+    queryKey: ["return-gap", user?.id, todayISO()],
+    enabled: !!user,
+    staleTime: 1000 * 60 * 5,
+    queryFn: async () => {
+      const { data: last } = await supabase.from("life_events")
+        .select("occurred_at").eq("user_id", user!.id)
+        .order("occurred_at", { ascending: false }).limit(1);
+      const lastAt = last?.[0]?.occurred_at ? new Date(String(last[0].occurred_at)).getTime() : null;
+      return { lastAt };
+    },
+  });
+  if (!data?.lastAt) return { returning: false, gapDays: 0 };
+  const gapDays = Math.floor((Date.now() - data.lastAt) / 864e5);
+  return { returning: gapDays >= RETURN_GAP_DAYS, gapDays };
+}
+
+function ReturnRitual({ gapDays, onShowPanel }: { gapDays: number; onShowPanel: () => void }) {
+  const { user } = useAuth();
+  const { profile } = useProfile();
+  const firstName = (profile?.name ?? "").split(" ")[0];
+
+  // Serviço, não culpa: o que continua valendo, esperando a pessoa.
+  const { data: standing } = useQuery({
+    queryKey: ["return-standing", user?.id],
+    enabled: !!user,
+    staleTime: 1000 * 60 * 10,
+    queryFn: async () => {
+      const [{ count: habits }, { count: plans }] = await Promise.all([
+        supabase.from("habits").select("id", { count: "exact", head: true })
+          .eq("user_id", user!.id).eq("active", true),
+        supabase.from("plans").select("id", { count: "exact", head: true })
+          .eq("user_id", user!.id).eq("status", "ativo"),
+      ]);
+      return { habits: habits ?? 0, plans: plans ?? 0 };
+    },
+  });
+
+  const standingParts: string[] = [];
+  if ((standing?.plans ?? 0) > 0) {
+    standingParts.push(standing!.plans === 1 ? "seu plano continua valendo" : `seus ${standing!.plans} planos continuam valendo`);
+  }
+  if ((standing?.habits ?? 0) > 0) {
+    standingParts.push(standing!.habits === 1 ? "seu compromisso diário está no lugar" : `seus ${standing!.habits} compromissos diários estão no lugar`);
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5 space-y-3 border-gold/40">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <HandHeart className="w-4 h-4 text-gold" />
+          Que bom te ver de volta{firstName ? `, ${firstName}` : ""}.
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Você ficou {gapDays} dias sem registrar — e está tudo bem. A vida acontece.
+          Conta numa frase o que aconteceu nesse tempo (ou só como está hoje):
+          o primeiro registro de volta vale por dez.
+        </p>
+        <CaptureBar />
+        <p className="text-[11px] text-muted-foreground">
+          {standingParts.length
+            ? `Nada aqui expirou: ${standingParts.join(" e ")}. `
+            : "Nada aqui expirou. "}
+          Seu XP e seus dias limpos nunca diminuem — semana ruim não apaga a subida.
+        </p>
+      </Card>
+
+      <Link
+        to={`/app/conselheiro?q=${encodeURIComponent("Fiquei um tempo sem registrar. Me ajuda a recomeçar pequeno, a partir de onde eu parei?")}`}
+        className="flex items-center justify-between rounded-lg border bg-card p-4 hover:bg-muted/50 transition-colors"
+      >
+        <div>
+          <p className="text-sm font-semibold">Recomeçar com o Conselheiro</p>
+          <p className="text-xs text-muted-foreground">
+            Ele conhece seu histórico e sabe propor um recomeço pequeno, sem cobrança.
+          </p>
+        </div>
+        <MessageCircle className="w-5 h-5 text-muted-foreground" />
+      </Link>
+
+      <button onClick={onShowPanel} className="w-full text-xs text-muted-foreground underline">
+        Prefiro ver meu painel normal
+      </button>
+    </div>
+  );
+}
+
 /* ── Ações rápidas (3.1): água, humor e foto em 1 toque ── */
 const QUICK_MOODS = [
   { score: 1, emoji: "😞", label: "péssimo" },
@@ -73,6 +173,15 @@ function QuickActions() {
   const qc = useQueryClient();
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const bottles = profile?.water_bottles?.length ? profile.water_bottles : DEFAULT_WATER_BOTTLES;
+  // Modularidade real (Sugestão 1): cada ação rápida pertence a um pilar;
+  // quem pausou o pilar não vê a ação. Quem escolheu "só dinheiro" vê um
+  // app de finanças, não um app de 4 áreas com 3 apagadas.
+  const active = activePillarSet(profile?.pillars);
+  const showWater = active.has("alimentacao");
+  const showMood = active.has("mente");
+  const showMeal = active.has("alimentacao");
+  const showExpense = active.has("prosperidade");
+  const showWorkout = active.has("vitalidade");
 
   const insert = async (key: string, row: Record<string, unknown>, okMsg: string) => {
     if (!user || savingKey) return;
@@ -92,11 +201,13 @@ function QuickActions() {
     insert(`m${score}`, { pillar: "mente", kind: "mood", payload: { score, label, summary: `Humor: ${label}` } },
       `Humor ${emoji} registrado. +5 XP`);
 
+  if (!showWater && !showMood && !showMeal && !showExpense && !showWorkout) return null;
+
   return (
     <div className="space-y-1.5">
       <p className="text-[11px] font-medium text-muted-foreground px-0.5">Registro em 1 toque</p>
       <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
-        {bottles.slice(0, 3).map((b) => (
+        {showWater && bottles.slice(0, 3).map((b) => (
           <button
             key={`${b.ml}-${b.label}`}
             onClick={() => addWater(b.ml, b.label)}
@@ -107,8 +218,10 @@ function QuickActions() {
             {b.label} <span className="text-muted-foreground">{b.ml}ml</span>
           </button>
         ))}
-        <span className="shrink-0 w-px bg-border my-1.5" aria-hidden />
-        {QUICK_MOODS.map((m) => (
+        {showWater && (showMood || showMeal || showExpense || showWorkout) && (
+          <span className="shrink-0 w-px bg-border my-1.5" aria-hidden />
+        )}
+        {showMood && QUICK_MOODS.map((m) => (
           <button
             key={m.score}
             onClick={() => logMood(m.score, m.emoji, m.label)}
@@ -120,13 +233,33 @@ function QuickActions() {
             {m.emoji}
           </button>
         ))}
-        <span className="shrink-0 w-px bg-border my-1.5" aria-hidden />
-        <Link
-          to="/app/alimentacao"
-          className="shrink-0 h-11 px-3 rounded-full border bg-card text-xs font-medium flex items-center gap-1.5 hover:bg-muted/60 active:scale-95 transition-all"
-        >
-          <Camera className="w-3.5 h-3.5" style={{ color: "hsl(var(--alimentacao))" }} /> Refeição
-        </Link>
+        {showMood && (showMeal || showExpense || showWorkout) && (
+          <span className="shrink-0 w-px bg-border my-1.5" aria-hidden />
+        )}
+        {showMeal && (
+          <Link
+            to="/app/alimentacao"
+            className="shrink-0 h-11 px-3 rounded-full border bg-card text-xs font-medium flex items-center gap-1.5 hover:bg-muted/60 active:scale-95 transition-all"
+          >
+            <Camera className="w-3.5 h-3.5" style={{ color: "hsl(var(--alimentacao))" }} /> Refeição
+          </Link>
+        )}
+        {showExpense && (
+          <Link
+            to="/app/prosperidade"
+            className="shrink-0 h-11 px-3 rounded-full border bg-card text-xs font-medium flex items-center gap-1.5 hover:bg-muted/60 active:scale-95 transition-all"
+          >
+            <span className="text-[13px] font-semibold" style={{ color: "hsl(var(--prosperidade))" }} aria-hidden>R$</span> Gasto
+          </Link>
+        )}
+        {showWorkout && (
+          <Link
+            to="/app/vitalidade"
+            className="shrink-0 h-11 px-3 rounded-full border bg-card text-xs font-medium flex items-center gap-1.5 hover:bg-muted/60 active:scale-95 transition-all"
+          >
+            <Dumbbell className="w-3.5 h-3.5" style={{ color: "hsl(var(--vitalidade))" }} /> Treino
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -384,6 +517,9 @@ function DayProgress() {
   });
 
   const events = data?.events ?? [];
+  // Modularidade real (Sugestão 1): o painel só mostra as seções dos
+  // pilares que a pessoa ativou.
+  const active = activePillarSet(profile?.pillars);
   const num = (v: unknown) => Number(v) || 0;
   const kcal = Math.round(events.filter((e) => e.kind === "meal").reduce((s, e) => s + num(e.payload?.calories), 0));
   const prot = Math.round(events.filter((e) => e.kind === "meal").reduce((s, e) => s + num(e.payload?.protein_g), 0));
@@ -427,12 +563,14 @@ function DayProgress() {
   }, [isLoading, kcal, kcalGoal, water, waterGoal, prot, protGoal, workoutsWeek, workoutsGoal]);
 
   const has = (k: string) => events.some((e) => e.kind === k);
+  // Grid de pilares tocados: só o que está ativo (antes mostrava tudo
+  // para todo mundo — era exatamente a "modularidade cosmética" do plano).
   const pillarsTouched = [
-    { label: "Treino", done: has("workout"), icon: Dumbbell, to: "/app/vitalidade", colorVar: "--vitalidade" },
-    { label: "Sono", done: has("sleep") || has("nap"), icon: Moon, to: "/app/vitalidade", colorVar: "--vitalidade" },
-    { label: "Humor", done: has("mood"), icon: Smile, to: "/app/mente", colorVar: "--mente" },
-    { label: "Mente", done: has("practice") || has("journal") || has("gratitude"), icon: BookOpen, to: "/app/mente", colorVar: "--mente" },
-  ];
+    { label: "Treino", done: has("workout"), icon: Dumbbell, to: "/app/vitalidade", colorVar: "--vitalidade", pillar: "vitalidade" as const },
+    { label: "Sono", done: has("sleep") || has("nap"), icon: Moon, to: "/app/vitalidade", colorVar: "--vitalidade", pillar: "vitalidade" as const },
+    { label: "Humor", done: has("mood"), icon: Smile, to: "/app/mente", colorVar: "--mente", pillar: "mente" as const },
+    { label: "Mente", done: has("practice") || has("journal") || has("gratitude"), icon: BookOpen, to: "/app/mente", colorVar: "--mente", pillar: "mente" as const },
+  ].filter((pt) => active.has(pt.pillar));
 
   const Bar = ({ value, goal, color, celebrating }: { value: number; goal: number; color: string; celebrating?: boolean }) => (
     <div className={cn("h-2 rounded-full bg-muted overflow-hidden", celebrating && "goal-celebrate")}>
@@ -464,7 +602,10 @@ function DayProgress() {
     );
   }
 
-  const hasAnyGoal = kcalGoal > 0 || protGoal > 0 || spendLimit > 0 || workoutsGoal > 0 || sleepGoal > 0;
+  const hasAnyGoal =
+    (active.has("alimentacao") && (kcalGoal > 0 || protGoal > 0)) ||
+    (active.has("prosperidade") && spendLimit > 0) ||
+    (active.has("vitalidade") && (workoutsGoal > 0 || sleepGoal > 0));
 
   return (
     <Card className="p-4 space-y-3.5">
@@ -489,7 +630,8 @@ function DayProgress() {
         </p>
       )}
 
-      {/* Calorias */}
+      {/* Calorias (pilar Alimentação) */}
+      {active.has("alimentacao") && (
       <div className="space-y-1">
         <div className="flex items-center justify-between text-sm">
           <span className="flex items-center gap-1.5 font-medium">
@@ -522,9 +664,10 @@ function DayProgress() {
           </p>
         )}
       </div>
+      )}
 
-      {/* Proteína (só com meta) */}
-      {protGoal > 0 && (
+      {/* Proteína (só com meta, pilar Alimentação) */}
+      {active.has("alimentacao") && protGoal > 0 && (
         <div className="space-y-1">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium">Proteína</span>
@@ -536,7 +679,8 @@ function DayProgress() {
         </div>
       )}
 
-      {/* Água */}
+      {/* Água (pilar Alimentação) */}
+      {active.has("alimentacao") && (
       <div className="space-y-1">
         <div className="flex items-center justify-between text-sm">
           <span className="flex items-center gap-1.5 font-medium">
@@ -548,9 +692,10 @@ function DayProgress() {
         </div>
         <Bar value={water} goal={waterGoal} color="hsl(205 70% 55%)" celebrating={celebrate === "water"} />
       </div>
+      )}
 
       {/* Gasto do dia (Prosperidade) */}
-      {spendLimit > 0 && (
+      {active.has("prosperidade") && spendLimit > 0 && (
         <div className="space-y-1">
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-1.5 font-medium">
@@ -576,7 +721,7 @@ function DayProgress() {
       )}
 
       {/* Treinos na semana (Vitalidade) */}
-      {workoutsGoal > 0 && (
+      {active.has("vitalidade") && workoutsGoal > 0 && (
         <div className="space-y-1">
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-1.5 font-medium">
@@ -596,7 +741,7 @@ function DayProgress() {
       )}
 
       {/* Sono (Vitalidade) */}
-      {sleepGoal > 0 && (
+      {active.has("vitalidade") && sleepGoal > 0 && (
         <div className="space-y-1">
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-1.5 font-medium">
@@ -612,8 +757,9 @@ function DayProgress() {
         </div>
       )}
 
-      {/* Pilares tocados hoje */}
-      <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+      {/* Pilares tocados hoje (só os ativos) */}
+      {pillarsTouched.length > 0 && (
+      <div className="grid gap-1.5 pt-0.5" style={{ gridTemplateColumns: `repeat(${pillarsTouched.length}, minmax(0, 1fr))` }}>
         {pillarsTouched.map((pt) => (
           <Link
             key={pt.label} to={pt.to}
@@ -628,6 +774,7 @@ function DayProgress() {
           </Link>
         ))}
       </div>
+      )}
     </Card>
   );
 }
@@ -826,6 +973,19 @@ export default function Hoje() {
   const firstName = (profile?.name ?? "").split(" ")[0];
   const streak = useActiveStreak();
 
+  // Ritual de retorno (Sugestão 3): silêncio detectado como serviço, não
+  // culpa. Enquanto ativo, a tela troca o painel pelo ritual — a pessoa
+  // pode dispensar (por hoje) e ver o painel normal quando quiser.
+  const { returning, gapDays } = useReturnGap();
+  const [panelForced, setPanelForced] = useState(
+    () => localStorage.getItem(`ascend-return-panel-${todayISO()}`) === "1"
+  );
+  const showReturnRitual = returning && !panelForced;
+  const forcePanel = () => {
+    try { localStorage.setItem(`ascend-return-panel-${todayISO()}`, "1"); } catch { /* noop */ }
+    setPanelForced(true);
+  };
+
   // Nível com significado desde o dia 1 (análise UX P2.3): os títulos
   // poéticos são um ativo de marca — mostrá-los, não escondê-los.
   const { data: xpTotal } = useQuery({
@@ -838,6 +998,22 @@ export default function Hoje() {
     },
   });
   const level = levelFromXp(xpTotal ?? 0).level;
+
+  // Momento de retorno: sem dashboard vazio na cara, sem streak em
+  // destaque — uma tela única, e a CaptureBar absorve (Sugestão 3).
+  if (showReturnRitual) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
+        <div>
+          <h1 className="font-display text-2xl font-semibold">
+            {greet()}{firstName ? `, ${firstName}` : ""}.
+          </h1>
+          <p className="text-sm text-muted-foreground">A subida continua de onde você parou.</p>
+        </div>
+        <ReturnRitual gapDays={gapDays} onShowPanel={forcePanel} />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl lg:max-w-4xl mx-auto space-y-4 animate-fade-up">

@@ -8,7 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Sparkles, Loader2, Check, X, Mic, MicOff } from "lucide-react";
-import { pillarById } from "@/lib/pillars";
+import { pillarById, captureExamplesFor } from "@/lib/pillars";
+import { useProfile } from "@/hooks/useProfile";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
 import { xpForKind } from "@/lib/xp";
 import { useDictation } from "@/hooks/useDictation";
@@ -18,11 +19,9 @@ import { useGuides } from "@/hooks/useGuides";
 import Paywall from "@/components/core/Paywall";
 import { readFnError, isPlanLimit, type PlanLimitError } from "@/lib/fnError";
 
-const EXAMPLES = [
-  "Gastei 47 no mercado e treinei pernas",
-  "Dormi umas 6h, tô meio cansado",
-  "Almocei frango com arroz, orei de manhã",
-];
+/* Exemplos coerentes com os pilares ATIVOS da pessoa (modularidade real,
+   Sugestão 1 do plano de feedbacks): quem escolheu só Prosperidade não vê
+   "treinei pernas" como exemplo. A lista vem de captureExamplesFor(). */
 
 /** Explica o XP uma única vez, no primeiro registro da vida do usuário
  *  (análise UX P2.3): "+4 XP" sem contexto não significa nada no dia 1. */
@@ -44,6 +43,7 @@ export default function CaptureBar({
   onConfirmed?: (count: number) => void;
 } = {}) {
   const { user } = useAuth();
+  const { profile } = useProfile();
   const qc = useQueryClient();
   const [text, setText] = useState(initialText ?? "");
   const [loading, setLoading] = useState(false);
@@ -132,7 +132,11 @@ export default function CaptureBar({
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={listening ? "Ouvindo... conte como foi o seu dia" : `Ex.: "${EXAMPLES[new Date().getDate() % EXAMPLES.length]}"`}
+            placeholder={(() => {
+              if (listening) return "Ouvindo... conte como foi o seu dia";
+              const examples = captureExamplesFor(profile?.pillars);
+              return `Ex.: "${examples[new Date().getDate() % examples.length]}"`;
+            })()}
             rows={2}
             maxLength={2000}
             className="resize-none"

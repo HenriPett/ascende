@@ -240,6 +240,24 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     );
   }
 
+  // Silêncio e retorno (plano de feedbacks, Sugestão 3): o retrato precisa
+  // saber lidar com o vazio — é quando a pessoa mais precisa dele. Quem lê
+  // este retrato (briefing, retrospectiva, Conselheiro) recebe a instrução
+  // de acolher o retorno, nunca de cobrar.
+  const lastEventAt = (events ?? [])[0]?.occurred_at ? new Date(String((events ?? [])[0].occurred_at)).getTime() : null;
+  if (!lastEventAt) {
+    lines.push(
+      `SILÊNCIO: nenhum registro nos últimos 30 dias. Se houver histórico antigo, trate como um RETORNO: acolha sem cobrança, não cite sequência perdida nem liste o que "faltou". O primeiro registro de volta vale por dez — diga isso, e proponha UM passo pequeno.`
+    );
+  } else {
+    const gapDays = Math.floor((Date.now() - lastEventAt) / 864e5);
+    if (gapDays >= 7) {
+      lines.push(
+        `RETORNO APÓS SILÊNCIO: a pessoa ficou ${gapDays} dias sem registrar e está de volta agora. Acolha o retorno sem culpa e sem auditoria do período: nada aqui expirou (planos e compromissos continuam valendo). Não mencione sequência perdida. Proponha UM recomeço pequeno, partindo de onde ela parou.`
+      );
+    }
+  }
+
   // Sono, humor, treinos, refeições, práticas — médias e últimos registros
   const kinds: Record<string, any[]> = {};
   for (const e of events ?? []) (kinds[e.kind] ??= []).push(e);
@@ -249,6 +267,23 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   if (sleeps.length) lines.push(`SONO NOTURNO: média de ${(sleeps.reduce((a, b) => a + b, 0) / sleeps.length).toFixed(1)}h nos últimos ${sleeps.length} registros (sonecas contadas à parte).`);
   const naps = (kinds["nap"] ?? []).map((e) => Number((e.payload as any)?.hours)).filter((n) => n > 0);
   if (naps.length) lines.push(`SONECAS (30d): ${naps.length}, média de ${(naps.reduce((a, b) => a + b, 0) / naps.length).toFixed(1)}h cada.`);
+
+  // Raio-X de Vitalidade (plano de feedbacks, Sug. 2 e 4): estimativas
+  // declaradas pela pessoa. Mesma regra do Raio-X financeiro: PREMISSAS,
+  // não registros — o real substitui a estimativa, nunca soma. Elas
+  // permitem o primeiro cruzamento entre pilares já no dia 1.
+  const estParts: string[] = [];
+  const estW = Number(p.est_workouts_week);
+  if (Number.isFinite(estW) && p.est_workouts_week != null) estParts.push(`treina ~${estW}x/semana`);
+  const estS = Number(p.est_sleep_h);
+  if (Number.isFinite(estS) && p.est_sleep_h != null && estS > 0) estParts.push(`dorme ~${estS}h/noite`);
+  if (estParts.length) {
+    lines.push(
+      `ESTIMATIVAS DE VITALIDADE DECLARADAS PELA PESSOA (Raio-X, não são registros): ${estParts.join("; ")}. ` +
+      `Use como premissas quando os registros reais forem escassos, citando a origem ("pela sua estimativa de X treinos por semana..."), em vez de dizer que faltam dados. ` +
+      `Registro real do período substitui a estimativa, nunca soma. Combine com as estimativas financeiras quando fizer sentido (ex.: custo do mercado por semana de treino).`
+    );
+  }
   }
 
   if (scopes.mente) {
