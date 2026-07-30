@@ -296,6 +296,12 @@ create table if not exists public.plans (
   status text not null default 'ativo',    -- ativo | arquivado
   created_at timestamptz not null default now()
 );
+-- Origem do plano: 'conselheiro' (conversa) | 'blueprint' (onboarding).
+-- O Blueprint entrega um plano POR ÁREA (alimentar, treino, rotina,
+-- financeiro) para que cada um apareça sozinho em "Meus planos"; a origem
+-- permite tratá-los como UM grupo caso o limite max_active_plans passe a
+-- ser aplicado no servidor.
+alter table public.plans add column if not exists origin text not null default 'conselheiro';
 create index if not exists plans_user on public.plans (user_id, status, created_at desc);
 alter table public.plans enable row level security;
 drop policy if exists "plans_all_own" on public.plans;

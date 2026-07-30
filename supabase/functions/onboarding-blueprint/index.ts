@@ -30,18 +30,49 @@ const BLUEPRINT_TOOL = {
   input_schema: {
     type: "object",
     properties: {
-      title: { type: "string", description: "Título curto e pessoal do blueprint. Ex.: 'Blueprint da Subida: massa magra dentro do orçamento'." },
-      content_markdown: {
+      overview: {
         type: "string",
         description:
-          "O plano composto COMPLETO em markdown, autossuficiente, seguindo o formato do app: " +
-          "comece com '## Resumo' (3 a 5 bullets com os números-chave), depois seções '## Alimentação' " +
-          "(estrutura de refeições com faixas de kcal e custo estimado dentro do gasto declarado com comida, " +
-          "usando alimentos brasileiros baratos: ovo, frango, arroz, feijão, banana), '## Treino' (estrutura " +
-          "semanal realista para o nível declarado), '## Sono' (a rotina declarada e por que ela sustenta o resto), " +
-          "'## Bolso' (como o plano cabe na renda/orçamento declarados), use tabelas quando ajudar, " +
-          "termine com '---' e '## Observações'. Se blocos foram pulados, comece com a seção '## Premissas que assumi'. " +
-          "NUNCA use travessão ou meia-risca no texto.",
+          "2 a 4 frases apresentando o conjunto do blueprint para a pessoa (o fio que liga os planos). " +
+          "Sem títulos, sem listas, sem travessão.",
+      },
+      plans: {
+        type: "array",
+        minItems: 2,
+        maxItems: 4,
+        description:
+          "Os planos SEPARADOS do blueprint, um por área. Gere um para cada área que os dados sustentam: " +
+          "alimentar (sempre, quando houver qualquer dado de corpo ou de gasto com comida), treino (quando " +
+          "houver nível de atividade ou meta física), rotina (quando houver rotina de sono declarada; é o " +
+          "plano que amarra sono, horários e compromissos) e financeiro (quando houver renda, orçamento ou " +
+          "gasto com comida declarados). NUNCA junte áreas diferentes num único plano: cada um vive sozinho " +
+          "na tela Meus planos e precisa ser autossuficiente.",
+        items: {
+          type: "object",
+          properties: {
+            kind: {
+              type: "string", enum: ["alimentar", "treino", "financeiro", "rotina"],
+              description: "Área do plano. Um plano por área, sem repetir.",
+            },
+            pillar: { type: "string", enum: VALID_PILLARS, description: "Pilar do plano: alimentar→alimentacao; treino→vitalidade; financeiro→prosperidade; rotina→vitalidade ou mente." },
+            title: { type: "string", description: "Título curto e pessoal, específico DESTA área. Ex.: 'Alimentação para massa magra com R$ 800/mês'." },
+            content_markdown: {
+              type: "string",
+              description:
+                "O plano COMPLETO desta área em markdown, autossuficiente, no formato obrigatório do app: " +
+                "comece com '## Resumo' (3 a 5 bullets com os números-chave desta área), depois as seções " +
+                "'## ...' e '### ...' que a área pedir, tabelas quando ajudarem, termine com '---' e " +
+                "'## Observações'. Se você assumiu algum padrão por falta de dado, declare em '## Premissas que assumi' " +
+                "logo depois do Resumo. " +
+                "No plano alimentar: estrutura de refeições com faixas de kcal, proteína e CUSTO estimado, " +
+                "cabendo no gasto com comida declarado, com alimentos brasileiros acessíveis (ovo, frango, arroz, " +
+                "feijão, banana). No de treino: estrutura semanal realista para o nível declarado. No de rotina: " +
+                "os horários de sono declarados e como o dia se organiza em volta deles. No financeiro: como o plano " +
+                "cabe na renda e no orçamento declarados. NUNCA use travessão ou meia-risca no texto.",
+            },
+          },
+          required: ["kind", "pillar", "title", "content_markdown"],
+        },
       },
       daily_calories_kcal: { type: "number", description: "Meta calórica diária proposta (kcal), coerente com TMB/objetivo. OBRIGATÓRIA." },
       daily_protein_g: { type: "number", description: "Meta diária de proteína (g), se fizer sentido para o objetivo." },
@@ -67,7 +98,7 @@ const BLUEPRINT_TOOL = {
         description: "Premissas assumidas para os blocos que a pessoa pulou (1 frase cada). Vazio se nada foi assumido.",
       },
     },
-    required: ["title", "content_markdown", "daily_calories_kcal", "habits", "assumptions"],
+    required: ["overview", "plans", "daily_calories_kcal", "habits", "assumptions"],
   },
 };
 
@@ -75,6 +106,9 @@ const SYSTEM = `Você monta o Blueprint da Subida do Ascende, plataforma brasile
 A pessoa ACABOU de responder o onboarding: o retrato abaixo é tudo que ela declarou. Sua tarefa é transformar essas respostas no primeiro plano composto dela, entregue no minuto 1 — a prova de que cada resposta valeu a pena.
 ESTILO: escreva como uma pessoa escreve, em português do Brasil. NUNCA use travessão ou meia-risca (— ou –); prefira vírgula, dois-pontos ou frases separadas. Tom caloroso e direto, sem falso entusiasmo.
 REGRAS:
+• PLANOS SEPARADOS: gere de 2 a 4 planos, UM POR ÁREA (alimentar, treino, rotina, financeiro). Cada plano é autossuficiente e vive sozinho na tela "Meus planos" da pessoa. NUNCA entregue um único plano de "rotina" com alimentação e treino dentro dele: para a pessoa, isso parece que os outros planos não existem.
+• NÃO gere plano de uma área que os dados não sustentam (sem nenhum dado financeiro, não invente plano financeiro). Melhor 2 planos honestos que 4 genéricos.
+• Se o retrato tiver a linha "NÃO ACOMPANHA", NÃO proponha metas nem planos daquelas áreas: a pessoa desligou de propósito.
 • Baseie TUDO nos dados declarados. O que faltar, assuma um padrão razoável e DECLARE em assumptions e na seção "Premissas que assumi" do markdown. Nunca finja precisão que os dados não sustentam.
 • O plano alimentar DEVE caber no gasto mensal com comida declarado (ou na renda/orçamento, se só eles existirem). Estime o custo e mostre a conta. Alimentos brasileiros acessíveis. Respeite TODAS as restrições alimentares e condições de saúde declaradas.
 • O treino deve ser realista para o nível de atividade declarado: quem está sedentário começa pequeno (caminhada, 2x/semana), não com 5 treinos.
@@ -142,7 +176,8 @@ Deno.serve(async (req) => {
       // deno-lint-ignore no-explicit-any
       const tu = ((data as any).content ?? []).find((b: any) => b.type === "tool_use");
       const inp = tu?.input;
-      if (!inp?.title || !inp?.content_markdown) {
+      const rawPlans = Array.isArray(inp?.plans) ? inp.plans : [];
+      if (!rawPlans.length) {
         await refund();
         return json({ error: "Não consegui montar seu Blueprint agora. Tente de novo em instantes — a cortesia não foi consumida.", recoverable: true }, 502);
       }
@@ -162,10 +197,34 @@ Deno.serve(async (req) => {
         return [{ name, pillar, why: h?.why ? String(h.why).slice(0, 140) : null }];
       }).slice(0, 3);
 
+      // Planos SEPARADOS, um por área (alimentar, treino, rotina, financeiro):
+      // cada um vira uma linha própria em "Meus planos". Um plano composto
+      // fazia a pessoa achar que só existia o de rotina.
+      const VALID_KINDS = ["alimentar", "treino", "financeiro", "rotina"];
+      const seenKinds = new Set<string>();
+      // deno-lint-ignore no-explicit-any
+      const plans = rawPlans.flatMap((pl: any) => {
+        const kind = VALID_KINDS.includes(pl?.kind) ? String(pl.kind) : null;
+        const title = String(pl?.title ?? "").trim().slice(0, 120);
+        const content = String(pl?.content_markdown ?? "").trim();
+        if (!kind || seenKinds.has(kind) || title.length < 3 || content.length < 80) return [];
+        seenKinds.add(kind);
+        return [{
+          kind,
+          pillar: VALID_PILLARS.includes(pl?.pillar) ? String(pl.pillar) : null,
+          title,
+          content_markdown: content.slice(0, 20000),
+        }];
+      }).slice(0, 4);
+      if (!plans.length) {
+        await refund();
+        return json({ error: "Não consegui montar seu Blueprint agora. Tente de novo em instantes — a cortesia não foi consumida.", recoverable: true }, 502);
+      }
+
       return json({
         blueprint: {
-          title: String(inp.title).slice(0, 120),
-          content_markdown: String(inp.content_markdown).slice(0, 20000),
+          overview: String(inp.overview ?? "").slice(0, 800),
+          plans,
           daily_calories_kcal: inRange(inp.daily_calories_kcal, 800, 8000),
           daily_protein_g: inRange(inp.daily_protein_g, 20, 400),
           weekly_workouts: inRange(inp.weekly_workouts, 1, 14),

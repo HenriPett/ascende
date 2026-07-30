@@ -47,10 +47,20 @@ export function kcalRangeLabel(tdeeKcal: number | null): string | null {
 
 export interface BlueprintHabit { name: string; pillar: string; why?: string | null }
 
-export interface BlueprintProposal {
-  /** Markdown completo do plano composto (formato dos planos do app). */
-  content_markdown: string;
+/** Um plano do blueprint (uma área). Cada um vira uma linha própria em
+ *  "Meus planos" — o blueprint nunca entrega um plano composto disfarçado. */
+export interface BlueprintPlan {
+  kind: "alimentar" | "treino" | "financeiro" | "rotina";
+  pillar: string | null;
   title: string;
+  content_markdown: string;
+}
+
+export interface BlueprintProposal {
+  /** Apresentação do conjunto (o fio que liga os planos). */
+  overview: string;
+  /** Planos SEPARADOS, um por área. */
+  plans: BlueprintPlan[];
   daily_calories_kcal: number | null;
   daily_protein_g: number | null;
   weekly_workouts: number | null;
@@ -61,3 +71,11 @@ export interface BlueprintProposal {
   /** Blocos pulados viram premissas declaradas (vocabulário do Conselheiro). */
   assumptions: string[];
 }
+
+/** Rótulo e pilar visual de cada tipo de plano do blueprint. */
+export const PLAN_KIND_META: Record<string, { label: string; colorVar: string }> = {
+  alimentar: { label: "Alimentação", colorVar: "--alimentacao" },
+  treino: { label: "Treino", colorVar: "--vitalidade" },
+  financeiro: { label: "Financeiro", colorVar: "--prosperidade" },
+  rotina: { label: "Rotina", colorVar: "--mente" },
+};

@@ -20,6 +20,7 @@ Com base no retrato da pessoa (dados reais), escreva de 4 a 6 frases curtas em p
 4. Feche com uma frase de partida para a nova semana, curta e sem clichê.
 Tom: caloroso, direto, sem falso entusiasmo, sem envergonhar. Sem listas, sem títulos, sem emoji — apenas o texto corrido.
 Se houver poucos dados, dê boas-vindas e diga (em 1 frase) o que registrar para a próxima retrospectiva valer a pena.
+HONESTIDADE SOBRE DADOS (inegociável): nunca afirme que a pessoa pulou, esqueceu ou deixou de preencher algo, e nunca cite etapas ou telas que você não viu no retrato: você não sabe o que o app perguntou a ela. Se um dado falta, ou trabalhe com o que existe, ou convide de forma neutra em 1 frase.
 VALOR NO VALE (regra inegociável): se o retrato indicar SILÊNCIO ou RETORNO APÓS SILÊNCIO, a retrospectiva vira acolhida: não audite a semana vazia, não cite sequência perdida, não liste o que faltou. Diga que nada expirou e que o primeiro registro de volta vale por dez; proponha UM recomeço pequeno.
 CRUZAMENTO DESDE O DIA 1: se houver ESTIMATIVAS declaradas (financeiras ou de vitalidade), cruze-as entre pilares mesmo sem registros, sempre citando que são estimativas ("pela sua estimativa de..."). Diga algo que nenhum app de nicho conseguiria dizer.
 ${SAFETY_RULES}`;
@@ -32,6 +33,7 @@ Com base no retrato da pessoa (dados reais), escreva de 3 a 5 frases curtas em p
 3. UMA sugestão pequena e possível para hoje.
 Tom: caloroso, direto, sem falso entusiasmo, sem envergonhar. Sem listas, sem títulos, sem emoji — apenas o texto corrido.
 Se houver poucos dados, dê boas-vindas e diga (em 1 frase) o que registrar hoje para o briefing de amanhã ficar mais inteligente.
+HONESTIDADE SOBRE DADOS (inegociável): nunca afirme que a pessoa pulou, esqueceu ou deixou de preencher algo, e nunca cite etapas ou telas que você não viu no retrato: você não sabe o que o app perguntou a ela. Se um dado falta, ou trabalhe com o que existe, ou convide de forma neutra em 1 frase.
 VALOR NO VALE (regra inegociável): se o retrato indicar SILÊNCIO ou RETORNO APÓS SILÊNCIO, o briefing vira acolhida: não audite o período vazio, não cite sequência perdida, não liste o que faltou. Diga que nada expirou e que o primeiro registro de volta vale por dez; proponha UM passo pequeno.
 CRUZAMENTO DESDE O DIA 1: se houver ESTIMATIVAS declaradas (financeiras ou de vitalidade), cruze-as entre pilares mesmo sem registros, sempre citando que são estimativas ("pela sua estimativa de..."). O objetivo é dizer, já no primeiro briefing, algo que nenhum app de nicho conseguiria dizer.
 ${SAFETY_RULES}`;

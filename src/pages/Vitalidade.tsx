@@ -15,6 +15,7 @@ import { todayISO } from "@/lib/format";
 import { PILLARS } from "@/lib/pillars";
 import { activeTrackerSet } from "@/lib/trackers";
 import SleepSchedule from "@/components/core/SleepSchedule";
+import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
 import { cn } from "@/lib/utils";
 import {
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar,
@@ -37,13 +38,14 @@ const MUSCLES = ["Peito", "Costas", "Pernas", "Ombros", "Braços", "Core", "Card
 function RaioXVitalidade() {
   const { user } = useAuth();
   const { profile, refresh } = useProfile();
+  const routineHours = sleepWindowHours(profile?.sleep_bedtime, profile?.sleep_waketime);
   const [open, setOpen] = useState(false);
   const [workoutsWeek, setWorkoutsWeek] = useState("");
   const [sleepAvg, setSleepAvg] = useState("");
   const [saving, setSaving] = useState(false);
 
   if (!profile) return null;
-  const hasEstimates = profile.est_workouts_week != null || profile.est_sleep_h != null;
+  const hasEstimates = profile.est_workouts_week != null || profile.est_sleep_h != null || routineHours !== null;
 
   const save = async () => {
     if (!user) return;
@@ -71,7 +73,11 @@ function RaioXVitalidade() {
   if (hasEstimates && !open) {
     const parts: string[] = [];
     if (profile.est_workouts_week != null) parts.push(`~${profile.est_workouts_week} treino${profile.est_workouts_week === 1 ? "" : "s"}/semana`);
-    if (profile.est_sleep_h != null) parts.push(`~${String(profile.est_sleep_h).replace(".", ",")}h de sono/noite`);
+    if (routineHours !== null) {
+      parts.push(`dorme ${timeForInput(profile.sleep_bedtime)} às ${timeForInput(profile.sleep_waketime)} (${formatWindowHours(routineHours)})`);
+    } else if (profile.est_sleep_h != null) {
+      parts.push(`~${String(profile.est_sleep_h).replace(".", ",")}h de sono/noite`);
+    }
     return (
       <Card className="p-4 flex items-start gap-3">
         <div className="w-9 h-9 rounded-full grid place-items-center shrink-0" style={{ background: "hsl(var(--vitalidade) / 0.12)" }}>

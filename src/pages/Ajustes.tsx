@@ -44,6 +44,7 @@ export default function Ajustes() {
   const [goal, setGoal] = useState("");
   const [income, setIncome] = useState("");
   const [budget, setBudget] = useState("");
+  const [foodSpend, setFoodSpend] = useState("");
   const [spirit, setSpirit] = useState("");
   const [hasReligion, setHasReligion] = useState(true);
   const [birthYear, setBirthYear] = useState("");
@@ -61,6 +62,7 @@ export default function Ajustes() {
     setGoal(profile.goal ?? "");
     setIncome(profile.monthly_income != null ? String(profile.monthly_income) : "");
     setBudget(profile.monthly_budget != null ? String(profile.monthly_budget) : "");
+    setFoodSpend(profile.est_food_spend != null ? String(profile.est_food_spend) : "");
     setSpirit(profile.spirituality_label ?? "");
     setHasReligion(profile.has_religion !== false);
     setBirthYear(profile.birth_year ? String(profile.birth_year) : "");
@@ -82,6 +84,7 @@ export default function Ajustes() {
       goal: goal.trim() || null,
       monthly_income: income ? Number(income) : null,
       monthly_budget: budget ? Number(budget) : null,
+      est_food_spend: foodSpend ? Number(foodSpend) : null,
       spirituality_label: hasReligion ? (spirit.trim() || null) : null,
       has_religion: hasReligion,
       birth_year: birthYear && Number(birthYear) > 1900 && Number(birthYear) <= new Date().getFullYear() ? Number(birthYear) : null,
@@ -311,6 +314,15 @@ export default function Ajustes() {
             <Label htmlFor="budget">Teto de gastos (R$)</Label>
             <Input id="budget" type="number" min="0" value={budget} onChange={(e) => setBudget(e.target.value)} />
           </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="food-spend">Gasto mensal com comida (R$)</Label>
+          <Input id="food-spend" type="number" min="0" value={foodSpend}
+            onChange={(e) => setFoodSpend(e.target.value)} />
+          <p className="text-[11px] text-muted-foreground">
+            Mercado + comida fora, na média. É a premissa do plano alimentar que cabe no seu bolso —
+            estimativa declarada, não registro: o gasto real do mês substitui, nunca soma.
+          </p>
         </div>
 
         {/* Espiritualidade / desenvolvimento da mente */}

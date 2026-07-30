@@ -151,6 +151,18 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     );
   }
   lines.push(`Nome: ${p.name || "não informado"}.`);
+  // Contexto de onboarding: uma conta nova que acabou de montar o Blueprint
+  // é MUITO diferente de uma conta antiga sem dados. Sem esta linha, o
+  // briefing tratava um retrato recém-preenchido como abandono.
+  if (p.blueprint_generated_at) {
+    const genMs = new Date(String(p.blueprint_generated_at)).getTime();
+    const hoursAgo = Number.isFinite(genMs) ? Math.floor((Date.now() - genMs) / 3_600_000) : null;
+    lines.push(
+      `ONBOARDING: a pessoa concluiu o onboarding completo e gerou o Blueprint da Subida` +
+      (hoursAgo !== null && hoursAgo < 48 ? ` há ${hoursAgo < 1 ? "menos de uma hora" : `${hoursAgo}h`}` : "") +
+      `. Os dados abaixo foram declarados por ela ali. Reconheça esse esforço quando fizer sentido e NUNCA sugira que ela "não preencheu" ou "pulou" o que aparece preenchido aqui.`
+    );
+  }
   if (p.goal) lines.push(`Objetivo declarado: ${p.goal}.`);
   lines.push(`Pilares ativos: ${(p.pillars ?? []).join(", ") || "nenhum ainda"}.`);
 
@@ -508,9 +520,30 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
 
   if (missing.length) {
     lines.push(
-      `DADOS IMPORTANTES AINDA NÃO PREENCHIDOS: ${missing.join("; ")}. ` +
+      `DADOS AINDA NÃO INFORMADOS: ${missing.join("; ")}. ` +
       `Para planos definitivos (alimentar, treino, financeiro), siga o protocolo de planos do seu prompt: peça o que falta antes de gerar. ` +
-      `Onde preencher: idade, sexo, altura, atividade e restrições em Ajustes (seção "Sobre você"); peso na aba Alimentação; condições e medicamentos na Vitalidade.`
+      `Onde preencher: idade, sexo, altura, atividade e restrições em Ajustes (seção "Sobre você"); peso na aba Alimentação; condições e medicamentos na Vitalidade. ` +
+      `REGRA DE TOM (inegociável): NUNCA atribua causa à ausência de um dado. Você NÃO sabe se a pessoa pulou, esqueceu, recusou ou se o app nem perguntou. ` +
+      `Nunca diga "você pulou", "você deixou em branco" ou "como você não preencheu": convide de forma neutra ("se quiser me contar X, eu ajusto") ou simplesmente trabalhe com o que existe. ` +
+      `Também nunca invente o nome de uma tela ou etapa: cite apenas os lugares listados acima.`
+    );
+  }
+
+  // Metas do app: o que está definido e o que é PROPOSTA à espera de 1 toque.
+  // Sem isto, um retrato sem meta calórica levava a IA a inventar o motivo
+  // ("você pulou essa etapa") para algo que o app nem pergunta: a meta nasce
+  // de um plano, não de um campo de formulário.
+  const goalState: string[] = [];
+  if (!Number(p.calorie_goal_kcal)) goalState.push("meta calórica diária");
+  if (!Number(p.protein_goal_g)) goalState.push("meta de proteína");
+  if (!Number(p.weekly_workouts_goal)) goalState.push("meta de treinos por semana");
+  if (!Number(p.sleep_goal_h)) goalState.push("meta de sono");
+  if (!Number(p.daily_spend_limit)) goalState.push("teto de gasto diário");
+  if (goalState.length) {
+    lines.push(
+      `METAS AINDA SEM VALOR: ${goalState.join(", ")}. ` +
+      `IMPORTANTE: metas NÃO são perguntadas em nenhum formulário do app e a pessoa NUNCA "pulou" uma etapa de metas: elas nascem de um plano (do Conselheiro ou do Blueprint do onboarding) que a pessoa ativa, ou de um campo direto na tela do pilar. ` +
+      `Se fizer sentido, ofereça calcular a meta a partir dos dados que você já tem, em vez de cobrar preenchimento.`
     );
   }
 

@@ -38,7 +38,10 @@ import { Markdown } from "@/components/core/Markdown";
 import { toast } from "sonner";
 import { PILLARS, inferPillarFromGoal, pillarById, type PillarId } from "@/lib/pillars";
 import { TRACKERS } from "@/lib/trackers";
-import { tmbMifflin, tdee, kcalRangeLabel, type BlueprintProposal } from "@/lib/blueprint";
+import {
+  tmbMifflin, tdee, kcalRangeLabel, PLAN_KIND_META,
+  type BlueprintProposal, type BlueprintPlan,
+} from "@/lib/blueprint";
 import { sleepWindowHours, formatWindowHours, timeForInput } from "@/lib/sleep";
 import SleepSchedule from "@/components/core/SleepSchedule";
 import CaptureBar from "@/components/core/CaptureBar";
@@ -111,12 +114,14 @@ export default function Onboarding() {
   const [generating, setGenerating] = useState(false);
   const [blueprint, setBlueprint] = useState<BlueprintProposal | null>(null);
   const [bpFallback, setBpFallback] = useState(false);
-  const [activatePlan, setActivatePlan] = useState(true);
+  const [plansChecked, setPlansChecked] = useState<boolean[]>([]);
   const [activateGoals, setActivateGoals] = useState(true);
   const [habitsChecked, setHabitsChecked] = useState<boolean[]>([]);
-  const [planOpen, setPlanOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState<BlueprintPlan | null>(null);
   const [activating, setActivating] = useState(false);
-  const [activated, setActivated] = useState(false);
+  const [activatedPlans, setActivatedPlans] = useState<string[]>([]);
+  const [activatedGoals, setActivatedGoals] = useState<string[]>([]);
+  const [activatedHabits, setActivatedHabits] = useState(0);
 
   const [captured, setCaptured] = useState(false);
 
@@ -142,6 +147,18 @@ export default function Onboarding() {
     if (battleCreated) out.push({ label: "Batalha", value: battleCreated });
     return out;
   }, [goal, inferred, kcalLabel, workoutsWeek, sleepHrs, foodSpend, battleCreated]);
+
+  // Trackers ativos segundo as escolhas do bloco 7 (fonte local: o perfil
+  // pode não ter recarregado quando o Blueprint é ativado).
+  const activeTrackers = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of TRACKERS) {
+      if (!pillars.includes(t.pillar)) continue;
+      if (prefs[t.id] === false) continue;
+      set.add(t.id);
+    }
+    return set;
+  }, [pillars, prefs]);
 
   const patchProfile = async (patch: Record<string, unknown>) => {
     if (!user) return false;
@@ -293,8 +310,9 @@ export default function Onboarding() {
       }
       if (data?.error) throw new Error(String(data.error));
       const bp = data?.blueprint as BlueprintProposal | undefined;
-      if (!bp?.content_markdown) throw new Error("erro");
+      if (!bp?.plans?.length) throw new Error("erro");
       setBlueprint(bp);
+      setPlansChecked(bp.plans.map(() => true));
       setHabitsChecked(bp.habits.map(() => true));
     } catch {
       // Fallback local honesto (Emenda 4: o onboarding nunca quebra por IA):
@@ -311,29 +329,46 @@ export default function Onboarding() {
     setActivating(true);
     try {
       const applied: string[] = [];
-      if (activatePlan) {
-        const { error } = await supabase.from("plans").insert({
-          user_id: user.id,
-          title: blueprint.title,
-          kind: "rotina", // plano COMPOSTO: conta como UM plano ativo, não três
-          pillar: inferred ?? null,
-          content: blueprint.content_markdown,
-        });
+      // Um plano POR ÁREA (alimentar, treino, rotina, financeiro): cada um
+      // aparece sozinho em "Meus planos". Antes era um plano composto de
+      // "rotina", e a pessoa achava que os outros não tinham sido criados.
+      const chosenPlans = blueprint.plans.filter((_, i) => plansChecked[i]);
+      if (chosenPlans.length) {
+        const { error } = await supabase.from("plans").insert(
+          chosenPlans.map((pl) => ({
+            user_id: user.id,
+            title: pl.title,
+            kind: pl.kind,
+            pillar: pl.pillar ?? inferred ?? null,
+            content: pl.content_markdown,
+            origin: "blueprint",
+          }))
+        );
         if (error) throw error;
-        applied.push("plano");
+        applied.push(chosenPlans.length === 1 ? "1 plano" : `${chosenPlans.length} planos`);
+        setActivatedPlans(chosenPlans.map((pl) => (PLAN_KIND_META[pl.kind]?.label ?? pl.kind).toLowerCase()));
       }
       if (activateGoals) {
+        // Metas só das áreas que a pessoa ACOMPANHA: aplicar uma meta de
+        // água para quem desligou água criaria cobrança invisível.
+        const on = (id: string) => activeTrackers.has(id);
         const patch: Record<string, unknown> = {};
-        if (blueprint.daily_calories_kcal) patch.calorie_goal_kcal = Math.round(blueprint.daily_calories_kcal);
-        if (blueprint.daily_protein_g) patch.protein_goal_g = Math.round(blueprint.daily_protein_g);
-        if (blueprint.weekly_workouts) patch.weekly_workouts_goal = Math.round(blueprint.weekly_workouts);
-        if (blueprint.sleep_hours_target) patch.sleep_goal_h = blueprint.sleep_hours_target;
-        if (blueprint.daily_spend_limit) patch.daily_spend_limit = blueprint.daily_spend_limit;
-        if (blueprint.water_goal_ml) patch.water_goal_ml = Math.round(blueprint.water_goal_ml);
+        if (blueprint.daily_calories_kcal && on("meals")) patch.calorie_goal_kcal = Math.round(blueprint.daily_calories_kcal);
+        if (blueprint.daily_protein_g && on("protein")) patch.protein_goal_g = Math.round(blueprint.daily_protein_g);
+        if (blueprint.weekly_workouts && on("workouts")) patch.weekly_workouts_goal = Math.round(blueprint.weekly_workouts);
+        if (blueprint.sleep_hours_target && on("sleep")) patch.sleep_goal_h = blueprint.sleep_hours_target;
+        if (blueprint.daily_spend_limit && on("spend_limit")) patch.daily_spend_limit = blueprint.daily_spend_limit;
+        if (blueprint.water_goal_ml && on("water")) patch.water_goal_ml = Math.round(blueprint.water_goal_ml);
         if (Object.keys(patch).length) {
           const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
           if (error) throw error;
           applied.push("metas");
+          const GOAL_LABEL: Record<string, string> = {
+            calorie_goal_kcal: "calorias", protein_goal_g: "proteína",
+            weekly_workouts_goal: "treinos", sleep_goal_h: "sono",
+            daily_spend_limit: "teto de gasto", water_goal_ml: "água",
+          };
+          setActivatedGoals(Object.keys(patch).map((k) => GOAL_LABEL[k] ?? k));
         }
       }
       const chosen = blueprint.habits.filter((_, i) => habitsChecked[i]);
@@ -343,10 +378,10 @@ export default function Onboarding() {
         );
         if (error) throw error;
         applied.push(chosen.length === 1 ? "1 compromisso" : `${chosen.length} compromissos`);
+        setActivatedHabits(chosen.length);
       }
       qc.invalidateQueries();
       refresh();
-      setActivated(true);
       toast.success(applied.length
         ? `Ativado: ${applied.join(", ")}. Tudo isso vive na tela Hoje e em Meus planos.`
         : "Tudo bem — nada foi ativado. O Blueprint continua disponível com o Conselheiro.");
@@ -396,6 +431,29 @@ export default function Onboarding() {
       </div>
     </div>
   );
+
+  // "Onde isso vive agora": prova visível de que TUDO que a pessoa preencheu
+  // virou algo no app. Lista só o que foi de fato salvo (nunca promete tela
+  // para dado que não existe).
+  const savedMap = useMemo(() => {
+    const rows: string[] = [];
+    if (activatedPlans.length) {
+      rows.push(`${activatedPlans.length === 1 ? "Seu plano" : `Seus ${activatedPlans.length} planos`} (${activatedPlans.join(", ")}): Pilares > Meus planos`);
+    }
+    if (activatedGoals.length) rows.push(`Metas (${activatedGoals.join(", ")}): tela Hoje`);
+    if (activatedHabits > 0) rows.push(`${activatedHabits === 1 ? "Seu compromisso diário" : `Seus ${activatedHabits} compromissos diários`}: tela Hoje`);
+    if (sleepHrs) rows.push("Rotina de sono e check-in matinal: tela Hoje e Vitalidade");
+    if (numeric(weightKg)) rows.push("Peso registrado: Alimentação > Corpo");
+    if (numeric(birthYear) || numeric(heightCm) || sex !== "nao_informar" || activity !== "nao_informar" || restrictions.length) {
+      rows.push("Idade, corpo, atividade e restrições: Ajustes > Sobre você");
+    }
+    if (numeric(income) || numeric(budget) || numeric(foodSpend)) rows.push("Renda, teto e gasto com comida: Ajustes e Prosperidade");
+    if (workoutsWeek !== "" || conditions.length) rows.push("Rotina física e condições de saúde: Vitalidade");
+    if (battleCreated) rows.push(`Batalha "${battleCreated}": tela Batalhas`);
+    rows.push("O que você acompanha: Ajustes > O que você acompanha");
+    return rows;
+  }, [activatedPlans, activatedGoals, activatedHabits, sleepHrs, weightKg, birthYear, heightCm,
+      sex, activity, restrictions, income, budget, foodSpend, workoutsWeek, conditions, battleCreated]);
 
   const skipLink = (label: string, onSkip: () => void) => (
     <button className="w-full text-xs text-muted-foreground underline" onClick={onSkip}>
@@ -478,7 +536,7 @@ export default function Onboarding() {
         </p>
       )}
       {navRow(finishBody)}
-      {skipLink("Pular este bloco (viro premissa do plano)", next)}
+      {skipLink("Pular (o que eu já preenchi fica salvo)", finishBody)}
     </div>,
 
     // 2 — rotina física
@@ -514,7 +572,7 @@ export default function Onboarding() {
         {chipInput(conditions, setConditions, conditionInput, setConditionInput, "Adicionar condição")}
       </div>
       {navRow(finishActivity)}
-      {skipLink("Pular este bloco (viro premissa do plano)", next)}
+      {skipLink("Pular (o que eu já preenchi fica salvo)", finishActivity)}
     </div>,
 
     // 3 — sono (o dial estilo iPhone)
@@ -527,7 +585,7 @@ export default function Onboarding() {
         </p>
       </div>
       <SleepSchedule compact onSaved={(h) => { setSleepSaved(h); next(); }} />
-      {skipLink("Pular este bloco (viro premissa do plano)", next)}
+      {skipLink("Pular — não quero declarar horários", next)}
     </div>,
 
     // 4 — comida & bolso
@@ -571,7 +629,7 @@ export default function Onboarding() {
         </p>
       ) : null}
       {navRow(finishFood)}
-      {skipLink("Pular este bloco (viro premissa do plano)", next)}
+      {skipLink("Pular (o que eu já preenchi fica salvo)", finishFood)}
     </div>,
 
     // 5 — batalha (opcional, tom discreto)
@@ -673,32 +731,42 @@ export default function Onboarding() {
               {blueprint.assumptions.join("; ")}.
             </p>
           )}
-          <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer">
-            <Checkbox className="mt-0.5" checked={activatePlan} onCheckedChange={(v) => setActivatePlan(!!v)} />
-            <span className="flex-1 min-w-0">
-              <span className="text-sm font-semibold block">{blueprint.title}</span>
-              <span className="text-xs text-muted-foreground block mt-0.5">
-                Plano composto: alimentação no seu orçamento, treino e sono. Fica em Meus planos.
-              </span>
-              <button type="button" className="text-xs underline underline-offset-2 mt-1 inline-flex items-center gap-1"
-                onClick={(e) => { e.preventDefault(); setPlanOpen(true); }}>
-                <Eye className="w-3 h-3" /> Ver plano completo
-              </button>
-            </span>
-          </label>
+          {blueprint.overview && (
+            <p className="text-sm text-muted-foreground">{blueprint.overview}</p>
+          )}
+          {blueprint.plans.map((pl, i) => {
+            const meta = PLAN_KIND_META[pl.kind];
+            return (
+              <label key={pl.kind} className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer">
+                <Checkbox className="mt-0.5" checked={plansChecked[i]}
+                  onCheckedChange={(v) => setPlansChecked((c) => c.map((x, j) => (j === i ? !!v : x)))} />
+                <span className="flex-1 min-w-0">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider"
+                    style={{ color: meta ? `hsl(var(${meta.colorVar}))` : "hsl(var(--gold))" }}>
+                    Plano de {meta?.label ?? "vida"}
+                  </span>
+                  <span className="text-sm font-semibold block">{pl.title}</span>
+                  <button type="button" className="text-xs underline underline-offset-2 mt-1 inline-flex items-center gap-1"
+                    onClick={(e) => { e.preventDefault(); setPlanOpen(pl); }}>
+                    <Eye className="w-3 h-3" /> Ver plano completo
+                  </button>
+                </span>
+              </label>
+            );
+          })}
           <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer">
             <Checkbox className="mt-0.5" checked={activateGoals} onCheckedChange={(v) => setActivateGoals(!!v)} />
             <span className="flex-1 min-w-0">
               <span className="text-sm font-semibold block">Metas vivas na tela Hoje</span>
               <span className="text-xs text-muted-foreground block mt-0.5">
                 {[
-                  blueprint.daily_calories_kcal ? `${Math.round(blueprint.daily_calories_kcal).toLocaleString("pt-BR")} kcal/dia` : null,
-                  blueprint.daily_protein_g ? `${Math.round(blueprint.daily_protein_g)} g de proteína` : null,
-                  blueprint.weekly_workouts ? `${Math.round(blueprint.weekly_workouts)} treinos/semana` : null,
-                  blueprint.sleep_hours_target ? `${String(blueprint.sleep_hours_target).replace(".", ",")}h de sono` : null,
-                  blueprint.water_goal_ml ? `${(blueprint.water_goal_ml / 1000).toString().replace(".", ",")}L de água` : null,
-                  blueprint.daily_spend_limit ? `teto de ${brl(blueprint.daily_spend_limit)}/dia` : null,
-                ].filter(Boolean).join(" · ")}
+                  blueprint.daily_calories_kcal && activeTrackers.has("meals") ? `${Math.round(blueprint.daily_calories_kcal).toLocaleString("pt-BR")} kcal/dia` : null,
+                  blueprint.daily_protein_g && activeTrackers.has("protein") ? `${Math.round(blueprint.daily_protein_g)} g de proteína` : null,
+                  blueprint.weekly_workouts && activeTrackers.has("workouts") ? `${Math.round(blueprint.weekly_workouts)} treinos/semana` : null,
+                  blueprint.sleep_hours_target && activeTrackers.has("sleep") ? `${String(blueprint.sleep_hours_target).replace(".", ",")}h de sono` : null,
+                  blueprint.water_goal_ml && activeTrackers.has("water") ? `${(blueprint.water_goal_ml / 1000).toString().replace(".", ",")}L de água` : null,
+                  blueprint.daily_spend_limit && activeTrackers.has("spend_limit") ? `teto de ${brl(blueprint.daily_spend_limit)}/dia` : null,
+                ].filter(Boolean).join(" · ") || "nenhuma meta para as áreas que você acompanha"}
               </span>
             </span>
           </label>
@@ -718,7 +786,9 @@ export default function Onboarding() {
             );
           })}
           <Button className="w-full" onClick={activate} disabled={activating}>
-            {activating ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1.5" /> Ativar meu plano</>)}
+            {activating
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : (<><Check className="w-4 h-4 mr-1.5" /> Ativar {plansChecked.filter(Boolean).length > 1 ? "meus planos" : "meu plano"}</>)}
           </Button>
           {skipLink("Agora não — quero explorar primeiro", next)}
         </div>
@@ -762,11 +832,17 @@ export default function Onboarding() {
           Primeiro registro feito — sua subida começou. É só isso, todo dia. ✨
         </p>
       )}
-      {activated && (
-        <p className="text-xs text-muted-foreground">
-          Seu Blueprint está ativo: metas na tela Hoje, plano em Pilares &gt; Meus planos.
-        </p>
-      )}
+      <div className="rounded-lg border p-3 space-y-1.5">
+        <p className="text-xs font-semibold">Tudo que você contou já está no app:</p>
+        <ul className="text-[11px] text-muted-foreground space-y-1">
+          {savedMap.map((row) => (
+            <li key={row} className="flex gap-1.5">
+              <Check className="w-3 h-3 mt-0.5 shrink-0 text-success" />
+              <span>{row}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
       <Button className="w-full" onClick={() => { toast.success("Bem-vindo(a) à subida!"); navigate("/app", { replace: true }); }}>
         {captured ? "Começar minha subida" : "Ir para o app"} <ArrowRight className="w-4 h-4 ml-1" />
       </Button>
@@ -803,14 +879,16 @@ export default function Onboarding() {
       </Card>
 
       {/* Plano completo do Blueprint (antes de ativar) */}
-      <Dialog open={planOpen && !!blueprint} onOpenChange={setPlanOpen}>
+      <Dialog open={!!planOpen} onOpenChange={(v) => !v && setPlanOpen(null)}>
         <DialogContent className="max-w-lg max-h-[85dvh] flex flex-col">
           <DialogHeader className="shrink-0">
-            <DialogTitle className="pr-6 break-words font-display">{blueprint?.title}</DialogTitle>
-            <DialogDescription>Proposta — ainda não ativado</DialogDescription>
+            <DialogTitle className="pr-6 break-words font-display">{planOpen?.title}</DialogTitle>
+            <DialogDescription>
+              {planOpen ? `Plano de ${PLAN_KIND_META[planOpen.kind]?.label ?? "vida"} · proposta, ainda não ativado` : ""}
+            </DialogDescription>
           </DialogHeader>
           <div className="flex-1 min-h-0 overflow-y-auto text-sm pr-1">
-            {blueprint && <Markdown content={blueprint.content_markdown} doc />}
+            {planOpen && <Markdown content={planOpen.content_markdown} doc />}
           </div>
         </DialogContent>
       </Dialog>
