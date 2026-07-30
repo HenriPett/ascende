@@ -107,3 +107,17 @@ levá-lo mais a sério do que o código levava. Três emendas:
    momento mais bem desenhado do app (ritual de retorno, briefing que acolhe o
    vazio, "nada aqui expirou") — nunca o mais constrangedor. Detecção de silêncio é
    serviço; culpa continua proibida (PRINCIPIOS.md, Dilema 4).
+
+4. **Fricção sem retorno imediato é proibida; fricção que constrói valor visível a
+   cada passo é investimento.** (Decisão de fundador — esta emenda REVISA a parte da
+   Emenda 1 que dizia "cada campo removido do onboarding é fricção a menos".) A
+   fricção que a Emenda 1 condenava era a de formulário burocrático sem payoff. O
+   onboarding pode ser longo desde que: (a) **cada resposta mude algo que a pessoa
+   VÊ na hora** (o retrato se montando, uma estimativa aparecendo, um número dela);
+   (b) **cada passo seja pulável sem punição** — pular vira "premissa que assumi",
+   nunca bloqueio; (c) **o resultado final seja proposta confirmável, nunca
+   imposição** — a IA nunca grava sozinha, nem no onboarding. O Blueprint da Subida
+   (plano alimentar no orçamento + treino + rotina de sono + compromissos, entregue
+   no minuto 1) é a aplicação desta emenda. A métrica de sucesso continua sendo
+   ativação e tempo até o primeiro insight cruzado — nunca tempo de tela no
+   onboarding.

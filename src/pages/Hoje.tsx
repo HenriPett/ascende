@@ -20,6 +20,8 @@ import { useEffect, useRef, useState } from "react";
 import { greet, todayISO } from "@/lib/format";
 import { dateISOInSP, daysAgoISOInSP } from "@/lib/dates";
 import { pillarById, activePillarSet } from "@/lib/pillars";
+import { activeTrackerSet } from "@/lib/trackers";
+import SleepCheckin from "@/components/core/SleepCheckin";
 import { cn } from "@/lib/utils";
 
 /** Sequência de dias ativos. Regra gentil: 1 dia de descanso por semana não quebra. */
@@ -173,15 +175,15 @@ function QuickActions() {
   const qc = useQueryClient();
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const bottles = profile?.water_bottles?.length ? profile.water_bottles : DEFAULT_WATER_BOTTLES;
-  // Modularidade real (Sugestão 1): cada ação rápida pertence a um pilar;
-  // quem pausou o pilar não vê a ação. Quem escolheu "só dinheiro" vê um
-  // app de finanças, não um app de 4 áreas com 3 apagadas.
-  const active = activePillarSet(profile?.pillars);
-  const showWater = active.has("alimentacao");
-  const showMood = active.has("mente");
-  const showMeal = active.has("alimentacao");
-  const showExpense = active.has("prosperidade");
-  const showWorkout = active.has("vitalidade");
+  // Modularidade TOTAL: cada ação rápida pertence a um TRACKER (não mais só
+  // ao pilar). Quem desligou "água" não vê os botões de água — desligar
+  // esconde, nunca apaga (o histórico continua da pessoa).
+  const trackers = activeTrackerSet(profile);
+  const showWater = trackers.has("water");
+  const showMood = trackers.has("mood");
+  const showMeal = trackers.has("meals");
+  const showExpense = activePillarSet(profile?.pillars).has("prosperidade");
+  const showWorkout = trackers.has("workouts");
 
   const insert = async (key: string, row: Record<string, unknown>, okMsg: string) => {
     if (!user || savingKey) return;
@@ -323,9 +325,14 @@ function FirstSteps() {
   const [dismissed, setDismissed] = useState(() => localStorage.getItem("ascend-firststeps-done") === "1");
   const awarded = useRef(false);
 
+  // Absorvida pelo Blueprint (Emenda 4): quem gerou o Blueprint da Subida no
+  // onboarding já viveu o essencial da trilha (metas, plano e compromissos no
+  // dia 1) — a lista some para não cobrar o que já aconteceu.
+  const absorbed = !!profile?.blueprint_generated_at;
+
   const { data } = useQuery({
     queryKey: ["first-steps", user?.id],
-    enabled: !!user && !dismissed,
+    enabled: !!user && !dismissed && !absorbed,
     staleTime: 1000 * 60,
     queryFn: async () => {
       const [{ count: events }, { count: mealCount }, { count: plansCount }, { count: estCount }, { count: recCount }] = await Promise.all([
@@ -364,7 +371,7 @@ function FirstSteps() {
     });
   }, [allDone, dismissed, qc]);
 
-  if (dismissed || !data) return null;
+  if (dismissed || absorbed || !data) return null;
 
   const dismiss = () => { localStorage.setItem("ascend-firststeps-done", "1"); setDismissed(true); };
 
@@ -517,9 +524,9 @@ function DayProgress() {
   });
 
   const events = data?.events ?? [];
-  // Modularidade real (Sugestão 1): o painel só mostra as seções dos
-  // pilares que a pessoa ativou.
-  const active = activePillarSet(profile?.pillars);
+  // Modularidade TOTAL: o painel só mostra as seções dos TRACKERS que a
+  // pessoa acompanha (pilar pausado pausa os trackers dele por herança).
+  const trackers = activeTrackerSet(profile);
   const num = (v: unknown) => Number(v) || 0;
   const kcal = Math.round(events.filter((e) => e.kind === "meal").reduce((s, e) => s + num(e.payload?.calories), 0));
   const prot = Math.round(events.filter((e) => e.kind === "meal").reduce((s, e) => s + num(e.payload?.protein_g), 0));
@@ -547,10 +554,10 @@ function DayProgress() {
     const key = `ascend-celebrated-${todayISO()}`;
     if (localStorage.getItem(key)) { celebrated.current = true; return; }
     const hits: [string, boolean][] = [
-      ["kcal", kcalGoal > 0 && kcal >= kcalGoal],
-      ["water", water >= waterGoal],
-      ["prot", protGoal > 0 && prot >= protGoal],
-      ["workouts", workoutsGoal > 0 && workoutsWeek >= workoutsGoal],
+      ["kcal", trackers.has("meals") && kcalGoal > 0 && kcal >= kcalGoal],
+      ["water", trackers.has("water") && water >= waterGoal],
+      ["prot", trackers.has("protein") && protGoal > 0 && prot >= protGoal],
+      ["workouts", trackers.has("workouts") && workoutsGoal > 0 && workoutsWeek >= workoutsGoal],
     ];
     const hit = hits.find(([, ok]) => ok);
     if (hit) {
@@ -560,17 +567,20 @@ function DayProgress() {
       toast.success("Primeira meta do dia batida. Assim que se sobe. ✨");
       setTimeout(() => setCelebrate(null), 2600);
     }
+    // `trackers` é um Set recriado a cada render (o efeito é protegido por
+    // ref + localStorage); incluí-lo dispararia o efeito todo render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, kcal, kcalGoal, water, waterGoal, prot, protGoal, workoutsWeek, workoutsGoal]);
 
   const has = (k: string) => events.some((e) => e.kind === k);
   // Grid de pilares tocados: só o que está ativo (antes mostrava tudo
   // para todo mundo — era exatamente a "modularidade cosmética" do plano).
   const pillarsTouched = [
-    { label: "Treino", done: has("workout"), icon: Dumbbell, to: "/app/vitalidade", colorVar: "--vitalidade", pillar: "vitalidade" as const },
-    { label: "Sono", done: has("sleep") || has("nap"), icon: Moon, to: "/app/vitalidade", colorVar: "--vitalidade", pillar: "vitalidade" as const },
-    { label: "Humor", done: has("mood"), icon: Smile, to: "/app/mente", colorVar: "--mente", pillar: "mente" as const },
-    { label: "Mente", done: has("practice") || has("journal") || has("gratitude"), icon: BookOpen, to: "/app/mente", colorVar: "--mente", pillar: "mente" as const },
-  ].filter((pt) => active.has(pt.pillar));
+    { label: "Treino", done: has("workout"), icon: Dumbbell, to: "/app/vitalidade", colorVar: "--vitalidade", show: trackers.has("workouts") },
+    { label: "Sono", done: has("sleep") || has("nap"), icon: Moon, to: "/app/vitalidade", colorVar: "--vitalidade", show: trackers.has("sleep") || trackers.has("naps") },
+    { label: "Humor", done: has("mood"), icon: Smile, to: "/app/mente", colorVar: "--mente", show: trackers.has("mood") },
+    { label: "Mente", done: has("practice") || has("journal") || has("gratitude"), icon: BookOpen, to: "/app/mente", colorVar: "--mente", show: trackers.has("practice") || trackers.has("journal") || trackers.has("gratitude") },
+  ].filter((pt) => pt.show);
 
   const Bar = ({ value, goal, color, celebrating }: { value: number; goal: number; color: string; celebrating?: boolean }) => (
     <div className={cn("h-2 rounded-full bg-muted overflow-hidden", celebrating && "goal-celebrate")}>
@@ -603,9 +613,11 @@ function DayProgress() {
   }
 
   const hasAnyGoal =
-    (active.has("alimentacao") && (kcalGoal > 0 || protGoal > 0)) ||
-    (active.has("prosperidade") && spendLimit > 0) ||
-    (active.has("vitalidade") && (workoutsGoal > 0 || sleepGoal > 0));
+    (trackers.has("meals") && kcalGoal > 0) ||
+    (trackers.has("protein") && protGoal > 0) ||
+    (trackers.has("spend_limit") && spendLimit > 0) ||
+    (trackers.has("workouts") && workoutsGoal > 0) ||
+    (trackers.has("sleep") && sleepGoal > 0);
 
   return (
     <Card className="p-4 space-y-3.5">
@@ -630,8 +642,8 @@ function DayProgress() {
         </p>
       )}
 
-      {/* Calorias (pilar Alimentação) */}
-      {active.has("alimentacao") && (
+      {/* Calorias (tracker Refeições) */}
+      {trackers.has("meals") && (
       <div className="space-y-1">
         <div className="flex items-center justify-between text-sm">
           <span className="flex items-center gap-1.5 font-medium">
@@ -666,8 +678,8 @@ function DayProgress() {
       </div>
       )}
 
-      {/* Proteína (só com meta, pilar Alimentação) */}
-      {active.has("alimentacao") && protGoal > 0 && (
+      {/* Proteína (só com meta, tracker Proteína) */}
+      {trackers.has("protein") && protGoal > 0 && (
         <div className="space-y-1">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium">Proteína</span>
@@ -679,8 +691,8 @@ function DayProgress() {
         </div>
       )}
 
-      {/* Água (pilar Alimentação) */}
-      {active.has("alimentacao") && (
+      {/* Água (tracker Água) */}
+      {trackers.has("water") && (
       <div className="space-y-1">
         <div className="flex items-center justify-between text-sm">
           <span className="flex items-center gap-1.5 font-medium">
@@ -694,8 +706,8 @@ function DayProgress() {
       </div>
       )}
 
-      {/* Gasto do dia (Prosperidade) */}
-      {active.has("prosperidade") && spendLimit > 0 && (
+      {/* Gasto do dia (tracker Teto de gasto) */}
+      {trackers.has("spend_limit") && spendLimit > 0 && (
         <div className="space-y-1">
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-1.5 font-medium">
@@ -720,8 +732,8 @@ function DayProgress() {
         </div>
       )}
 
-      {/* Treinos na semana (Vitalidade) */}
-      {active.has("vitalidade") && workoutsGoal > 0 && (
+      {/* Treinos na semana (tracker Treinos) */}
+      {trackers.has("workouts") && workoutsGoal > 0 && (
         <div className="space-y-1">
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-1.5 font-medium">
@@ -740,8 +752,8 @@ function DayProgress() {
         </div>
       )}
 
-      {/* Sono (Vitalidade) */}
-      {active.has("vitalidade") && sleepGoal > 0 && (
+      {/* Sono (tracker Sono) */}
+      {trackers.has("sleep") && sleepGoal > 0 && (
         <div className="space-y-1">
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-1.5 font-medium">
@@ -1056,6 +1068,7 @@ export default function Hoje() {
       <Briefing />
       <FirstSteps />
       <CaptureBar />
+      <SleepCheckin />
       <RetroCountdown />
       <HabitsToday />
       <DayProgress />

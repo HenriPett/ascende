@@ -55,7 +55,7 @@ npx supabase login
 (vai abrir o navegador para você autorizar)
 
 ```bash
-npx supabase functions deploy ai-chat capture briefing analyze-meal analyze-body import-statement --project-ref SEU_REFERENCE_ID
+npx supabase functions deploy ai-chat capture briefing analyze-meal analyze-body import-statement onboarding-blueprint --project-ref SEU_REFERENCE_ID
 ```
 
 ### Login com Google (opcional, recomendado)

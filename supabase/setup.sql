@@ -43,6 +43,22 @@ alter table public.profiles add column if not exists sleep_goal_h numeric;      
 -- antes de existirem semanas de registro. Registro real substitui, nunca soma.
 alter table public.profiles add column if not exists est_workouts_week int;      -- treinos/semana (estimativa)
 alter table public.profiles add column if not exists est_sleep_h numeric;        -- sono médio/noite (estimativa)
+-- Rotina de sono declarada (estilo iPhone): horário de dormir e de acordar.
+-- A duração derivada alimenta sleep_goal_h; o check-in matinal de 1 toque
+-- usa esses horários para registrar o sono da noite ("segui minha rotina").
+alter table public.profiles add column if not exists sleep_bedtime time;         -- ex.: 23:00
+alter table public.profiles add column if not exists sleep_waketime time;        -- ex.: 06:30
+-- Modularidade total (nível tracker): o que a pessoa acompanha dentro de cada
+-- pilar. Só guarda o que foi DESLIGADO ({"water": false}); ausência = ligado.
+-- Desligar esconde (telas, briefing, Conselheiro), nunca apaga histórico.
+alter table public.profiles add column if not exists tracking_prefs jsonb not null default '{}'::jsonb;
+-- Onboarding Blueprint: gasto mensal aproximado com comida (mercado + fora),
+-- declarado na porta — premissa do "plano alimentar que cabe no bolso".
+alter table public.profiles add column if not exists est_food_spend numeric;
+-- Blueprint da Subida: carimbo de quando o blueprint de boas-vindas foi
+-- gerado (cortesia, UMA vez por conta — a unicidade é garantida no servidor
+-- via claim_blueprint(), seção 24).
+alter table public.profiles add column if not exists blueprint_generated_at timestamptz;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles for select using (auth.uid() = user_id);
@@ -999,4 +1015,22 @@ begin
   values (uid, 20, 'Primeiros passos concluídos: base montada');
   return true;
 end; $$;
+
+-- ─── 24. BLUEPRINT DA SUBIDA (onboarding estendido, Emenda 4) ──
+-- Reivindicação atômica da cortesia: o blueprint com IA é gerado UMA vez por
+-- conta. A função marca blueprint_generated_at somente se ainda estiver nulo
+-- (condicional no UPDATE = duas requisições simultâneas não passam juntas).
+-- Chamada apenas pelo service role (função de borda onboarding-blueprint).
+create or replace function public.claim_blueprint(uid uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare updated int;
+begin
+  update public.profiles
+     set blueprint_generated_at = now()
+   where user_id = uid and blueprint_generated_at is null;
+  get diagnostics updated = row_count;
+  return updated > 0;
+end; $$;
+revoke execute on function public.claim_blueprint(uuid) from public;
+revoke execute on function public.claim_blueprint(uuid) from anon, authenticated;
 grant execute on function public.award_first_steps_milestone() to authenticated;

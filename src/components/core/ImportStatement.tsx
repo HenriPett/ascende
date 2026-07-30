@@ -4,33 +4,27 @@
 // XP: nenhum por item (anti-inflação de nível); um marco único "mês mapeado"
 // por mês, via rpc award_import_milestone. Privacidade: o arquivo é processado
 // e descartado no servidor — nada da fatura fica armazenado.
+//
+// Refactor (Fatura em toda IA): a lista de revisão e a gravação em lote agora
+// vivem em StatementReview/useStatementConfirm — as mesmas peças usadas pelo
+// Conselheiro (Chat) e pela CaptureBar. Este diálogo continua sendo o caminho
+// para o PDF de fatura completa.
 import { useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { FileUp, Loader2, Check } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { brl } from "@/lib/format";
+import { FileUp, Loader2 } from "lucide-react";
+import { fileToBase64 } from "@/lib/files";
 import { readFnError, isPlanLimit, type PlanLimitError } from "@/lib/fnError";
 import type { ProposedStatementTx } from "@/lib/prosperidade";
+import StatementReview, { findStatementDuplicates, useStatementConfirm } from "@/components/core/StatementReview";
 
 const MAX_FILE_BYTES = 6_500_000;
 const ACCEPT = "application/pdf,image/jpeg,image/png,image/webp";
-
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
-    r.onerror = () => reject(new Error("read"));
-    r.readAsDataURL(file);
-  });
-}
 
 export default function ImportStatement({
   onImported, onPlanLimit,
@@ -39,35 +33,16 @@ export default function ImportStatement({
   onPlanLimit: (info: PlanLimitError) => void;
 }) {
   const { user } = useAuth();
-  const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<ProposedStatementTx[] | null>(null);
   const [checked, setChecked] = useState<boolean[]>([]);
   const [dup, setDup] = useState<boolean[]>([]);
   const [note, setNote] = useState<string | null>(null);
+  const { confirm: confirmStatement, saving } = useStatementConfirm();
 
   const reset = () => { setItems(null); setChecked([]); setDup([]); setNote(null); };
-
-  // Deduplicação: parcelas futuras geradas hoje reaparecem na fatura do mês
-  // que vem — antes de propor, comparamos com o que já está registrado
-  // (mesmo tipo, mesmo valor, mesmo mês, mesma descrição) e desmarcamos.
-  const txKey = (t: { kind: string; amount: number; occurred_at: string; description: string | null }) =>
-    `${t.kind}|${Number(t.amount).toFixed(2)}|${t.occurred_at.slice(0, 7)}|${(t.description ?? "").toLowerCase().replace(/\s+/g, " ").trim()}`;
-
-  const findDuplicates = async (list: ProposedStatementTx[]): Promise<boolean[]> => {
-    if (!user || !list.length) return list.map(() => false);
-    const dates = list.map((i) => i.occurred_at).sort();
-    const { data: existing } = await supabase.from("transactions")
-      .select("kind,amount,description,occurred_at")
-      .eq("user_id", user.id)
-      .gte("occurred_at", dates[0]).lte("occurred_at", dates[dates.length - 1])
-      .limit(2000);
-    const seen = new Set((existing ?? []).map(txKey));
-    return list.map((it) => seen.has(txKey(it)));
-  };
 
   const pick = () => fileRef.current?.click();
 
@@ -99,7 +74,7 @@ export default function ImportStatement({
         toast.error("Não encontrei lançamentos legíveis no documento.");
         return;
       }
-      const dups = await findDuplicates(list);
+      const dups = user ? await findStatementDuplicates(user.id, list) : list.map(() => false);
       setItems(list);
       setDup(dups);
       setChecked(list.map((_, i) => !dups[i]));
@@ -113,44 +88,16 @@ export default function ImportStatement({
   };
 
   const confirm = async () => {
-    if (!user || !items) return;
+    if (!items) return;
     const selected = items.filter((_, i) => checked[i]);
     if (!selected.length) { toast.error("Selecione pelo menos um lançamento."); return; }
-    setSaving(true);
-    try {
-      const { error } = await supabase.from("transactions").insert(
-        selected.map((it) => ({
-          user_id: user.id,
-          kind: it.kind,
-          amount: it.amount,
-          category: it.category,
-          description: it.description,
-          occurred_at: it.occurred_at,
-          source: "import",
-        }))
-      );
-      if (error) throw error;
-      // Marco único por mês: a ação real foi UMA (trazer o documento).
-      const { data: awarded } = await supabase.rpc("award_import_milestone");
-      toast.success(
-        awarded
-          ? `${selected.length} lançamentos importados. Mês mapeado: +15 XP`
-          : `${selected.length} lançamentos importados.`
-      );
+    const ok = await confirmStatement(selected);
+    if (ok) {
       setOpen(false);
       reset();
-      qc.invalidateQueries();
       onImported();
-    } catch {
-      toast.error("Não consegui gravar os lançamentos. Tente de novo.");
-    } finally {
-      setSaving(false);
     }
   };
-
-  const total = (items ?? [])
-    .filter((_, i) => checked[i])
-    .reduce((s, it) => s + (it.kind === "expense" ? it.amount : 0), 0);
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
@@ -165,6 +112,8 @@ export default function ImportStatement({
           <DialogDescription>
             O mês inteiro em um gesto: envie o PDF (ou um print) da fatura e confirme os
             lançamentos em lote. O arquivo é processado e descartado — nada fica armazenado.
+            Dica: prints e comprovantes avulsos também funcionam direto na captura da tela
+            Hoje e na conversa com o Conselheiro.
           </DialogDescription>
         </DialogHeader>
 
@@ -180,57 +129,14 @@ export default function ImportStatement({
         )}
 
         {items && (
-          <div className="space-y-3">
-            {note && <p className="text-xs text-muted-foreground rounded-md border p-2.5">{note}</p>}
-            {items.some((it) => it.origin === "past" || it.origin === "future") && (
-              <p className="text-xs text-muted-foreground rounded-md border p-2.5">
-                Compras parceladas foram expandidas: as parcelas <strong>passadas e futuras</strong> entram
-                nos meses certos, para o retrato ficar completo de uma vez. Desmarque o que não quiser —
-                e o que já estava registrado veio desmarcado sozinho.
-              </p>
-            )}
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <button className="underline underline-offset-2"
-                onClick={() => setChecked(items.map(() => !checked.every(Boolean)))}>
-                {checked.every(Boolean) ? "Desmarcar todos" : "Marcar todos"}
-              </button>
-              <span>{checked.filter(Boolean).length} de {items.length} · saídas {brl(total)}</span>
-            </div>
-            <div className="max-h-72 overflow-y-auto divide-y rounded-lg border">
-              {items.map((it, i) => (
-                <label key={i} className="flex items-center gap-3 p-2.5 cursor-pointer hover:bg-muted/40">
-                  <Checkbox checked={checked[i]}
-                    onCheckedChange={(v) => setChecked((arr) => arr.map((c, j) => (j === i ? Boolean(v) : c)))} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">
-                      {it.description}
-                      {it.origin === "past" && <Badge variant="secondary" className="text-[10px] ml-1.5 align-middle">parcela passada</Badge>}
-                      {it.origin === "future" && <Badge variant="secondary" className="text-[10px] ml-1.5 align-middle">parcela futura</Badge>}
-                      {dup[i] && <Badge variant="outline" className="text-[10px] ml-1.5 align-middle">já registrado</Badge>}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {it.category} · {new Date(it.occurred_at + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" })}
-                    </p>
-                  </div>
-                  <span className={it.kind === "expense" ? "text-sm font-medium text-destructive" : "text-sm font-medium text-success"}>
-                    {it.kind === "expense" ? "−" : "+"}{brl(it.amount)}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={reset} disabled={saving}>Trocar arquivo</Button>
-              <Button className="flex-1" onClick={confirm} disabled={saving}>
-                {saving
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : (<><Check className="w-4 h-4 mr-1.5" /> Confirmar selecionados</>)}
-              </Button>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Importação não gera XP por item — só o marco "mês mapeado" (+15 XP, uma vez por mês).
-              XP é por ação na vida real, não por volume.
-            </p>
-          </div>
+          <StatementReview
+            items={items} checked={checked} dup={dup} note={note} saving={saving}
+            cancelLabel="Trocar arquivo"
+            onToggle={(i, v) => setChecked((arr) => arr.map((c, j) => (j === i ? v : c)))}
+            onToggleAll={(v) => setChecked(items.map(() => v))}
+            onCancel={reset}
+            onConfirm={confirm}
+          />
         )}
       </DialogContent>
     </Dialog>

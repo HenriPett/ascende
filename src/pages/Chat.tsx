@@ -20,10 +20,15 @@ import LearnedInsights, { type LearnedMemory } from "@/components/core/LearnedIn
 import FirstTimeTip from "@/components/core/FirstTimeTip";
 import { useGuides } from "@/hooks/useGuides";
 import { xpForKind } from "@/lib/xp";
+import { sleepWindowHours, timeForInput } from "@/lib/sleep";
 import { useDictation } from "@/hooks/useDictation";
 import { cn } from "@/lib/utils";
 import Paywall from "@/components/core/Paywall";
 import { readFnError, isPlanLimit, type PlanLimitError } from "@/lib/fnError";
+import { imageToBase64, fileToBase64, fileToText } from "@/lib/files";
+import type { ProposedStatementTx } from "@/lib/prosperidade";
+import StatementReview, { findStatementDuplicates, useStatementConfirm } from "@/components/core/StatementReview";
+import { proposedEventChecked } from "@/lib/trackers";
 
 interface ProfileSuggestion {
   patch: Record<string, unknown>;
@@ -75,48 +80,6 @@ const BASE_SUGGESTIONS = [
   "Quanto posso gastar com lazer este mês sem me apertar?",
 ];
 
-/** Reduz imagem no navegador e devolve base64 jpeg. */
-function imageToBase64(file: File, maxDim = 1200): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let { width, height } = img;
-      if (width > maxDim || height > maxDim) {
-        const s = maxDim / Math.max(width, height);
-        width = Math.round(width * s); height = Math.round(height * s);
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) { reject(new Error("canvas")); return; }
-      ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("img")); };
-    img.src = url;
-  });
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(",")[1]);
-    r.onerror = () => reject(new Error("read"));
-    r.readAsDataURL(file);
-  });
-}
-
-function fileToText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(new Error("read"));
-    r.readAsText(file);
-  });
-}
-
 export default function Chat() {
   const { user } = useAuth();
   const { profile } = useProfile();
@@ -150,6 +113,12 @@ export default function Chat() {
   }, []);
   const [capturedChecked, setCapturedChecked] = useState<boolean[]>([]);
   const [savingCaptured, setSavingCaptured] = useState(false);
+  // Print/comprovante financeiro na conversa: lançamentos propostos em lote
+  const [stItems, setStItems] = useState<ProposedStatementTx[] | null>(null);
+  const [stChecked, setStChecked] = useState<boolean[]>([]);
+  const [stDup, setStDup] = useState<boolean[]>([]);
+  const [stNote, setStNote] = useState<string | null>(null);
+  const { confirm: confirmStatement, saving: savingStatement } = useStatementConfirm();
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { listening, toggle: toggleMic, stop: stopMic } = useDictation(
@@ -174,7 +143,7 @@ export default function Chat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, sending, captured, proposedPlan, learned]);
+  }, [messages.length, sending, captured, proposedPlan, learned, stItems]);
 
   // ── Anexos ───────────────────────────────────────────────────
   const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -224,6 +193,7 @@ export default function Chat() {
     setAttachments([]);
     setCaptured(null);
     setLearned(null);
+    setStItems(null);
     setSending(true);
     setLocal((l) => [...l, {
       role: "user",
@@ -253,7 +223,18 @@ export default function Chat() {
       const events = (data?.captured ?? []) as ProposedEvent[];
       if (events.length) {
         setCaptured(events);
-        setCapturedChecked(events.map(() => true));
+        // Modularidade total: evento de tracker desligado chega desmarcado
+        setCapturedChecked(events.map((ev) => proposedEventChecked(profile, ev.kind)));
+      }
+      // Imagem financeira (print de fatura, comprovante, Pix): cartão de
+      // confirmação em lote — mesma UX da importação, dentro da conversa.
+      const statement = (data?.statement_items ?? []) as ProposedStatementTx[];
+      if (statement.length && user) {
+        const dups = await findStatementDuplicates(user.id, statement);
+        setStItems(statement);
+        setStDup(dups);
+        setStChecked(statement.map((_, i) => !dups[i]));
+        setStNote((data?.statement_note as string | undefined) ?? null);
       }
       if (data?.plan?.title && data?.plan?.content) {
         setProposedPlan(data.plan as ProposedPlan);
@@ -351,7 +332,12 @@ export default function Chat() {
     if (!selected.length) { setCaptured(null); return; }
     setSavingCaptured(true);
     try {
-      await saveProposedEvents(user.id, selected);
+      const schedHours = sleepWindowHours(profile?.sleep_bedtime, profile?.sleep_waketime);
+      await saveProposedEvents(user.id, selected, schedHours ? {
+        hours: schedHours,
+        bedtime: timeForInput(profile?.sleep_bedtime),
+        waketime: timeForInput(profile?.sleep_waketime),
+      } : null);
       const gained = selected.reduce((sum, ev) => sum + xpForKind(ev.kind), 0);
       toast.success(selected.length === 1
         ? `${selected[0].summary} · +${gained} XP`
@@ -569,6 +555,30 @@ export default function Chat() {
                 {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Salvar no perfil</>)}
               </Button>
             </div>
+          </div>
+        )}
+
+        {/* Lançamentos lidos de um print/comprovante — confirmar em lote */}
+        {stItems && !sending && (
+          <div className="rounded-xl border border-gold/40 bg-card p-3 space-y-2 animate-fade-up">
+            <p className="text-sm font-medium flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-gold" />
+              Li lançamentos na imagem. Confirma o que quer registrar?
+            </p>
+            <StatementReview
+              items={stItems} checked={stChecked} dup={stDup} note={stNote}
+              saving={savingStatement}
+              cancelLabel="Agora não"
+              onToggle={(i, v) => setStChecked((arr) => arr.map((c, j) => (j === i ? v : c)))}
+              onToggleAll={(v) => setStChecked(stItems.map(() => v))}
+              onCancel={() => setStItems(null)}
+              onConfirm={async () => {
+                const selected = stItems.filter((_, i) => stChecked[i]);
+                if (!selected.length) { setStItems(null); return; }
+                const ok = await confirmStatement(selected);
+                if (ok) setStItems(null);
+              }}
+            />
           </div>
         )}
 

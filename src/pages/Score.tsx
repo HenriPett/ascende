@@ -7,6 +7,7 @@ import { useXp } from "@/hooks/useXp";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { PILLARS, activePillarSet } from "@/lib/pillars";
+import { activeTrackerSet } from "@/lib/trackers";
 import { levelTitle, nextTitle, xpReasonLabel } from "@/lib/xp";
 import { monthStartISO } from "@/lib/format";
 import { daysAgoISOInSP } from "@/lib/dates";
@@ -42,6 +43,9 @@ function LevelRing({ level, progress }: { level: number; progress: number }) {
 export default function Score() {
   const { user } = useAuth();
   const { profile } = useProfile();
+  // Modularidade total: componentes de trackers desligados saem das fórmulas
+  // (quem não acompanha sono não é medido por sono) — e o "porquê" explica.
+  const trackers = activeTrackerSet(profile);
   const { xp, level, progress, nextFloor, currentFloor } = useXp();
   const title = levelTitle(level);
   const upcoming = nextTitle(level);
@@ -100,37 +104,57 @@ export default function Score() {
       }
     }
 
-    // Vitalidade: conclusão de hábitos (14d) + sono médio vs. 7–8h
+    // Vitalidade: conclusão de hábitos (14d) + sono médio vs. 7–8h.
+    // O componente de sono só entra se a pessoa ACOMPANHA sono (tracker).
     const parts: number[] = [];
-    if (habitsCount > 0) parts.push(clamp((logs.length / (habitsCount * 14)) * 100));
-    const sleeps = events.filter((e) => e.kind === "sleep").map((e) => Number((e.payload as { hours?: number })?.hours)).filter((n) => n > 0);
-    if (sleeps.length) {
-      const avg = sleeps.reduce((a, b) => a + b, 0) / sleeps.length;
-      parts.push(clamp(100 - Math.abs(avg - 7.5) * 22));
+    const whyParts: string[] = [];
+    if (habitsCount > 0) { parts.push(clamp((logs.length / (habitsCount * 14)) * 100)); whyParts.push("conclusão de hábitos"); }
+    if (trackers.has("sleep")) {
+      const sleeps = events.filter((e) => e.kind === "sleep").map((e) => Number((e.payload as { hours?: number })?.hours)).filter((n) => n > 0);
+      if (sleeps.length) {
+        const avg = sleeps.reduce((a, b) => a + b, 0) / sleeps.length;
+        parts.push(clamp(100 - Math.abs(avg - 7.5) * 22));
+        whyParts.push("sono médio (ideal ~7,5h)");
+      }
     }
     if (parts.length) {
       scores.vitalidade = {
         value: clamp(parts.reduce((a, b) => a + b, 0) / parts.length),
-        why: "Baseado na conclusão de hábitos e no sono médio (ideal ~7,5h).",
+        why: `Baseado em: ${whyParts.join(" e ")}.` + (trackers.has("sleep") ? "" : " Sono fora da conta: você escolheu não acompanhar."),
       };
     }
 
-    // Alimentação: dias com refeição registrada nos últimos 14
-    const mealDays = new Set(events.filter((e) => e.kind === "meal").map((e) => e.occurred_at.slice(0, 10))).size;
-    if (mealDays > 0) {
-      scores.alimentacao = { value: clamp((mealDays / 14) * 100), why: "Baseado em quantos dos últimos 14 dias tiveram refeições registradas." };
+    // Alimentação: dias com refeição registrada nos últimos 14 (só se a
+    // pessoa acompanha refeições — tracker).
+    if (trackers.has("meals")) {
+      const mealDays = new Set(events.filter((e) => e.kind === "meal").map((e) => e.occurred_at.slice(0, 10))).size;
+      if (mealDays > 0) {
+        scores.alimentacao = { value: clamp((mealDays / 14) * 100), why: "Baseado em quantos dos últimos 14 dias tiveram refeições registradas." };
+      }
+    } else {
+      scores.alimentacao = { value: null, why: "Você escolheu não acompanhar refeições — sem indicador, de propósito." };
     }
 
-    // Mente: média de humor + frequência de prática/diário
-    const moods = events.filter((e) => e.kind === "mood").map((e) => Number((e.payload as { score?: number })?.score)).filter((n) => n >= 1);
-    const practices = new Set(
-      events.filter((e) => e.kind === "practice" || e.kind === "journal").map((e) => e.occurred_at.slice(0, 10))
-    ).size;
+    // Mente: média de humor + frequência de prática/diário — cada componente
+    // só entra se o tracker correspondente estiver ativo.
     const mparts: number[] = [];
-    if (moods.length) mparts.push(clamp(((moods.reduce((a, b) => a + b, 0) / moods.length) - 1) * 25));
-    if (practices > 0) mparts.push(clamp((practices / 14) * 100));
+    const mwhy: string[] = [];
+    if (trackers.has("mood")) {
+      const moods = events.filter((e) => e.kind === "mood").map((e) => Number((e.payload as { score?: number })?.score)).filter((n) => n >= 1);
+      if (moods.length) { mparts.push(clamp(((moods.reduce((a, b) => a + b, 0) / moods.length) - 1) * 25)); mwhy.push("humor médio"); }
+    }
+    const practiceKinds = [
+      ...(trackers.has("practice") ? ["practice"] : []),
+      ...(trackers.has("journal") ? ["journal"] : []),
+    ];
+    if (practiceKinds.length) {
+      const practices = new Set(
+        events.filter((e) => practiceKinds.includes(e.kind)).map((e) => e.occurred_at.slice(0, 10))
+      ).size;
+      if (practices > 0) { mparts.push(clamp((practices / 14) * 100)); mwhy.push("frequência de prática e diário"); }
+    }
     if (mparts.length) {
-      scores.mente = { value: clamp(mparts.reduce((a, b) => a + b, 0) / mparts.length), why: "Baseado no humor médio e na frequência de prática e diário." };
+      scores.mente = { value: clamp(mparts.reduce((a, b) => a + b, 0) / mparts.length), why: `Baseado em: ${mwhy.join(" e ")}.` };
     }
   }
 

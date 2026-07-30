@@ -130,6 +130,26 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   if (disabled.length) {
     lines.push(`PRIVACIDADE: a pessoa desativou a análise das áreas: ${disabled.join(", ")}. Esses dados foram omitidos deste retrato de propósito. Não especule sobre eles nem peça para reativar.`);
   }
+  // Modularidade total (nível tracker): o que a pessoa ESCOLHEU não acompanhar.
+  // Regra inegociável para quem lê este retrato (briefing, Conselheiro,
+  // retrospectiva): nunca cobrar registro, sugerir meta ou propor hábito
+  // dessas áreas — a escolha dela é parte do produto, não uma lacuna.
+  const TRACKER_LABEL: Record<string, string> = {
+    water: "água/hidratação", meals: "refeições e calorias", protein: "proteína",
+    weight: "peso e corpo", sleep: "sono", naps: "sonecas", workouts: "treinos",
+    mood: "humor", practice: "prática (espiritual/mente)", journal: "diário",
+    gratitude: "gratidão", spend_limit: "teto de gasto diário",
+  };
+  const trackingPrefs = (p.tracking_prefs ?? {}) as Record<string, unknown>;
+  const offTrackers = Object.keys(TRACKER_LABEL)
+    .filter((k) => trackingPrefs[k] === false)
+    .map((k) => TRACKER_LABEL[k]);
+  if (offTrackers.length) {
+    lines.push(
+      `NÃO ACOMPANHA (escolha deliberada da pessoa em Ajustes): ${offTrackers.join(", ")}. ` +
+      `NUNCA cobre registros, sugira metas, proponha hábitos ou lamente a falta de dados dessas áreas — a menos que a pessoa peça explicitamente. Isso não é lacuna, é escolha.`
+    );
+  }
   lines.push(`Nome: ${p.name || "não informado"}.`);
   if (p.goal) lines.push(`Objetivo declarado: ${p.goal}.`);
   lines.push(`Pilares ativos: ${(p.pillars ?? []).join(", ") || "nenhum ainda"}.`);
@@ -177,6 +197,12 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   }
   if (p.monthly_income) lines.push(`Renda mensal aproximada: ${BRL(Number(p.monthly_income))}.`);
   if (p.monthly_budget) lines.push(`Orçamento mensal desejado: ${BRL(Number(p.monthly_budget))}.`);
+  if (p.est_food_spend) {
+    lines.push(
+      `ESTIMATIVA DECLARADA: gasta ~${BRL(Number(p.est_food_spend))}/mês com comida (mercado + fora de casa). ` +
+      `É premissa, não registro — o real do mês substitui, nunca soma. É a base do "plano alimentar que cabe no bolso": qualquer plano alimentar deve caber nesse valor (ou declarar por que não cabe).`
+    );
+  }
 
   // Finanças do mês
   if (scopes.prosperidade) {
@@ -265,6 +291,28 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   if (scopes.vitalidade) {
   const sleeps = (kinds["sleep"] ?? []).map((e) => Number((e.payload as any)?.hours)).filter((n) => n > 0);
   if (sleeps.length) lines.push(`SONO NOTURNO: média de ${(sleeps.reduce((a, b) => a + b, 0) / sleeps.length).toFixed(1)}h nos últimos ${sleeps.length} registros (sonecas contadas à parte).`);
+
+  // Rotina de sono declarada (estilo iPhone) + adesão via check-in matinal.
+  // É o cruzamento-assinatura da marca: noites fora da rotina × gasto por
+  // impulso × humor — algo que nenhum app de nicho consegue dizer.
+  const bt = String(p.sleep_bedtime ?? "").slice(0, 5);
+  const wt = String(p.sleep_waketime ?? "").slice(0, 5);
+  if (/^\d{2}:\d{2}$/.test(bt) && /^\d{2}:\d{2}$/.test(wt) && trackingPrefs["sleep"] !== false) {
+    const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+    const diffMin = ((toMin(wt) - toMin(bt)) + 1440) % 1440;
+    if (diffMin > 0) {
+      const hrs = Math.round((diffMin / 60) * 10) / 10;
+      const withFlag = (kinds["sleep"] ?? []).filter((e) => typeof (e.payload as any)?.followed_schedule === "boolean");
+      const followed = withFlag.filter((e) => (e.payload as any)?.followed_schedule === true).length;
+      lines.push(
+        `ROTINA DE SONO DECLARADA: dorme às ${bt}, acorda às ${wt} (~${hrs}h/noite).` +
+        (withFlag.length
+          ? ` Adesão (30d): seguiu a rotina em ${followed} de ${withFlag.length} noites com check-in.`
+          : ` Ainda sem check-ins de rotina (o check-in matinal de 1 toque na tela Hoje alimenta a adesão).`) +
+        ` Se a pessoa disser "dormi no horário"/"segui minha rotina", isso significa ${hrs}h de sono nesses horários.`
+      );
+    }
+  }
   const naps = (kinds["nap"] ?? []).map((e) => Number((e.payload as any)?.hours)).filter((n) => n > 0);
   if (naps.length) lines.push(`SONECAS (30d): ${naps.length}, média de ${(naps.reduce((a, b) => a + b, 0) / naps.length).toFixed(1)}h cada.`);
 
@@ -538,6 +586,7 @@ export const CAPTURE_TOOL = {
             tx_kind: { type: "string", enum: ["income", "expense"], description: "Entrada ou saída (apenas para transaction)." },
             category: { type: "string", description: "Categoria da transação. Ex.: Mercado, Transporte, Lazer, Salário." },
             hours: { type: "number", description: "Horas dormidas (para sleep e nap). '40 minutos' vira 0.7." },
+            followed_schedule: { type: "boolean", description: "APENAS para sleep: true quando a pessoa disser que SEGUIU a rotina/horários de sono dela ('dormi no horário', 'segui minha rotina de sono'). Nesse caso pode omitir hours: o app usa a duração da rotina declarada." },
             calories: { type: "number", description: "APENAS para meal: estimativa de calorias da refeição descrita. SEMPRE estime, assumindo porções típicas brasileiras." },
             protein_g: { type: "number", description: "APENAS para meal: proteína estimada em gramas, quando possível." },
             carbs_g: { type: "number", description: "APENAS para meal: carboidratos estimados em gramas, quando possível." },
@@ -574,7 +623,7 @@ export const CAPTURE_SYSTEM = `Você extrai eventos estruturados de relatos do d
 Regras:
 • Extraia TODOS os eventos presentes no texto — um relato pode alimentar vários pilares de uma vez.
 • Valores em reais: "47", "R$47", "quarenta e sete" → amount 47. Gastos são expense; salário/recebimentos são income.
-• Sono NOTURNO ("dormi 5h", "dormi mal" → estime 5 e cite no summary que foi estimado) vira sleep. Sonecas e cochilos ("tirei uma soneca", "cochilei 40 min", "dormi depois do almoço") viram nap com hours; NUNCA registre soneca como sleep — são coisas diferentes com pesos diferentes. Na dúvida entre noite e soneca, o horário e o contexto decidem (dormir "depois do almoço" é soneca).
+• Sono NOTURNO ("dormi 5h", "dormi mal" → estime 5 e cite no summary que foi estimado) vira sleep. Se a pessoa disser que SEGUIU a rotina/horários dela ("dormi no horário", "segui minha rotina de sono", "dormi e acordei na hora certa"), emita sleep com followed_schedule: true e SEM hours (o app preenche com a duração da rotina declarada dela); summary: "Sono: rotina seguida". Se o retrato informar a rotina declarada, pode citar a duração no summary. Sonecas e cochilos ("tirei uma soneca", "cochilei 40 min", "dormi depois do almoço") viram nap com hours; NUNCA registre soneca como sleep — são coisas diferentes com pesos diferentes. Na dúvida entre noite e soneca, o horário e o contexto decidem (dormir "depois do almoço" é soneca).
 • Menções a treino/exercício viram workout — SEMPRE preencha muscles inferindo os grupos do exercício (corrida → Pernas e Cardio; "treinei costas" → Costas). Inclua os grupos no summary. Ex.: "Treino de corrida (Pernas, Cardio)".
 • Se a duração do treino for mencionada, preencha duration_min.
 • Água bebida ("tomei 2L de água", "bebi 500ml") vira water com ml.
@@ -833,4 +882,126 @@ export async function extractEventsAndMemories(
     console.error("extração combinada: erro inesperado", e);
     return { ok: false, events: [], learned: [] };
   }
+}
+/* ─── Extração de fatura/comprovante (compartilhada) ──────────────────────
+   Antes vivia só em `import-statement`; com "fatura em toda IA", as TRÊS
+   superfícies (import-statement, capture com imagem, ai-chat com imagem)
+   usam o mesmo tool, o mesmo system e a mesma normalização — a lista chega
+   ao app como PROPOSTA e a pessoa confirma em lote. A IA nunca grava sozinha. */
+
+export const STATEMENT_CATEGORIES = [
+  "Mercado", "Alimentação fora", "Transporte", "Moradia", "Saúde", "Lazer",
+  "Educação", "Assinaturas", "Salário", "Extra", "Outros",
+];
+
+export const STATEMENT_MAX_ITEMS = 120;
+export const STATEMENT_MAX_INSTALLMENTS = 24;   // expansão de parcelas: até 24x
+export const STATEMENT_MAX_ITEMS_EXPANDED = 240;
+
+/** Soma `delta` meses a uma data ISO, fixando o dia ao último dia do mês
+ *  quando necessário (31/01 + 1 mês → 28/02). */
+export function addMonthsClamp(iso: string, delta: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const idx = (m - 1) + delta;
+  const ny = y + Math.floor(idx / 12);
+  const nm = ((idx % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
+  const nd = Math.min(d, lastDay);
+  return `${ny}-${String(nm + 1).padStart(2, "0")}-${String(nd).padStart(2, "0")}`;
+}
+
+export const STATEMENT_TOOL = {
+  name: "extrair_lancamentos",
+  description:
+    "Extrai os lançamentos de uma fatura de cartão, extrato bancário, comprovante ou print de transações. " +
+    "Cada item vira uma PROPOSTA que o usuário confirma no app.",
+  input_schema: {
+    type: "object",
+    properties: {
+      is_statement: {
+        type: "boolean",
+        description: "true se o documento/imagem realmente contém transações financeiras (fatura, extrato, comprovante de Pix, print de compra, cupom); false caso contrário.",
+      },
+      statement_month: {
+        type: "string",
+        description: "Mês de referência do documento no formato YYYY-MM, se identificável.",
+      },
+      items: {
+        type: "array",
+        maxItems: STATEMENT_MAX_ITEMS,
+        items: {
+          type: "object",
+          properties: {
+            kind: { type: "string", enum: ["income", "expense"], description: "expense para compras/débitos/Pix enviado; income para créditos/estornos/salário/Pix recebido." },
+            amount: { type: "number", description: "Valor em reais, sempre positivo." },
+            category: { type: "string", enum: STATEMENT_CATEGORIES, description: "Melhor categoria para o lançamento." },
+            description: { type: "string", description: "Descrição curta e legível, SEM o sufixo de parcela (limpe códigos, siglas e o 'i/N'). Ex.: 'Loja de Móveis', não 'LOJAMOVEIS*BR 3/10'." },
+            occurred_at: { type: "string", description: "Data do lançamento em YYYY-MM-DD. Se o documento só tiver dia/mês, deduza o ano pelo mês de referência. Comprovante sem data legível: use a data de hoje informada no contexto." },
+            installment_current: { type: "integer", description: "Se for compra parcelada (ex.: '3/10'), o número desta parcela (3). Omita se não for parcelado." },
+            installment_total: { type: "integer", description: "Se for compra parcelada (ex.: '3/10'), o total de parcelas (10). Omita se não for parcelado." },
+          },
+          required: ["kind", "amount", "category", "description", "occurred_at"],
+        },
+      },
+      note: {
+        type: "string",
+        description: "Observação curta ao usuário, se necessária. Ex.: 'Ignorei o pagamento da fatura anterior para não duplicar'. Vazio se não precisar.",
+      },
+    },
+    required: ["is_statement", "items"],
+  },
+};
+
+export const STATEMENT_SYSTEM = `Você é o extrator financeiro do Ascende, plataforma brasileira de qualidade de vida.
+Você recebe UM documento ou imagem (fatura de cartão, extrato bancário, comprovante de Pix, print de compra, cupom fiscal) e extrai os lançamentos.
+
+REGRAS:
+• Cada linha de transação vira um item: tipo (expense/income), valor positivo em reais, categoria, descrição limpa e data.
+• NÃO inclua: saldo, limite disponível, "pagamento recebido"/pagamento da fatura anterior, juros informativos sem lançamento, subtotais e totais. Só transações reais.
+• Estorno/crédito na fatura = income. Pix RECEBIDO = income; Pix ENVIADO = expense.
+• Comprovante avulso (Pix, compra, cupom) normalmente é UM único lançamento — não invente outros.
+• PARCELAS: quando a linha indicar parcelamento (ex.: "Loja X 3/10"), o amount é o valor DA PARCELA (não o total da compra), a descrição vem limpa (sem o "3/10") e você preenche installment_current=3 e installment_total=10. O app gera as parcelas passadas e futuras a partir disso.
+• Categorize com bom senso brasileiro: supermercado/hortifruti → Mercado; iFood/restaurante/lanchonete → Alimentação fora; Uber/99/combustível/estacionamento → Transporte; farmácia/consulta → Saúde; cinema/bar/viagem → Lazer; streaming/telefonia/apps → Assinaturas; luz/água/condomínio → Moradia; na dúvida → Outros.
+• Datas em YYYY-MM-DD. Se o documento só mostra dia/mês, use o mês de referência para deduzir o ano. Comprovante sem data legível: use a data de hoje, se informada no contexto.
+• Se a imagem NÃO contiver transações financeiras (ou estiver ilegível), retorne is_statement:false e items:[] — sem inventar.
+• Nunca julgue os gastos da pessoa. Extraia com neutralidade.
+• Responda SEMPRE usando a ferramenta extrair_lancamentos.`;
+
+/** Valida os itens do tool e expande parcelas (passadas e futuras).
+ *  Formato de saída = ProposedStatementTx do app (origin + installment). */
+// deno-lint-ignore no-explicit-any
+export function normalizeStatementItems(raw: unknown): any[] {
+  const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+  // deno-lint-ignore no-explicit-any
+  return (Array.isArray(raw) ? raw : []).slice(0, STATEMENT_MAX_ITEMS).flatMap((it: any) => {
+    const amount = Number(it?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return [];
+    const kind = it?.kind === "income" ? "income" : "expense";
+    const category = STATEMENT_CATEGORIES.includes(it?.category) ? it.category : "Outros";
+    const description = String(it?.description ?? category).slice(0, 100);
+    const occurred_at = isoDate.test(String(it?.occurred_at ?? "")) ? String(it.occurred_at) : null;
+    if (!occurred_at) return [];
+    const base = { kind, amount: Math.round(amount * 100) / 100, category, description, occurred_at };
+
+    // Compra parcelada: expande passadas e futuras a partir da parcela da
+    // fatura (mesmo valor, meses vizinhos). O usuário confirma em lote e
+    // o app desmarca automaticamente as que já existirem registradas.
+    const cur = Number(it?.installment_current);
+    const total = Number(it?.installment_total);
+    const isInstallment = Number.isInteger(cur) && Number.isInteger(total) &&
+      total >= 2 && total <= STATEMENT_MAX_INSTALLMENTS && cur >= 1 && cur <= total;
+    if (!isInstallment) return [{ ...base, origin: "statement", installment: null }];
+
+    const out: unknown[] = [];
+    for (let k = 1; k <= total; k++) {
+      out.push({
+        ...base,
+        description: `${description} · ${k}/${total}`,
+        occurred_at: addMonthsClamp(occurred_at, k - cur),
+        origin: k === cur ? "statement" : (k < cur ? "past" : "future"),
+        installment: `${k}/${total}`,
+      });
+    }
+    return out;
+  }).slice(0, STATEMENT_MAX_ITEMS_EXPANDED);
 }

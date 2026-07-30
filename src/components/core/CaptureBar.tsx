@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,21 +7,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Sparkles, Loader2, Check, X, Mic, MicOff } from "lucide-react";
-import { pillarById, captureExamplesFor } from "@/lib/pillars";
+import { Sparkles, Loader2, Check, X, Mic, MicOff, Camera, Image as ImageIcon } from "lucide-react";
+import { pillarById } from "@/lib/pillars";
 import { useProfile } from "@/hooks/useProfile";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
 import { xpForKind } from "@/lib/xp";
+import { sleepWindowHours, timeForInput } from "@/lib/sleep";
 import { useDictation } from "@/hooks/useDictation";
 import LearnedInsights, { type LearnedMemory } from "@/components/core/LearnedInsights";
 import FirstTimeTip from "@/components/core/FirstTimeTip";
 import { useGuides } from "@/hooks/useGuides";
 import Paywall from "@/components/core/Paywall";
 import { readFnError, isPlanLimit, type PlanLimitError } from "@/lib/fnError";
+import { captureExamplesForTrackers, proposedEventChecked, trackerForEventKind } from "@/lib/trackers";
+import { imageToBase64 } from "@/lib/files";
+import type { ProposedStatementTx } from "@/lib/prosperidade";
+import StatementReview, { findStatementDuplicates, useStatementConfirm } from "@/components/core/StatementReview";
 
-/* Exemplos coerentes com os pilares ATIVOS da pessoa (modularidade real,
-   Sugestão 1 do plano de feedbacks): quem escolheu só Prosperidade não vê
-   "treinei pernas" como exemplo. A lista vem de captureExamplesFor(). */
+/* Exemplos coerentes com os TRACKERS ativos da pessoa (modularidade total):
+   quem desligou o tracker de água não vê "Tomei 2 copos de água" como
+   exemplo. A lista vem de captureExamplesForTrackers(). */
 
 /** Explica o XP uma única vez, no primeiro registro da vida do usuário
  *  (análise UX P2.3): "+4 XP" sem contexto não significa nada no dia 1. */
@@ -52,19 +57,50 @@ export default function CaptureBar({
   const [limitInfo, setLimitInfo] = useState<PlanLimitError | null>(null);
   const [learned, setLearned] = useState<LearnedMemory[] | null>(null);
   const [checked, setChecked] = useState<boolean[]>([]);
+  // Print de fatura/comprovante direto na captura (Fatura em toda IA):
+  const [image, setImage] = useState<{ name: string; data: string } | null>(null);
+  const [statementItems, setStatementItems] = useState<ProposedStatementTx[] | null>(null);
+  const [stChecked, setStChecked] = useState<boolean[]>([]);
+  const [stDup, setStDup] = useState<boolean[]>([]);
+  const [stNote, setStNote] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const { confirm: confirmStatement, saving: savingStatement } = useStatementConfirm();
   const { listening, toggle: toggleMic, stop: stopMic } = useDictation(
     (t) => setText((v) => (v ? v + " " : "") + t)
   );
   const { markSeen } = useGuides();
 
+  const pickImage = () => fileRef.current?.click();
+  const onPickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Envie uma imagem (print da fatura, comprovante, foto). Para PDF de fatura completa, use \"Importar fatura\" em Prosperidade.");
+      return;
+    }
+    try {
+      const data = await imageToBase64(file, 1400);
+      setImage({ name: file.name, data });
+    } catch {
+      toast.error(`Não consegui ler "${file.name}".`);
+    }
+  };
+
   const analyze = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() && !image) return;
     stopMic();
     markSeen("hoje-captura"); // usou a função: a dica não é mais necessária
     setLoading(true);
     setLearned(null);
+    setStatementItems(null);
     try {
-      const { data, error } = await supabase.functions.invoke("capture", { body: { text: text.trim() } });
+      const { data, error } = await supabase.functions.invoke("capture", {
+        body: {
+          text: text.trim() || (image ? "Enviei uma imagem para registrar." : ""),
+          ...(image ? { image: image.data, media_type: "image/jpeg" } : {}),
+        },
+      });
       if (error) {
         const body = await readFnError(error);
         if (isPlanLimit(body)) { setLimitInfo(body); return; }
@@ -73,20 +109,35 @@ export default function CaptureBar({
       if (data?.error) throw new Error(data.error);
       const events: ProposedEvent[] = data?.events ?? [];
       const insights = (data?.learned ?? []) as LearnedMemory[];
+      const stItems = (data?.statement_items ?? []) as ProposedStatementTx[];
       if (insights.length) {
         setLearned(insights);
         qc.invalidateQueries({ queryKey: ["ai-memories"] });
       }
+      if (stItems.length) {
+        // A imagem era financeira: revisão em lote, igual à importação.
+        const dups = user ? await findStatementDuplicates(user.id, stItems) : stItems.map(() => false);
+        setStatementItems(stItems);
+        setStDup(dups);
+        setStChecked(stItems.map((_, i) => !dups[i]));
+        setStNote((data?.statement_note as string | undefined) ?? null);
+        setImage(null);
+      }
       if (!events.length) {
-        if (!insights.length) {
-          toast.info("Não encontrei nada para registrar nesse texto. Tente descrever o que aconteceu — um gasto, um treino, como você dormiu...");
-        } else {
+        if (!insights.length && !stItems.length) {
+          toast.info(image
+            ? "Não encontrei nada registrável na imagem. Prints de fatura, comprovantes e telas de Pix funcionam melhor."
+            : "Não encontrei nada para registrar nesse texto. Tente descrever o que aconteceu — um gasto, um treino, como você dormiu...");
+        } else if (!stItems.length) {
           setText("");
         }
         return;
       }
       setProposed(events);
-      setChecked(events.map(() => true));
+      // Modularidade total: evento de tracker desligado chega DESMARCADO
+      // (a pessoa mencionou, então propor respeita a frase dela; gravar
+      // por padrão, não).
+      setChecked(events.map((ev) => proposedEventChecked(profile, ev.kind)));
     } catch {
       toast.error("Não consegui interpretar agora. Verifique sua conexão e tente de novo.");
     } finally {
@@ -101,7 +152,12 @@ export default function CaptureBar({
     if (!selected.length) { setProposed(null); return; }
     setSaving(true);
     try {
-      await saveProposedEvents(user.id, selected);
+      const schedHours = sleepWindowHours(profile?.sleep_bedtime, profile?.sleep_waketime);
+      await saveProposedEvents(user.id, selected, schedHours ? {
+        hours: schedHours,
+        bedtime: timeForInput(profile?.sleep_bedtime),
+        waketime: timeForInput(profile?.sleep_waketime),
+      } : null);
       const gained = selected.reduce((sum, ev) => sum + xpForKind(ev.kind), 0);
       toast.success(
         (selected.length === 1
@@ -109,6 +165,7 @@ export default function CaptureBar({
           : `${selected.length} registros feitos de uma vez · +${gained} XP`) + xpToastSuffix()
       );
       setText("");
+      setImage(null);
       setProposed(null);
       qc.invalidateQueries();
       onConfirmed?.(selected.length);
@@ -119,6 +176,18 @@ export default function CaptureBar({
     }
   };
 
+  const confirmStatementItems = async () => {
+    if (!statementItems) return;
+    const selected = statementItems.filter((_, i) => stChecked[i]);
+    if (!selected.length) { setStatementItems(null); return; }
+    const ok = await confirmStatement(selected);
+    if (ok) {
+      setStatementItems(null);
+      setText("");
+      onConfirmed?.(selected.length);
+    }
+  };
+
   return (
     <Card className="p-4 space-y-3 border-gold/30">
       <div className="flex items-center gap-2 text-sm font-medium">
@@ -126,7 +195,7 @@ export default function CaptureBar({
         Conte como foi — eu registro tudo para você
       </div>
 
-      {!proposed && (
+      {!proposed && !statementItems && (
         <>
           <FirstTimeTip id="hoje-captura" />
           <Textarea
@@ -134,7 +203,8 @@ export default function CaptureBar({
             onChange={(e) => setText(e.target.value)}
             placeholder={(() => {
               if (listening) return "Ouvindo... conte como foi o seu dia";
-              const examples = captureExamplesFor(profile?.pillars);
+              if (image) return "Quer acrescentar algo sobre a imagem? (opcional)";
+              const examples = captureExamplesForTrackers(profile);
               return `Ex.: "${examples[new Date().getDate() % examples.length]}"`;
             })()}
             rows={2}
@@ -144,7 +214,26 @@ export default function CaptureBar({
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); analyze(); }
             }}
           />
+          {image && (
+            <div className="flex items-center gap-2 text-xs rounded-full border bg-card px-2.5 py-1 w-fit max-w-full">
+              <ImageIcon className="w-3 h-3 shrink-0" />
+              <span className="truncate">{image.name}</span>
+              <button onClick={() => setImage(null)} aria-label={`Remover ${image.name}`}
+                className="text-muted-foreground hover:text-foreground">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
           <div className="flex justify-end gap-1.5">
+            <Button
+              variant="ghost" size="icon" className="text-muted-foreground"
+              onClick={pickImage} disabled={loading}
+              aria-label="Anexar print ou foto (fatura, comprovante, Pix)"
+              title="Print de fatura, comprovante ou foto"
+            >
+              <Camera className="w-4 h-4" />
+            </Button>
             <Button
               variant={listening ? "default" : "ghost"} size="icon"
               className={listening ? "animate-pulse" : "text-muted-foreground"}
@@ -153,7 +242,7 @@ export default function CaptureBar({
             >
               {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </Button>
-            <Button onClick={analyze} disabled={loading || !text.trim()}>
+            <Button onClick={analyze} disabled={loading || (!text.trim() && !image)}>
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Registrar"}
             </Button>
           </div>
@@ -166,6 +255,7 @@ export default function CaptureBar({
           <p className="text-sm text-muted-foreground">Encontrei isto no seu relato. Confirma?</p>
           {proposed.map((ev, i) => {
             const meta = pillarById(ev.pillar);
+            const trackerOff = !proposedEventChecked(profile, ev.kind);
             return (
               <label key={i} className="flex items-center gap-3 rounded-md border p-2.5 cursor-pointer">
                 <Checkbox
@@ -177,7 +267,14 @@ export default function CaptureBar({
                   style={{ background: meta ? `hsl(var(${meta.colorVar}))` : "hsl(var(--muted-foreground))" }}
                   aria-hidden
                 />
-                <span className="text-sm flex-1 min-w-0 break-words">{ev.summary}</span>
+                <span className="text-sm flex-1 min-w-0 break-words">
+                  {ev.summary}
+                  {trackerOff && (
+                    <span className="block text-[11px] text-muted-foreground">
+                      você não acompanha {trackerForEventKind(ev.kind)?.label.toLowerCase() ?? "isso"} — marque se quiser registrar mesmo assim
+                    </span>
+                  )}
+                </span>
                 <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">{meta?.name ?? ev.pillar}</span>
               </label>
             );
@@ -190,6 +287,23 @@ export default function CaptureBar({
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Confirmar</>)}
             </Button>
           </div>
+        </div>
+      )}
+
+      {/* Imagem financeira detectada: revisão em lote (mesma UX da importação) */}
+      {statementItems && (
+        <div className="animate-fade-up space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Li a imagem como lançamentos financeiros. Confirme o que quiser registrar:
+          </p>
+          <StatementReview
+            items={statementItems} checked={stChecked} dup={stDup} note={stNote}
+            saving={savingStatement}
+            onToggle={(i, v) => setStChecked((arr) => arr.map((c, j) => (j === i ? v : c)))}
+            onToggleAll={(v) => setStChecked(statementItems.map(() => v))}
+            onCancel={() => setStatementItems(null)}
+            onConfirm={confirmStatementItems}
+          />
         </div>
       )}
 

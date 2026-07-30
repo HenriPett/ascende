@@ -113,6 +113,9 @@ export interface Flags {
   apple_billing_enabled: boolean;
   /** Composição corporal por foto: suspensa por padrão (plano Etapa 4.1). */
   body_photo_enabled: boolean;
+  /** Blueprint da Subida (onboarding, 1 chamada Sonnet/conta): desligável em
+   *  emergência de custo — o app cai no blueprint local, sem quebrar. */
+  onboarding_blueprint_enabled: boolean;
 }
 
 const DEFAULT_FLAGS: Flags = {
@@ -121,6 +124,7 @@ const DEFAULT_FLAGS: Flags = {
   model_routing_enabled: true, new_score_enabled: false,
   global_timeline_enabled: false, apple_billing_enabled: false,
   body_photo_enabled: false,
+  onboarding_blueprint_enabled: true,
 };
 
 export async function getFlags(supabase: SupabaseClient): Promise<Flags> {

@@ -22,10 +22,22 @@ export interface ProposedEvent {
   kg?: number;
   mood_label?: string;
   mood_score?: number;
+  /** sleep: a pessoa disse que seguiu a rotina declarada ("dormi no horário"). */
+  followed_schedule?: boolean;
+}
+
+/** Contexto opcional da rotina de sono (para preencher horas quando a
+ *  pessoa só disse "segui minha rotina"). Vem do perfil, via lib/sleep. */
+export interface SleepScheduleCtx {
+  hours: number;
+  bedtime?: string;
+  waketime?: string;
 }
 
 /** Grava os eventos confirmados pelo usuário. Lança erro se algum insert falhar. */
-export async function saveProposedEvents(userId: string, events: ProposedEvent[]): Promise<void> {
+export async function saveProposedEvents(
+  userId: string, events: ProposedEvent[], sleepSchedule?: SleepScheduleCtx | null,
+): Promise<void> {
   for (const ev of events) {
     if (ev.kind === "transaction" && ev.amount && ev.amount > 0) {
       // Transações vão para a tabela própria (o banco cria o evento na linha do tempo)
@@ -42,6 +54,16 @@ export async function saveProposedEvents(userId: string, events: ProposedEvent[]
     } else {
       const payload: Record<string, unknown> = {};
       if (ev.hours) payload.hours = ev.hours;
+      // "Segui minha rotina de sono": a IA não sabe as horas — o app preenche
+      // com a duração da rotina declarada no perfil (Feature A).
+      if (ev.kind === "sleep" && typeof ev.followed_schedule === "boolean") {
+        payload.followed_schedule = ev.followed_schedule;
+        if (!ev.hours && ev.followed_schedule && sleepSchedule?.hours) {
+          payload.hours = sleepSchedule.hours;
+          if (sleepSchedule.bedtime) payload.bedtime = sleepSchedule.bedtime;
+          if (sleepSchedule.waketime) payload.waketime = sleepSchedule.waketime;
+        }
+      }
       if (ev.description) payload.description = ev.description;
       if (ev.muscles?.length) payload.muscles = ev.muscles;
       if (ev.meal_type) payload.meal_type = ev.meal_type;

@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import { Plus, Trash2, Moon, Dumbbell, CircleCheck, Circle, BarChart3, HeartPulse, X, Zap } from "lucide-react";
 import { todayISO } from "@/lib/format";
 import { PILLARS } from "@/lib/pillars";
+import { activeTrackerSet } from "@/lib/trackers";
+import SleepSchedule from "@/components/core/SleepSchedule";
 import { cn } from "@/lib/utils";
 import {
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar,
@@ -139,6 +141,9 @@ function RaioXVitalidade() {
 export default function Vitalidade() {
   const { user } = useAuth();
   const { profile, refresh: refreshProfile } = useProfile();
+  // Modularidade total: sono, sonecas e treinos são trackers desligáveis —
+  // desligado some da tela (e do briefing), mas o histórico continua.
+  const trackers = activeTrackerSet(profile);
   const qc = useQueryClient();
   const today = todayISO();
   const [newHabit, setNewHabit] = useState("");
@@ -265,7 +270,8 @@ export default function Vitalidade() {
   };
 
   // Tipo efetivo: o escolhido; sem escolha, noite — mas se a noite já foi registrada hoje, soneca
-  const effectiveSleepType: "sleep" | "nap" = sleepType ?? (data?.sleptTonight ? "nap" : "sleep");
+  const effectiveSleepType: "sleep" | "nap" =
+    sleepType ?? (!trackers.has("sleep") ? "nap" : data?.sleptTonight ? "nap" : "sleep");
 
   const logSleep = async () => {
     const h = Number(sleepHours.replace(",", "."));
@@ -352,12 +358,18 @@ export default function Vitalidade() {
       {/* Valor no dia 1 (Sugestões 2 e 4): o equivalente ao Raio-X */}
       <RaioXVitalidade />
 
-      {/* Registro rápido: sono e treino */}
+      {/* Rotina de sono (estilo iPhone): horários + check-in matinal na tela Hoje */}
+      {trackers.has("sleep") && <SleepSchedule />}
+
+      {/* Registro rápido: sono e treino (cada um é um tracker desligável) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {(trackers.has("sleep") || trackers.has("naps")) && (
         <Card className="p-4 space-y-2">
           <p className="text-sm font-medium flex items-center gap-1.5"><Moon className="w-4 h-4" /> Sono</p>
           <div className="flex gap-1.5">
-            {([["sleep", "Noite"], ["nap", "Soneca"]] as const).map(([t, label]) => (
+            {([["sleep", "Noite"], ["nap", "Soneca"]] as const)
+              .filter(([t]) => (t === "sleep" ? trackers.has("sleep") : trackers.has("naps")))
+              .map(([t, label]) => (
               <button
                 key={t} type="button" onClick={() => setSleepType(t)}
                 className={cn(
@@ -389,6 +401,8 @@ export default function Vitalidade() {
             onSubmit={saveSleepGoalRaw}
           />
         </Card>
+        )}
+        {trackers.has("workouts") && (
         <Card className="p-4 space-y-2">
           <p className="text-sm font-medium flex items-center gap-1.5"><Dumbbell className="w-4 h-4" /> Treino de hoje</p>
           <Input maxLength={80} placeholder="Ex.: pernas, corrida 5km" value={workout}
@@ -418,9 +432,11 @@ export default function Vitalidade() {
             onSubmit={saveWorkoutsGoalRaw}
           />
         </Card>
+        )}
       </div>
 
       {/* ── Relatório: partes do corpo treinadas ─────────────── */}
+      {trackers.has("workouts") && (
       <Card className="p-4 space-y-3">
         <div>
           <h2 className="font-display font-semibold flex items-center gap-1.5">
@@ -481,6 +497,7 @@ export default function Vitalidade() {
           </>
         )}
       </Card>
+      )}
 
       {/* Hábitos */}
       <Card className="p-4 space-y-3">

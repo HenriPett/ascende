@@ -26,6 +26,7 @@ import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine,
 } from "recharts";
+import { activeTrackerSet } from "@/lib/trackers";
 
 interface MealPayload {
   description?: string;
@@ -83,8 +84,12 @@ const confidenceLabel: Record<Estimate["confidence"], string> = {
 };
 
 export default function Alimentacao() {
+  /* Modularidade total: água, peso/corpo e a própria meta calórica são
+     trackers desligáveis. Desligado some da tela (e da cobrança do
+     briefing); o histórico continua da pessoa. */
   const { user } = useAuth();
   const { profile, refresh: refreshProfile } = useProfile();
+  const trackers = activeTrackerSet(profile);
   const qc = useQueryClient();
   const [meal, setMeal] = useState("");
 
@@ -421,7 +426,8 @@ export default function Alimentacao() {
         </TabsList>
 
         <TabsContent value="hoje" className="space-y-4 mt-0">
-        {/* ── Meta calórica do dia ─────────────────────────────── */}
+        {/* ── Meta calórica do dia (tracker Refeições) ─────────── */}
+        {trackers.has("meals") && (
         <Card className="p-4 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-medium flex items-center gap-1.5">
@@ -460,9 +466,11 @@ export default function Alimentacao() {
             </p>
           )}
         </Card>
+        )}
 
 
-        {/* Foto ou descrição → calorias */}
+        {/* Foto ou descrição → calorias (tracker Refeições) */}
+        {trackers.has("meals") && (<>
         <Card className="p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Camera className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
@@ -579,7 +587,10 @@ export default function Alimentacao() {
         </Card>
 
 
-        {/* Hidratação */}
+        </>)}
+
+        {/* Hidratação (tracker Água) */}
+        {trackers.has("water") && (
         <Card className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -620,12 +631,20 @@ export default function Alimentacao() {
             ))}
           </div>
         </Card>
+        )}
 
 
         </TabsContent>
 
         <TabsContent value="corpo" className="space-y-4 mt-0">
-        {/* ── Evolução corporal ────────────────────────────────── */}
+        {/* ── Evolução corporal (tracker Peso e corpo) ─────────── */}
+        {!trackers.has("weight") && (
+          <p className="text-sm text-muted-foreground rounded-md border p-3">
+            Você escolheu não acompanhar peso e corpo — nada aqui te cobra isso.
+            Se mudar de ideia, reative em Ajustes, na seção "O que você acompanha".
+          </p>
+        )}
+        {trackers.has("weight") && (
         <Card className="p-4 space-y-4">
           <div>
             <h2 className="font-display font-semibold flex items-center gap-1.5">
@@ -753,6 +772,7 @@ export default function Alimentacao() {
             faixas + peso/altura/sexo/evolução e comparativos privados. O
             backend também está bloqueado (flags.body_photo_enabled = false). */}
         </Card>
+        )}
 
 
         </TabsContent>

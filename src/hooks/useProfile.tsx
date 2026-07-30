@@ -56,6 +56,15 @@ export interface Profile {
   est_workouts_week: number | null;
   est_sleep_h: number | null;
   guides_seen: string[] | null;
+  /** Rotina de sono declarada (estilo iPhone): "HH:MM[:SS]" ou null. */
+  sleep_bedtime: string | null;
+  sleep_waketime: string | null;
+  /** Modularidade por tracker: só guarda o desligado ({"water": false}). */
+  tracking_prefs: Record<string, boolean> | null;
+  /** Gasto mensal aproximado com comida (Blueprint do onboarding). */
+  est_food_spend: number | null;
+  /** Quando o Blueprint da Subida foi gerado (cortesia, 1x por conta). */
+  blueprint_generated_at: string | null;
 }
 
 export function useProfile() {

@@ -2,10 +2,11 @@
 import {
   corsFor, serviceClient, requireUser, assertRateLimit, buildSnapshot,
   MODEL_SMART, MODEL_FAST, SAFETY_RULES, extractEventsAndMemories,
+  STATEMENT_TOOL, STATEMENT_SYSTEM, normalizeStatementItems,
 } from "../_shared/lib.ts";
 import { anthropicCall, reserveUsage, releaseUsage } from "../_shared/usage.ts";
 import {
-  getEntitlements, limitResponse,
+  getEntitlements, limitResponse, spParts,
   spDayStartUtc, spWeekStartUtc, spMonthStartUtc,
   nextSpDayStartUtc, nextSpWeekStartUtc, nextSpMonthStartUtc,
 } from "../_shared/entitlements.ts";
@@ -325,6 +326,51 @@ Deno.serve(async (req) => {
     const extractPromise = extractEventsAndMemories(
       supabase, user.id, message, "chat-extracao", ent.limits.memory_cap,
     );
+
+    // ── Fatura em toda IA: imagens na conversa também podem ser prints de
+    // fatura, comprovantes de Pix ou cupons. Uma extração econômica (o mesmo
+    // tool da importação) roda em paralelo e, se for financeira, a resposta
+    // ganha statement_items — o app mostra o cartão de confirmação em lote.
+    // Usa a cota da PRÓPRIA mensagem (nenhuma cota nova, decisão do plano);
+    // falha aqui nunca derruba a resposta principal.
+    const STATEMENT_REDIRECT_ITEMS = 25;
+    const imageBlocks = contentBlocks.filter((b) => b.type === "image").slice(0, 2);
+    const statementPromise: Promise<{ items: unknown[]; note: string | null }> = (async () => {
+      if (!imageBlocks.length) return { items: [], note: null };
+      try {
+        const todayIso = spParts().dateIso;
+        const { res: sRes, data: sData } = await anthropicCall(supabase, user.id, "chat-fatura", {
+          model: MODEL_FAST,
+          max_tokens: 6000,
+          system: `${STATEMENT_SYSTEM}\n\nData de hoje (fuso de São Paulo): ${todayIso}.`,
+          tools: [STATEMENT_TOOL],
+          tool_choice: { type: "tool", name: "extrair_lancamentos" },
+          messages: [{
+            role: "user",
+            content: [...imageBlocks, { type: "text", text: "Se a(s) imagem(ns) contiver(em) transações financeiras, extraia os lançamentos. Caso contrário, is_statement:false." }],
+          }],
+        });
+        if (!sRes.ok || !sData) return { items: [], note: null };
+        // deno-lint-ignore no-explicit-any
+        const stu = ((sData as any).content ?? []).find((b: any) => b.type === "tool_use");
+        const sInp = stu?.input ?? {};
+        if (!sInp.is_statement) return { items: [], note: null };
+        const raw = Array.isArray(sInp.items) ? sInp.items : [];
+        if (raw.length > STATEMENT_REDIRECT_ITEMS) {
+          return {
+            items: [],
+            note: "Essa imagem parece uma fatura completa, com muitos lançamentos. O melhor caminho é a importação de fatura (em Prosperidade): ela expande parcelas e evita duplicatas com mais precisão.",
+          };
+        }
+        return {
+          items: normalizeStatementItems(raw),
+          note: sInp.note ? String(sInp.note).slice(0, 240) : null,
+        };
+      } catch (e) {
+        console.error("chat-fatura", e);
+        return { items: [], note: null };
+      }
+    })();
     // deno-lint-ignore no-explicit-any
     const blocks = ((mainData as any).content ?? []) as any[];
     let reply = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
@@ -531,10 +577,12 @@ Deno.serve(async (req) => {
     ]);
     if (insertErr) console.error("chat_messages insert", insertErr);
 
-    const { events: captured, learned } = await extractPromise;
+    const [{ events: captured, learned }, statement] = await Promise.all([extractPromise, statementPromise]);
     return json({
       reply, captured, plan, profile_suggestion: profileSuggestion, learned,
       habit_proposal: habitProposal.length ? habitProposal : null,
+      statement_items: statement.items.length ? statement.items : null,
+      statement_note: statement.note,
     });
   } catch (e) {
     if (e instanceof Response) return e;

@@ -17,7 +17,9 @@ import { Link } from "react-router-dom";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import { PILLARS, type PillarId } from "@/lib/pillars";
+import { PILLARS, pillarById, type PillarId } from "@/lib/pillars";
+import { TRACKERS } from "@/lib/trackers";
+import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
 import { MEMORY_CATEGORY_LABEL } from "@/components/core/LearnedInsights";
 import { useGuides } from "@/hooks/useGuides";
 import FeedbackDialog from "@/components/core/FeedbackDialog";
@@ -123,6 +125,26 @@ export default function Ajustes() {
     const { error } = await supabase.from("profiles").update({ ai_scopes: next }).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar a preferência."); setScopes(scopes); return; }
     toast.success(on ? "O Conselheiro voltará a considerar essa área." : "O Conselheiro deixará essa área de fora das análises.");
+  };
+
+  // ── Modularidade total: o que a pessoa acompanha (trackers) ───
+  // Só guarda o que foi DESLIGADO; ausência = ligado. Desligar esconde
+  // (telas, briefing, Conselheiro), nunca apaga o histórico.
+  const [trackingPrefs, setTrackingPrefs] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setTrackingPrefs((profile?.tracking_prefs as Record<string, boolean>) ?? {});
+  }, [profile]);
+  const toggleTracker = async (id: string, on: boolean) => {
+    if (!user) return;
+    const next = { ...trackingPrefs };
+    if (on) delete next[id]; else next[id] = false;
+    setTrackingPrefs(next);
+    const { error } = await supabase.from("profiles").update({ tracking_prefs: next }).eq("user_id", user.id);
+    if (error) { toast.error("Não consegui salvar a preferência."); setTrackingPrefs(trackingPrefs); return; }
+    toast.success(on
+      ? "Reativado — tudo volta, com o histórico intacto."
+      : "Desligado. Isso some das telas e das análises; nada foi apagado.");
+    refresh();
   };
 
   // ── Exportação de dados (sempre gratuita) ─────────────────────
@@ -418,6 +440,55 @@ export default function Ajustes() {
             />
           </div>
         ))}
+      </Card>
+
+      {/* Modularidade total: liga/desliga por tracker */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="font-display font-semibold">O que você acompanha</h2>
+          <p className="text-xs text-muted-foreground">
+            Não quer acompanhar água? Desligue — o anel, os botões de 1 toque e a
+            cobrança do briefing somem na hora. Desligar esconde, não apaga: seu
+            histórico continua seu, e religa em 1 toque.
+          </p>
+        </div>
+        {PILLARS.filter((pl) => pillars.includes(pl.id) || pillars.length === 0).map((pl) => {
+          const list = TRACKERS.filter((t) => t.pillar === pl.id);
+          if (!list.length) return null;
+          return (
+            <div key={pl.id} className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <pl.icon className="w-3.5 h-3.5" style={{ color: `hsl(var(${pl.colorVar}))` }} />
+                {pl.name}
+              </p>
+              {list.map((t) => (
+                <div key={t.id} className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Label htmlFor={`tracker-${t.id}`} className="text-sm font-normal">{t.label}</Label>
+                    <p className="text-[11px] text-muted-foreground truncate">{t.desc}</p>
+                  </div>
+                  <Switch id={`tracker-${t.id}`}
+                    checked={trackingPrefs[t.id] !== false}
+                    onCheckedChange={(v) => toggleTracker(t.id, !!v)}
+                    aria-label={`Acompanhar ${t.label}`} />
+                </div>
+              ))}
+            </div>
+          );
+        })}
+        {pillars.length > 0 && PILLARS.some((pl) => !pillars.includes(pl.id)) && (
+          <p className="text-[11px] text-muted-foreground">
+            Pilares pausados pausam os itens deles automaticamente — ative o pilar acima para vê-los aqui.
+          </p>
+        )}
+        {profile?.sleep_bedtime && profile?.sleep_waketime && trackingPrefs["sleep"] !== false && (
+          <p className="text-[11px] text-muted-foreground border-t pt-2.5">
+            Rotina de sono: {timeForInput(profile.sleep_bedtime)} → {timeForInput(profile.sleep_waketime)}
+            {(() => { const h = sleepWindowHours(profile.sleep_bedtime, profile.sleep_waketime); return h ? ` (${formatWindowHours(h)})` : ""; })()}
+            {" · "}
+            <Link to="/app/vitalidade" className="underline underline-offset-2">editar em Vitalidade</Link>
+          </p>
+        )}
       </Card>
 
       <Button className="w-full" onClick={save} disabled={saving}>

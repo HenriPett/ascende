@@ -12,6 +12,7 @@ import { HeartHandshake, Send, BookOpen, Loader2, Trash2, Brain } from "lucide-r
 import { cn } from "@/lib/utils";
 import { eventLabel } from "@/lib/eventLabels";
 import { todayISOInSP, dateISOInSP } from "@/lib/dates";
+import { activeTrackerSet } from "@/lib/trackers";
 
 const MOODS = [
   { score: 1, emoji: "😞", label: "péssimo" },
@@ -31,6 +32,9 @@ export default function Mente() {
   const [journalText, setJournalText] = useState("");
   const [savingJournal, setSavingJournal] = useState(false);
 
+  // Modularidade total: humor, diário, prática e gratidão são trackers
+  // desligáveis — desligado some da tela; o histórico continua da pessoa.
+  const trackers = activeTrackerSet(profile);
   // Modo sem religião: foco em desenvolvimento da mente
   const hasReligion = profile?.has_religion !== false;
   const pageTitle = hasReligion ? "Mente & Espírito" : "Mente & Foco";
@@ -147,7 +151,8 @@ export default function Mente() {
         </p>
       </div>
 
-      {/* Humor */}
+      {/* Humor (tracker Humor) */}
+      {trackers.has("mood") && (
       <Card className="p-4">
         <h2 className="font-display font-semibold mb-1">Como você está agora?</h2>
         {moodToday && (
@@ -171,8 +176,10 @@ export default function Mente() {
           ))}
         </div>
       </Card>
+      )}
 
-      {/* ── Diário — pensamentos do dia ─────────────────────── */}
+      {/* ── Diário — pensamentos do dia (tracker Diário) ────── */}
+      {trackers.has("journal") && (
       <Card className="overflow-hidden">
         <div className="h-1.5" style={{ background: `hsl(${journalHsl})` }} />
         <div className="p-4 space-y-3">
@@ -249,8 +256,10 @@ export default function Mente() {
           )}
         </div>
       </Card>
+      )}
 
-      {/* Prática — espiritual ou de desenvolvimento mental */}
+      {/* Prática — espiritual ou de desenvolvimento mental (tracker Prática) */}
+      {trackers.has("practice") && (
       <Card className="p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -265,8 +274,10 @@ export default function Mente() {
           </Button>
         </div>
       </Card>
+      )}
 
-      {/* Gratidão */}
+      {/* Gratidão (tracker Gratidão) */}
+      {trackers.has("gratitude") && (
       <Card className="p-4">
         <h2 className="font-display font-semibold mb-1 flex items-center gap-1.5">
           <HeartHandshake className="w-4 h-4" /> Pelo que você é grato(a) hoje?
@@ -277,6 +288,7 @@ export default function Mente() {
           <Button type="submit" size="icon" aria-label="Guardar gratidão"><Send className="w-4 h-4" /></Button>
         </form>
       </Card>
+      )}
 
       {/* Recentes */}
       {recent.length > 0 && (
