@@ -14,6 +14,8 @@ export interface EntitlementsData {
   } | null;
   usage: Record<string, number>;
   pricing: { monthly_label?: string; annual_label?: string } | null;
+  /** Lua de mel do free (2 primeiras semanas, captura 10/dia): fim da janela. */
+  honeymoon_until?: string | null;
 }
 
 export function useEntitlements() {

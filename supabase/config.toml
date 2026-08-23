@@ -29,3 +29,10 @@ verify_jwt = true
 # O webhook é autenticado pela assinatura HMAC do Stripe, não por JWT
 [functions.billing-webhook]
 verify_jwt = false
+# WhatsApp: o webhook é autenticado pela assinatura HMAC da Meta (App Secret)
+# e o notify pelo segredo do agendador (x-cron-secret) — não por JWT
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+[functions.whatsapp-notify]
+verify_jwt = false

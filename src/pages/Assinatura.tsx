@@ -14,9 +14,9 @@ import { formatSP } from "@/lib/dates";
 const FREE_FEATURES = [
   "Registros manuais, hábitos e batalhas sem limite",
   "Diário, hidratação, XP e níveis, gráficos básicos",
-  "Captura inteligente: 3 por dia",
+  "Captura inteligente: 3 por dia — e 10 por dia nas suas 2 primeiras semanas",
   "Conselheiro: 15 mensagens por semana",
-  "2 análises de refeição por mês",
+  "4 análises de refeição por mês (1 por semana)",
   "Retrospectiva toda semana (domingo)",
   "1 plano ativo · 20 memórias do Conselheiro",
   "Exportação de dados e privacidade — sempre grátis",
@@ -167,6 +167,26 @@ export default function Assinatura() {
           ))}
         </Card>
       </div>
+
+      {ent?.honeymoon_until && !isPlus && (
+        <p className="text-xs text-muted-foreground px-1">
+          Você está nas suas 2 primeiras semanas: a captura inteligente vale 10 por dia
+          até {formatSP(ent.honeymoon_until, { day: "2-digit", month: "2-digit" })} — aproveite
+          para formar o hábito.
+        </p>
+      )}
+
+      {/* No radar — deliberadamente FORA da lista de benefícios (verdade
+          comercial, §2.2): ambição declarada não é promessa vendida. */}
+      <Card className="p-4 space-y-1">
+        <h2 className="font-display font-semibold text-sm">No radar (sem data, sem promessa)</h2>
+        <p className="text-xs text-muted-foreground">
+          Coisas que queremos construir e ainda não existem — por isso não estão na lista
+          acima: conexão bancária via Open Finance (fatura entra sozinha) e análise de
+          fotos direto pelo WhatsApp. Quando existirem de verdade, entram na lista; antes
+          disso, não cobramos nem prometemos por elas.
+        </p>
+      </Card>
 
       <p className="text-xs text-muted-foreground px-1">
         Ao encerrar a assinatura você não perde nada: seus registros, relatórios e memórias

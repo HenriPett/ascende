@@ -9,17 +9,29 @@ export function levelFromXp(xp: number) {
 }
 
 // Títulos da subida — a metáfora da montanha em cada etapa.
+// Densificados no meio e no topo (plano de feedbacks): a curva quadrática
+// deixa os níveis altos lentos — sem marcos intermediários, o XP virava
+// ruído no mês 3. Agora sempre há um "próximo título" a poucos níveis.
 const TITLES: [minLevel: number, title: string][] = [
   [1, "Desperto"],
   [2, "Primeiro Passo"],
   [3, "Caminhante"],
+  [4, "Ritmo de Trilha"],
   [5, "Trilheiro"],
+  [6, "Meia-Encosta"],
   [7, "Escalador"],
+  [8, "Acima da Névoa"],
   [10, "Guardião da Trilha"],
+  [12, "Rocha Firme"],
   [13, "Montanhista"],
+  [14, "Cordilheira"],
   [16, "Domador de Picos"],
+  [18, "Ar Rarefeito"],
   [20, "Vento da Altitude"],
+  [22, "Alta Montanha"],
   [25, "Lenda da Montanha"],
+  [30, "Cume Maior"],
+  [40, "Horizonte Infinito"],
 ];
 
 export function levelTitle(level: number): string {

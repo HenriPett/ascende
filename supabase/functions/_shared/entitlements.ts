@@ -89,8 +89,11 @@ export interface PlanLimits {
 
 export const DEFAULT_LIMITS: { free: PlanLimits; plus: PlanLimits } = {
   free: {
-    capture_daily: 3, chat_weekly: 5, chat_daily: null, chat_monthly: null,
-    meal_photos_monthly: 2, body_photos_monthly: 1, document_analyses_monthly: 0,
+    // Fallback alinhado ao valor VIVO em app_settings ('plan_limits'): se a
+    // leitura da config falhar, o padrão embutido não pode ser mais restrito
+    // do que a promessa da página de assinatura (verdade comercial, §2.2).
+    capture_daily: 3, chat_weekly: 15, chat_daily: null, chat_monthly: null,
+    meal_photos_monthly: 4, body_photos_monthly: 1, document_analyses_monthly: 0,
     briefing_daily: false, weekly_review: true, monthly_report: false,
     max_active_plans: 1, memory_cap: 20, advanced_analytics: false,
   },
@@ -153,16 +156,27 @@ export interface Entitlements {
     provider: string; status: string;
     current_period_end: string | null; cancel_at_period_end: boolean;
   } | null;
+  /** Lua de mel do free: fim da janela (ISO) ou null se fora dela. */
+  honeymoon_until: string | null;
 }
+
+/* ── Lua de mel (plano de feedbacks): o limite de captura existe para
+   proteger o custo de IA de contas dormentes, não para impedir a FORMAÇÃO
+   do hábito. Nas 2 primeiras semanas de conta, o free captura até 10/dia;
+   depois cai para o limite normal — quando o hábito já existe e o teto
+   vira argumento de assinatura, não obstáculo. */
+const HONEYMOON_DAYS = 14;
+const HONEYMOON_CAPTURE_DAILY = 10;
 
 /** Função central de permissões. Todas as funções de IA passam por aqui. */
 export async function getEntitlements(supabase: SupabaseClient, userId: string): Promise<Entitlements> {
-  const [flags, limitsCfg, { data: sub }] = await Promise.all([
+  const [flags, limitsCfg, { data: sub }, { data: prof }] = await Promise.all([
     getFlags(supabase),
     getPlanLimitsConfig(supabase),
     supabase.from("subscriptions").select("provider,status,plan_key,current_period_end,cancel_at_period_end,trial_end")
       .eq("user_id", userId).eq("plan_key", "ascend_plus")
       .order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("profiles").select("created_at").eq("user_id", userId).maybeSingle(),
   ]);
   const now = Date.now();
   const active = !!sub && (
@@ -172,10 +186,24 @@ export async function getEntitlements(supabase: SupabaseClient, userId: string):
   );
   // Com assinaturas desligadas (flag), ninguém é tratado como Plus ainda.
   const isPlus = flags.subscriptions_enabled && active;
+
+  let limits = isPlus ? limitsCfg.plus : limitsCfg.free;
+  let honeymoonUntil: string | null = null;
+  if (!isPlus && prof?.created_at) {
+    const until = new Date(prof.created_at).getTime() + HONEYMOON_DAYS * 864e5;
+    if (now < until) {
+      honeymoonUntil = new Date(until).toISOString();
+      if (limits.capture_daily !== null && limits.capture_daily < HONEYMOON_CAPTURE_DAILY) {
+        limits = { ...limits, capture_daily: HONEYMOON_CAPTURE_DAILY };
+      }
+    }
+  }
+
   return {
     plan: isPlus ? "ascend_plus" : "free",
-    limits: isPlus ? limitsCfg.plus : limitsCfg.free,
+    limits,
     flags,
+    honeymoon_until: honeymoonUntil,
     subscription: sub
       ? {
           provider: sub.provider, status: sub.status,

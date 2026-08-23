@@ -23,6 +23,7 @@ import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
 import { MEMORY_CATEGORY_LABEL } from "@/components/core/LearnedInsights";
 import { useGuides } from "@/hooks/useGuides";
 import FeedbackDialog from "@/components/core/FeedbackDialog";
+import WhatsappCard from "@/components/core/WhatsappCard";
 import { todayISOInSP } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
@@ -506,6 +507,9 @@ export default function Ajustes() {
       <Button className="w-full" onClick={save} disabled={saving}>
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar ajustes"}
       </Button>
+
+      {/* WhatsApp: captura por mensagem + avisos que trazem de volta ao app */}
+      <WhatsappCard />
 
       {/* Feedback — canal TEMPORÁRIO da fase de consolidação */}
       <Card className="p-4 flex items-center justify-between gap-3">

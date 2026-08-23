@@ -5,6 +5,15 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from "@/components/ui/select";
+import { CATEGORIES } from "@/lib/prosperidade";
 import CaptureBar from "@/components/core/CaptureBar";
 import BattleCheckinCard from "@/components/core/BattleCheckin";
 import { toast } from "sonner";
@@ -160,6 +169,81 @@ function ReturnRitual({ gapDays, onShowPanel }: { gapDays: number; onShowPanel: 
   );
 }
 
+/* ── Gasto rápido inline (plano de feedbacks): registrar um gasto do dia a
+   dia não deveria custar uma navegação. O botão abre um diálogo de 2 toques
+   (valor + categoria) e grava direto em `transactions` — o gráfico e o
+   Conselheiro enxergam na hora. O pilar completo continua a um link. ── */
+const QUICK_EXPENSE_CATEGORIES = CATEGORIES.filter((c) => c !== "Salário" && c !== "Extra");
+
+function QuickExpense({ disabled }: { disabled?: boolean }) {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState<string>("Mercado");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const value = Number(String(amount).replace(",", "."));
+    if (!user || !value || value <= 0) { toast.error("Informe um valor válido."); return; }
+    setSaving(true);
+    const { error } = await supabase.from("transactions").insert({
+      user_id: user.id, kind: "expense", amount: value,
+      category, occurred_at: todayISO(), source: "manual",
+    });
+    setSaving(false);
+    if (error) { toast.error("Não consegui registrar o gasto."); return; }
+    toast.success(`Gasto de R$ ${value.toFixed(2).replace(".", ",")} · ${category} registrado. +2 XP${xpToastSuffix()}`);
+    setAmount(""); setOpen(false);
+    qc.invalidateQueries();
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        className="shrink-0 h-11 px-3 rounded-full border bg-card text-xs font-medium flex items-center gap-1.5 hover:bg-muted/60 active:scale-95 transition-all disabled:opacity-60"
+      >
+        <span className="text-[13px] font-semibold" style={{ color: "hsl(var(--prosperidade))" }} aria-hidden>R$</span> Gasto
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Registrar gasto</DialogTitle>
+            <DialogDescription>Valor e categoria — dois toques e pronto.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              inputMode="decimal"
+              autoFocus
+              placeholder="Valor (R$)"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") save(); }}
+            />
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger><SelectValue placeholder="Categoria" /></SelectTrigger>
+              <SelectContent>
+                {QUICK_EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button className="w-full" onClick={save} disabled={saving}>
+              {saving ? "Registrando…" : "Registrar gasto"}
+            </Button>
+            <p className="text-[11px] text-muted-foreground text-center">
+              Descrição, data e entradas ficam no{" "}
+              <Link to="/app/prosperidade" className="underline underline-offset-2" onClick={() => setOpen(false)}>
+                pilar Prosperidade
+              </Link>.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 /* ── Ações rápidas (3.1): água, humor e foto em 1 toque ── */
 const QUICK_MOODS = [
   { score: 1, emoji: "😞", label: "péssimo" },
@@ -246,14 +330,7 @@ function QuickActions() {
             <Camera className="w-3.5 h-3.5" style={{ color: "hsl(var(--alimentacao))" }} /> Refeição
           </Link>
         )}
-        {showExpense && (
-          <Link
-            to="/app/prosperidade"
-            className="shrink-0 h-11 px-3 rounded-full border bg-card text-xs font-medium flex items-center gap-1.5 hover:bg-muted/60 active:scale-95 transition-all"
-          >
-            <span className="text-[13px] font-semibold" style={{ color: "hsl(var(--prosperidade))" }} aria-hidden>R$</span> Gasto
-          </Link>
-        )}
+        {showExpense && <QuickExpense disabled={!!savingKey} />}
         {showWorkout && (
           <Link
             to="/app/vitalidade"
@@ -979,11 +1056,33 @@ function HabitsToday() {
   );
 }
 
+/* ── XP de metas batidas (deslocar a recompensa de "anotar" para "viver"):
+   ao abrir a tela Hoje, 1x por dia, reivindica os bônus do dia de ONTEM
+   (água na meta, dia dentro da meta calórica, dia dentro do teto de gasto).
+   Avaliação preguiçosa no servidor (claim_goal_bonuses) — zero cron,
+   unicidade garantida pelo reason datado no xp_log. ── */
+function useGoalBonuses() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!user) return;
+    const key = `ascend-goalbonus-${todayISO()}`;
+    try { if (localStorage.getItem(key)) return; localStorage.setItem(key, "1"); } catch { /* noop */ }
+    supabase.rpc("claim_goal_bonuses").then(({ data }) => {
+      const list = Array.isArray(data) ? data as { label: string; points: number }[] : [];
+      if (!list.length) return;
+      for (const b of list) toast.success(`${b.label} · +${b.points} XP 🎯`);
+      qc.invalidateQueries({ queryKey: ["xp"] });
+    });
+  }, [user, qc]);
+}
+
 export default function Hoje() {
   const { profile } = useProfile();
   const { user } = useAuth();
   const firstName = (profile?.name ?? "").split(" ")[0];
   const streak = useActiveStreak();
+  useGoalBonuses();
 
   // Ritual de retorno (Sugestão 3): silêncio detectado como serviço, não
   // culpa. Enquanto ativo, a tela troca o painel pelo ritual — a pessoa

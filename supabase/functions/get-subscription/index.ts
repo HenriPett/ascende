@@ -43,6 +43,7 @@ Deno.serve(async (req) => {
       limits: ent.limits,
       flags: ent.flags,
       subscription: ent.subscription,
+      honeymoon_until: ent.honeymoon_until,
       usage: {
         chat_today: chatToday, chat_week: chatWeek, chat_month: chatMonth,
         capture_today: captureToday, meal_photos_month: mealsMonth,
