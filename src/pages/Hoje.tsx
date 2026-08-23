@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { CATEGORIES } from "@/lib/prosperidade";
 import CaptureBar from "@/components/core/CaptureBar";
+import { WhatsappHojeCard } from "@/components/core/WhatsappCard";
 import BattleCheckinCard from "@/components/core/BattleCheckin";
 import { toast } from "sonner";
 import {
@@ -1172,6 +1173,7 @@ export default function Hoje() {
       <HabitsToday />
       <DayProgress />
       <QuickActions />
+      <WhatsappHojeCard />
       <BattleCheckinCard />
 
       <Link

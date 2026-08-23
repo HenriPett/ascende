@@ -6,7 +6,7 @@
 //
 // Config do frontend: VITE_WHATSAPP_NUMBER no .env (só dígitos, com DDI,
 // ex.: 5547999999999) — usado para montar o link wa.me com o código pronto.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { MessageCircle, Loader2, Copy, ExternalLink, Unlink } from "lucide-react";
+import { MessageCircle, Loader2, Copy, ExternalLink, Unlink, X } from "lucide-react";
 
 const WA_NUMBER: string = (import.meta.env.VITE_WHATSAPP_NUMBER as string | undefined) ?? "";
 
@@ -30,17 +30,16 @@ interface WaLink {
 const maskPhone = (p: string) =>
   p.length > 6 ? `+${p.slice(0, 4)} ••••• ${p.slice(-4)}` : `+${p}`;
 
-export default function WhatsappCard() {
+/* ── Hook compartilhado do vínculo (usado pelo card de Ajustes e pelo
+   convite compacto da tela Hoje) ── */
+function useWhatsappLink(pollingWhileCode: string | null) {
   const { user } = useAuth();
-  const qc = useQueryClient();
-  const [code, setCode] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const { data: link, isLoading } = useQuery({
+  return useQuery({
     queryKey: ["whatsapp-link", user?.id],
     enabled: !!user,
     // Enquanto o código está na tela, revalida rápido para detectar o vínculo
-    refetchInterval: (q) => (code && !(q.state.data as WaLink | null)?.linked_at ? 4000 : false),
+    refetchInterval: (q) =>
+      pollingWhileCode && !(q.state.data as WaLink | null)?.linked_at ? 4000 : false,
     queryFn: async (): Promise<WaLink | null> => {
       const { data } = await supabase.from("whatsapp_links")
         .select("phone, linked_at, notify_retro, notify_briefing, notify_return")
@@ -48,6 +47,111 @@ export default function WhatsappCard() {
       return (data as WaLink | null) ?? null;
     },
   });
+}
+
+/* ── Convite compacto para a tela Hoje (feedback do fundador): Ajustes é onde
+   pouca gente passeia — o convite mora onde o hábito acontece. Regras de
+   respeito: só aparece para quem NÃO vinculou, só depois do primeiro registro
+   (não compete com o dia 1), e o X dispensa PARA SEMPRE (nunca vira cobrança,
+   coerente com /recusas). O pareamento acontece aqui mesmo, em 3 toques. ── */
+export function WhatsappHojeCard() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [dismissed, setDismissed] = useState(
+    () => localStorage.getItem("ascend-wa-hoje-dismissed") === "1",
+  );
+  const [code, setCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const { data: link, isLoading } = useWhatsappLink(code);
+
+  // Só depois do primeiro registro (não compete com o dia 1 do onboarding)
+  const { data: hasEvents } = useQuery({
+    queryKey: ["wa-hoje-has-events", user?.id],
+    enabled: !!user && !dismissed && !link?.linked_at,
+    staleTime: 1000 * 60 * 10,
+    queryFn: async () => {
+      const { count } = await supabase.from("life_events")
+        .select("id", { count: "exact", head: true }).eq("user_id", user!.id);
+      return (count ?? 0) > 0;
+    },
+  });
+
+  useEffect(() => {
+    // Vinculou com o código deste card: celebra e some.
+    if (code && link?.linked_at) {
+      toast.success("WhatsApp conectado ✓ Agora é só mandar uma frase por lá.");
+      setCode(null);
+    }
+  }, [code, link?.linked_at]);
+
+  if (dismissed || isLoading || link?.linked_at || !hasEvents) return null;
+
+  const dismiss = () => { localStorage.setItem("ascend-wa-hoje-dismissed", "1"); setDismissed(true); };
+
+  const generate = async () => {
+    setBusy(true);
+    const { data, error } = await supabase.rpc("create_whatsapp_pairing_code");
+    setBusy(false);
+    if (error || !data) { toast.error("Não consegui gerar o código. Tente de novo."); return; }
+    setCode(String(data));
+    qc.invalidateQueries({ queryKey: ["whatsapp-link"] });
+  };
+
+  const waHref = code && WA_NUMBER
+    ? `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(code)}`
+    : null;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-start gap-3">
+        <MessageCircle className="w-5 h-5 shrink-0 mt-0.5" style={{ color: "hsl(142 70% 45%)" }} />
+        <div className="flex-1 min-w-0 space-y-2">
+          <div>
+            <p className="text-sm font-semibold">Registre pelo WhatsApp</p>
+            <p className="text-xs text-muted-foreground">
+              "Gastei 47 no mercado e treinei" por mensagem vira registro aqui —
+              e o Conselheiro responde por lá também.
+            </p>
+          </div>
+          {code ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="font-display text-lg font-semibold tracking-[0.25em] rounded-lg border bg-background px-3 py-1">
+                  {code}
+                </span>
+                {waHref && (
+                  <Button asChild size="sm">
+                    <a href={waHref} target="_blank" rel="noreferrer">
+                      <ExternalLink className="w-3.5 h-3.5 mr-1" /> Enviar no WhatsApp
+                    </a>
+                  </Button>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Mande o código (vale 15 min). Assim que chegar, confirmo aqui sozinho.
+              </p>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" onClick={generate} disabled={busy}>
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Conectar em 3 toques"}
+            </Button>
+          )}
+        </div>
+        <button onClick={dismiss} className="text-muted-foreground hover:text-foreground" aria-label="Dispensar convite do WhatsApp">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+export default function WhatsappCard() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [code, setCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const { data: link, isLoading } = useWhatsappLink(code);
 
   const linked = !!link?.linked_at && !!link?.phone;
 
