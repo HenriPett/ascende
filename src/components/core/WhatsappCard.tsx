@@ -93,9 +93,9 @@ export default function WhatsappCard() {
           <MessageCircle className="w-4 h-4" style={{ color: "hsl(142 70% 45%)" }} /> WhatsApp
         </h2>
         <p className="text-xs text-muted-foreground">
-          Conte seu dia por mensagem ("gastei 47 no mercado e treinei") e confirme no botão —
-          o registro cai direto no seu painel. E o Ascende te avisa quando a retrospectiva
-          estiver pronta, sempre com o caminho de volta para o app.
+          Registre o dia por mensagem ("gastei 47 no mercado e treinei") confirmando no botão,
+          ou converse com o Conselheiro ("tô gastando demais esse mês?") — a conversa continua
+          no app de onde parou. E o Ascende te avisa quando a retrospectiva estiver pronta.
         </p>
       </div>
 
