@@ -260,7 +260,13 @@ export default function Landing() {
             O Ascende monta o plano do seu corpo dentro do seu orçamento — porque é o
             único app que vê a sua vida inteira.
           </p>
-          <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up">
+          <div className="mt-7 flex justify-center animate-fade-up">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3.5 py-1.5 text-xs font-medium">
+              <MessageCircle className="w-3.5 h-3.5 text-gold" />
+              Novo: registre o dia e fale com o Conselheiro direto pelo WhatsApp
+            </span>
+          </div>
+          <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up">
             <Button asChild size="lg" className="px-9 h-12 text-base">
               <Link to="/auth">Começar minha subida <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
             </Button>
@@ -330,12 +336,12 @@ export default function Landing() {
               {
                 n: "1",
                 title: "Conte, não preencha",
-                desc: "\u201CGastei 47 no mercado, treinei e dormi mal.\u201D Uma frase — digitada, falada ou até uma foto do prato — e a IA registra tudo nos lugares certos. Sem formulários, sem planilhas.",
+                desc: "\u201CGastei 47 no mercado, treinei e dormi mal.\u201D Uma frase — digitada, falada, por foto do prato ou por mensagem de WhatsApp — e a IA registra tudo nos lugares certos. Sem formulários, sem planilhas.",
               },
               {
                 n: "2",
                 title: "A IA conecta os pontos",
-                desc: "Uma retrospectiva toda semana cruzando finanças, corpo, alimentação e mente (no Ascende+, um briefing todo dia) — e um Conselheiro que responde com os seus dados, não com conselhos genéricos.",
+                desc: "Uma retrospectiva toda semana cruzando finanças, corpo, alimentação e mente (no Ascende+, um briefing todo dia) — e um Conselheiro que responde com os seus dados, não com conselhos genéricos. Quando ficar pronta, o Ascende te avisa no WhatsApp.",
               },
               {
                 n: "3",
@@ -486,8 +492,13 @@ export default function Landing() {
         <p className="text-center text-muted-foreground mt-3 mb-10 max-w-xl mx-auto">
           Por isso o Ascende faz o trabalho chato por você — de foto, de voz ou de conversa.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
+            {
+              icon: MessageCircle,
+              title: "WhatsApp → registro",
+              desc: "\u201CGastei 47 no mercado e treinei\u201D por mensagem vira registro no painel — você só confirma no botão. E o Conselheiro responde por lá também, continuando a conversa no app.",
+            },
             {
               icon: Camera,
               title: "Foto do prato → calorias",
@@ -562,10 +573,11 @@ export default function Landing() {
             <ul className="mt-4 space-y-2 text-sm">
               {[
                 "Registros manuais, hábitos e batalhas sem limite",
+                "Registro e Conselheiro também pelo WhatsApp",
                 "Diário, hidratação, XP, níveis e gráficos básicos",
-                "Captura inteligente: 3 por dia",
+                "Captura inteligente: 3 por dia (10/dia nas 2 primeiras semanas)",
                 "Conselheiro: 15 mensagens por semana",
-                "2 análises de refeição por mês",
+                "4 análises de refeição por mês (1 por semana)",
                 "Retrospectiva da semana todo domingo",
                 "1 plano ativo · 20 memórias do Conselheiro",
                 "Exportação de dados e privacidade — sempre grátis",
@@ -590,7 +602,7 @@ export default function Landing() {
                 "Tudo do plano gratuito",
                 "Captura inteligente: 30 por dia",
                 "Conselheiro: 15 mensagens por dia (até 300/mês)",
-                "Briefing diário todas as manhãs",
+                "Briefing diário todas as manhãs — com aviso no seu WhatsApp",
                 "30 análises de refeição por mês",
                 "Análise de documentos: 10 PDFs por mês",
                 "Até 5 planos ativos · 150 memórias do Conselheiro",
@@ -609,6 +621,49 @@ export default function Landing() {
           arquivado (somente leitura) e volta ao reativar. Seus dados nunca viram produto —
           detalhes na <Link to="/privacidade" className="underline underline-offset-2">Política de Privacidade</Link>.
         </p>
+      </section>
+
+      {/* ─── Roadmap honesto: presente vendável × futuro declarado ───
+          Regra da casa (§2.2): benefício listado = benefício que existe.
+          O futuro aparece SEPARADO, nomeado como intenção sem data — sinaliza
+          ambição (marketing) sem virar dívida comercial (verdade). */}
+      <section className="container py-16 md:py-24 max-w-4xl">
+        <h2 className="font-display text-3xl md:text-4xl font-semibold text-center">
+          Para onde a subida vai.
+        </h2>
+        <p className="text-center text-muted-foreground mt-3 mb-10 max-w-2xl mx-auto">
+          Uma regra nossa: só listamos como benefício o que já existe. O que ainda estamos
+          construindo fica aqui embaixo, separado e sem promessa de data — para você saber
+          a direção sem comprar futuro.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="rounded-xl border bg-card p-6">
+            <h3 className="font-display text-lg font-semibold flex items-center gap-1.5">
+              <Check className="w-4 h-4 text-gold" /> Já está aqui hoje
+            </h3>
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+              <li>• Captura por frase, voz e foto — no app e pelo WhatsApp</li>
+              <li>• Conselheiro que vê os 4 pilares, no app e pelo WhatsApp (a conversa continua nos dois)</li>
+              <li>• Retrospectiva semanal, briefing diário (Ascende+) e avisos no WhatsApp</li>
+              <li>• Raio-X financeiro de 60s, importação de fatura, batalhas contra vícios</li>
+              <li>• Planos que viram metas vivas na sua tela Hoje</li>
+            </ul>
+          </div>
+          <div className="rounded-xl border border-dashed bg-card/50 p-6">
+            <h3 className="font-display text-lg font-semibold text-muted-foreground">
+              No radar — sem data e sem promessa
+            </h3>
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+              <li>• Conexão bancária via Open Finance: sua fatura entrando sozinha, sem digitar nada</li>
+              <li>• Fotos e áudios direto pelo WhatsApp (print do Pix virando lançamento)</li>
+              <li>• Aplicativo nativo com integração de saúde (sono e treinos entrando automaticamente)</li>
+            </ul>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Quando existirem de verdade, sobem para a coluna de cá — antes disso, não
+              cobramos nem prometemos por eles.
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* ─── FAQ ─── */}

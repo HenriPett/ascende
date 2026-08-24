@@ -26,7 +26,7 @@ const FEATURE_LABEL: Record<string, string> = {
 const PLUS_BENEFITS = [
   "Conselheiro: 15 mensagens por dia (até 300 no mês)",
   "Captura inteligente: 30 por dia",
-  "Briefing diário todas as manhãs",
+  "Briefing diário todas as manhãs (com aviso no WhatsApp)",
   "30 análises de refeição e 10 análises de PDF por mês",
   "Até 5 planos ativos e 150 memórias do Conselheiro",
 ];

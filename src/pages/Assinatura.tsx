@@ -13,6 +13,7 @@ import { formatSP } from "@/lib/dates";
 
 const FREE_FEATURES = [
   "Registros manuais, hábitos e batalhas sem limite",
+  "Registro e Conselheiro também pelo WhatsApp",
   "Diário, hidratação, XP e níveis, gráficos básicos",
   "Captura inteligente: 3 por dia — e 10 por dia nas suas 2 primeiras semanas",
   "Conselheiro: 15 mensagens por semana",
@@ -29,7 +30,7 @@ const PLUS_FEATURES = [
   "Tudo do plano gratuito",
   "Captura inteligente: 30 por dia",
   "Conselheiro: 15 mensagens por dia (até 300/mês)",
-  "Briefing diário todas as manhãs",
+  "Briefing diário todas as manhãs — com aviso no seu WhatsApp",
   "30 análises de refeição por mês",
   "Análise de documentos: 10 PDFs por mês",
   "Até 5 planos ativos · 150 memórias do Conselheiro",
@@ -182,8 +183,8 @@ export default function Assinatura() {
         <h2 className="font-display font-semibold text-sm">No radar (sem data, sem promessa)</h2>
         <p className="text-xs text-muted-foreground">
           Coisas que queremos construir e ainda não existem — por isso não estão na lista
-          acima: conexão bancária via Open Finance (fatura entra sozinha) e análise de
-          fotos direto pelo WhatsApp. Quando existirem de verdade, entram na lista; antes
+          acima: conexão bancária via Open Finance (fatura entra sozinha), fotos e áudios direto
+          pelo WhatsApp, e aplicativo nativo com integração de saúde. Quando existirem de verdade, entram na lista; antes
           disso, não cobramos nem prometemos por elas.
         </p>
       </Card>
