@@ -23,20 +23,69 @@
 import {
   serviceClient, assertRateLimit, isTrivialMessage, extractEventsAndMemories,
   buildSnapshot, MODEL_SMART, MODEL_FAST, SAFETY_RULES,
+  CAPTURE_SYSTEM, CAPTURE_TOOL, STATEMENT_SYSTEM, STATEMENT_TOOL, normalizeStatementItems,
 } from "../_shared/lib.ts";
 import { anthropicCall, reserveUsage, releaseUsage } from "../_shared/usage.ts";
 import {
   getEntitlements, spDayStartUtc, spWeekStartUtc, spMonthStartUtc,
+  nextSpMonthStartUtc, spParts,
 } from "../_shared/entitlements.ts";
 import {
   waSendText, waSendButtons, verifyWaSignature, saveEventsServer, xpForKind, appUrl,
+  waDownloadMedia, groqTranscribe, toBase64,
 } from "../_shared/whatsapp.ts";
 
 const PENDING_TTL_MIN = 60;     // proposta sem resposta expira em 1h
 const LEGACY_DAILY_LIMIT = 40;  // espelha o ai-chat enquanto premium_limits_enabled = false
 
+/* Limites de mídia — espelham o app (capture: 5 MB de imagem; ai-chat: ~4,5 MB
+   de PDF) mais o teto de áudio do canal (~16 MB cobre vários minutos de voz;
+   a transcrição via Groq custa centavos por hora, o teto é sanidade, não custo). */
+const MAX_IMG_BYTES = 5 * 1024 * 1024;
+const MAX_PDF_BYTES = 4_500_000;
+const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
+const IMG_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const WA_STATEMENT_MAX_ITEMS = 8; // acima disso, o lote é trabalho para o app
+
+/* Espelha o IMAGE_CAPTURE_TOOL de capture/index.ts (mesma composição a partir
+   dos tools compartilhados): numa única chamada o modelo decide se a imagem é
+   financeira (items) ou vira eventos de vida (events). Se mudar lá, mude aqui. */
+const IMAGE_CAPTURE_TOOL = {
+  name: "interpretar_captura",
+  description:
+    "Interpreta a imagem (e o texto opcional) enviados pelo usuário. Se a imagem contiver transações " +
+    "financeiras (fatura, extrato, comprovante de Pix, print de compra, cupom), preencha is_statement e items. " +
+    "Caso contrário, extraia eventos de vida em events (tela de app de treino vira workout; foto sem nada registrável = arrays vazios).",
+  input_schema: {
+    type: "object",
+    properties: {
+      is_statement: (STATEMENT_TOOL.input_schema.properties as Record<string, unknown>).is_statement,
+      items: (STATEMENT_TOOL.input_schema.properties as Record<string, unknown>).items,
+      statement_note: (STATEMENT_TOOL.input_schema.properties as Record<string, unknown>).note,
+      events: (CAPTURE_TOOL.input_schema.properties as Record<string, unknown>).events,
+    },
+    required: ["is_statement", "items", "events"],
+  },
+};
+
+/** Grava a proposta pendente e envia o cartão de confirmação (fluxo padrão). */
+async function proposeEvents(
+  // deno-lint-ignore no-explicit-any
+  supabase: any, userId: string, from: string, events: any[], url: string, preface?: string,
+): Promise<void> {
+  await supabase.from("whatsapp_pending").upsert({
+    user_id: userId, events, created_at: new Date().toISOString(),
+  });
+  const lines = events.slice(0, WA_STATEMENT_MAX_ITEMS)
+    // deno-lint-ignore no-explicit-any
+    .map((e: any) => `• ${e.summary ?? e.kind} (+${xpForKind(String(e.kind))} XP)`).join("\n");
+  await waSendButtons(from,
+    `${preface ? preface + "\n\n" : ""}Entendi assim:\n\n${lines}${events.length > WA_STATEMENT_MAX_ITEMS ? `\n… e mais ${events.length - WA_STATEMENT_MAX_ITEMS}` : ""}\n\nConfirmo?  Para ajustar detalhes, revise no app: ${url}/app`,
+    [{ id: "wa_confirm", title: "✓ Confirmar" }, { id: "wa_discard", title: "✗ Descartar" }]);
+}
+
 const HELP = (url: string) =>
-  `Aqui é o Ascende 🏔️\n\nComigo você faz duas coisas por aqui:\n\n1. *Registrar o dia*: "gastei 47 no mercado e treinei pernas" — eu proponho os registros e você confirma no botão.\n2. *Conversar com o Conselheiro*: "tô gastando demais esse mês?" — ele responde vendo todos os seus pilares, e a conversa continua no app de onde parou.\n\nGráficos, planos e ajustes finos: ${url}/app\n\nComandos: "parar" silencia meus avisos · "ajuda" mostra esta mensagem.`;
+  `Aqui é o Ascende 🏔️\n\nComigo você faz tudo por mensagem:\n\n1. *Registrar o dia*: "gastei 47 no mercado e treinei pernas" — por texto ou *áudio*. Eu proponho os registros e você confirma no botão.\n2. *Mandar foto*: prato de comida vira refeição com calorias; print de Pix ou compra vira lançamento.\n3. *Conversar com o Conselheiro*: "tô gastando demais esse mês?" — ele responde vendo todos os seus pilares, e a conversa continua no app de onde parou. PDF (fatura, exame) também entra por aqui (Ascende+).\n\nGráficos, planos e ajustes finos: ${url}/app\n\nComandos: "parar" silencia meus avisos · "ajuda" mostra esta mensagem.`;
 
 /* ── Sistema do Conselheiro no WhatsApp: a MESMA pessoa do app, adaptada ao
    canal. Sem ferramentas (os cartões interativos de plano/hábitos/perfil só
@@ -106,14 +155,19 @@ async function chatLimitMessage(
 }
 
 /** Conversa com o Conselheiro: mesma cota, mesmo retrato e MESMO histórico
- *  do app (chat_messages) — a conversa continua nos dois lugares. */
+ *  do app (chat_messages) — a conversa continua nos dois lugares.
+ *  `extraBlocks` permite anexar documento/imagem (PDF pelo WhatsApp);
+ *  `historyLabel` é o que fica gravado no histórico no lugar do bloco binário.
+ *  Retorna true se a resposta saiu (para o chamador decidir sobre reservas). */
 async function counselorTurn(
   // deno-lint-ignore no-explicit-any
   supabase: any, userId: string, ent: Awaited<ReturnType<typeof getEntitlements>>,
   from: string, text: string, url: string,
-): Promise<void> {
+  // deno-lint-ignore no-explicit-any
+  extraBlocks: any[] = [], historyLabel?: string,
+): Promise<boolean> {
   const limitMsg = await chatLimitMessage(supabase, userId, ent, url);
-  if (limitMsg) { await waSendText(from, limitMsg); return; }
+  if (limitMsg) { await waSendText(from, limitMsg); return false; }
 
   const [snapshot, { data: history }] = await Promise.all([
     buildSnapshot(supabase, userId),
@@ -123,17 +177,21 @@ async function counselorTurn(
   const messages = (history ?? []).slice().reverse()
     // deno-lint-ignore no-explicit-any
     .map((m: any) => ({ role: m.role, content: m.content }));
-  messages.push({ role: "user", content: text });
+  messages.push({
+    role: "user",
+    content: extraBlocks.length ? [...extraBlocks, { type: "text", text }] : text,
+  });
 
   // Mesmo roteamento de modelo do ai-chat: pergunta curta não paga modelo caro.
   const needsSmart =
+    extraBlocks.length > 0 ||
     text.length > 160 ||
     /plano|dieta|treino|or[çc]ament|financ|analis|relat[óo]rio|semana|m[êe]s|como (estou|est[áa]|anda)|minha vida|meta|estrat[ée]gia|cruz|compar/i.test(text);
   const model = ent.flags.model_routing_enabled && !needsSmart ? MODEL_FAST : MODEL_SMART;
 
   const { res, data } = await anthropicCall(supabase, userId, "wa-conselheiro", {
     model,
-    max_tokens: 1000,
+    max_tokens: extraBlocks.length ? 1500 : 1000,
     system: [
       { type: "text", text: WA_SYSTEM(url), cache_control: { type: "ephemeral" } },
       { type: "text", text: snapshot },
@@ -142,20 +200,20 @@ async function counselorTurn(
   });
   if (!res.ok || !data) {
     await waSendText(from, "O Conselheiro está indisponível agora. Sua mensagem não contou no limite: tente de novo em instantes.");
-    return;
+    return false;
   }
   // deno-lint-ignore no-explicit-any
   const reply = (((data as any).content ?? []) as any[])
     .filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
   if (!reply) {
     await waSendText(from, "O Conselheiro não conseguiu formular uma resposta agora. Tente reformular ou enviar de novo (não contou no limite).");
-    return;
+    return false;
   }
 
   // Persistência ANTES do envio: é ela que conta a cota (mesma regra do app)
   // e que faz a conversa aparecer no app.
   const { error: insertErr } = await supabase.from("chat_messages").insert([
-    { user_id: userId, role: "user", content: text },
+    { user_id: userId, role: "user", content: historyLabel ?? text },
     { user_id: userId, role: "assistant", content: reply },
   ]);
   if (insertErr) console.error("wa chat_messages insert", insertErr.message);
@@ -169,6 +227,7 @@ async function counselorTurn(
   } catch (e) {
     console.error("wa chat-extracao", e);
   }
+  return true;
 }
 
 Deno.serve(async (req) => {
@@ -245,18 +304,170 @@ Deno.serve(async (req) => {
       return new Response("ok", { status: 200 });
     }
 
-    // ── Mídia (v1: redireciona para o app, onde a análise já existe) ──
-    if (msg.type === "image" || msg.type === "audio" || msg.type === "document") {
-      await waSendText(from, `Por aqui eu entendo texto por enquanto. Fotos de prato, prints de fatura e áudio já funcionam no app: ${url}/app`);
+    // ── Mídia sem vínculo: não dá para processar sem saber de quem é ──
+    const isMedia = ["image", "audio", "voice", "document"].includes(String(msg.type));
+    if (isMedia && !link) {
+      await waSendText(from, `Oi! Para eu processar áudios e fotos, primeiro conecte este número à sua conta: no app, Ajustes → WhatsApp, gere o código de 6 dígitos e me mande aqui.\n\nAinda não tem conta? Começa em ${url}`);
       return new Response("ok", { status: 200 });
     }
-    if (msg.type !== "text") return new Response("ok", { status: 200 });
 
-    const text = String(msg.text?.body ?? "").trim();
+    // ── IMAGEM: mesmo pipeline multimodal da captura do app (capture-imagem):
+    //    o modelo decide — imagem financeira vira lançamentos (com data e
+    //    parcelas), qualquer outra vira eventos (prato → meal com calorias,
+    //    print de treino → workout). Mesma cota de captura, mesmos botões. ──
+    if (msg.type === "image" && link) {
+      await assertRateLimit(supabase, link.user_id, "whatsapp", 40, 5);
+      const caption = String(msg.image?.caption ?? "").trim();
+      const ent = await getEntitlements(supabase, link.user_id);
+
+      let reservationId: number | null = null;
+      if (ent.flags.premium_limits_enabled && ent.limits.capture_daily !== null) {
+        const { id } = await reserveUsage(supabase, link.user_id, "capture", ent.limits.capture_daily, spDayStartUtc());
+        if (id === null) {
+          await waSendText(from, `Você usou as ${ent.limits.capture_daily} capturas inteligentes de hoje — fotos também contam nelas. O limite renova amanhã.${ent.plan === "free" ? ` No Ascende+ são 30 por dia: ${url}/app/assinatura` : ""}`);
+          return new Response("ok", { status: 200 });
+        }
+        reservationId = id;
+      }
+
+      const media = await waDownloadMedia(String(msg.image?.id ?? ""), MAX_IMG_BYTES);
+      if (media === "too_big" || !media || !IMG_TYPES.includes(media.mime)) {
+        await releaseUsage(supabase, reservationId);
+        await waSendText(from, media === "too_big"
+          ? "Essa imagem é grande demais (máximo 5 MB). Tenta mandar em qualidade normal, sem ser \"documento\"?"
+          : "Não consegui baixar essa imagem (a tentativa não contou no seu limite). Tenta de novo?");
+        return new Response("ok", { status: 200 });
+      }
+
+      const todayIso = spParts().dateIso;
+      const { res, data } = await anthropicCall(supabase, link.user_id, "wa-captura-imagem", {
+        model: MODEL_FAST,
+        max_tokens: 8000,
+        system: `${CAPTURE_SYSTEM}\n\n━━━ IMAGENS FINANCEIRAS ━━━\n${STATEMENT_SYSTEM}\n\nData de hoje (fuso de São Paulo): ${todayIso}.\nUse SEMPRE a ferramenta interpretar_captura. Decida: imagem financeira → is_statement:true e items (events vazio); qualquer outra imagem → is_statement:false e events extraídos da imagem + texto (prints de app de treino viram workout; foto de prato vira meal com calorias estimadas).`,
+        tools: [IMAGE_CAPTURE_TOOL],
+        tool_choice: { type: "tool", name: "interpretar_captura" },
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: media.mime, data: toBase64(media.bytes) } },
+            { type: "text", text: `Relato do usuário (opcional): ${caption.slice(0, 2000)}` },
+          ],
+        }],
+      }, { reservationId });
+
+      if (!res.ok || !data) {
+        await releaseUsage(supabase, reservationId);
+        await waSendText(from, "Não consegui ler a imagem agora (a tentativa não contou no seu limite). Tenta de novo em instantes?");
+        return new Response("ok", { status: 200 });
+      }
+      // deno-lint-ignore no-explicit-any
+      const tu = (((data as any).content ?? []) as any[]).find((b) => b.type === "tool_use");
+      const inp = tu?.input ?? {};
+
+      if (inp.is_statement) {
+        // Lançamentos com data própria; parcelas FUTURAS ficam para a revisão
+        // fina do app (aqui não dá para desmarcar item a item).
+        const items = normalizeStatementItems(Array.isArray(inp.items) ? inp.items : [])
+          // deno-lint-ignore no-explicit-any
+          .filter((it: any) => it.origin !== "future" && String(it.occurred_at) <= todayIso);
+        if (items.length > WA_STATEMENT_MAX_ITEMS) {
+          await waSendText(from, `Essa imagem parece uma fatura completa (${items.length} lançamentos). O melhor caminho é a importação de fatura no app, que expande parcelas e evita duplicatas com precisão: ${url}/app/prosperidade`);
+          return new Response("ok", { status: 200 });
+        }
+        if (items.length) {
+          // deno-lint-ignore no-explicit-any
+          const events = items.map((it: any) => ({
+            kind: "transaction", pillar: "prosperidade",
+            tx_kind: it.kind, amount: it.amount, category: it.category,
+            description: it.description, occurred_at: it.occurred_at,
+            summary: `${it.kind === "income" ? "Entrada" : "Gasto"} R$ ${Number(it.amount).toFixed(2).replace(".", ",")} · ${it.description}`,
+          }));
+          await proposeEvents(supabase, link.user_id, from, events, url,
+            `Li a imagem 📄${inp.statement_note ? ` (${String(inp.statement_note).slice(0, 160)})` : ""}`);
+          return new Response("ok", { status: 200 });
+        }
+      }
+      // deno-lint-ignore no-explicit-any
+      const events = Array.isArray(inp.events) ? (inp.events as any[]) : [];
+      if (!events.length) {
+        await waSendText(from, `Não encontrei nada registrável nessa imagem. Funciona bem com: foto do prato, print de Pix/compra, tela de app de treino. Análise de composição corporal é no app: ${url}/app/vitalidade`);
+        return new Response("ok", { status: 200 });
+      }
+      await proposeEvents(supabase, link.user_id, from, events, url, "Li a foto 📸");
+      return new Response("ok", { status: 200 });
+    }
+
+    // ── DOCUMENTO (PDF): como no app, é conversa com o Conselheiro — consome
+    //    1 mensagem de chat + 1 análise de documento do mês (Ascende+). ──
+    if (msg.type === "document" && link) {
+      await assertRateLimit(supabase, link.user_id, "whatsapp", 40, 5);
+      const mimeDoc = String(msg.document?.mime_type ?? "").split(";")[0];
+      if (mimeDoc !== "application/pdf") {
+        await waSendText(from, `Por enquanto eu leio documentos em PDF. Outros formatos (Word, planilhas, txt) funcionam no Conselheiro do app: ${url}/app/conselheiro`);
+        return new Response("ok", { status: 200 });
+      }
+      const ent = await getEntitlements(supabase, link.user_id);
+      let docReservation: number | null = null;
+      if (ent.flags.premium_limits_enabled) {
+        const cap = ent.limits.document_analyses_monthly ?? 0;
+        const { id } = await reserveUsage(supabase, link.user_id, "chat-documento", cap, spMonthStartUtc());
+        if (id === null) {
+          await waSendText(from, cap === 0
+            ? `A análise de documentos (PDF) faz parte do Ascende+ — junto com 30 capturas/dia e briefing diário: ${url}/app/assinatura`
+            : `Você usou as ${cap} análises de documentos deste mês. O limite renova no início do próximo mês.`);
+          return new Response("ok", { status: 200 });
+        }
+        docReservation = id;
+      }
+      const media = await waDownloadMedia(String(msg.document?.id ?? ""), MAX_PDF_BYTES);
+      if (media === "too_big" || !media) {
+        await releaseUsage(supabase, docReservation);
+        await waSendText(from, media === "too_big"
+          ? "Esse PDF é grande demais para o WhatsApp (máximo ~4 MB). No app o Conselheiro aceita arquivos maiores."
+          : "Não consegui baixar o documento (não contou no seu limite). Tenta de novo?");
+        return new Response("ok", { status: 200 });
+      }
+      const docName = String(msg.document?.filename ?? "documento.pdf").slice(0, 120);
+      const caption = String(msg.document?.caption ?? "").trim() ||
+        "Analise este documento considerando meus dados e me diga o que importa.";
+      const okTurn = await counselorTurn(
+        supabase, link.user_id, ent, from, caption, url,
+        [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: toBase64(media.bytes) } }],
+        `${caption}\n📎 ${docName}`,
+      );
+      if (!okTurn) await releaseUsage(supabase, docReservation); // falha não consome análise
+      return new Response("ok", { status: 200 });
+    }
+
+    // ── ÁUDIO: transcreve (Groq) e entra no MESMO roteador do texto —
+    //    relato vira captura com botões, pergunta vai ao Conselheiro. ──
+    let text = "";
+    let transcribed = false;
+    if ((msg.type === "audio" || msg.type === "voice") && link) {
+      const audioId = String(msg.audio?.id ?? msg.voice?.id ?? "");
+      const media = await waDownloadMedia(audioId, MAX_AUDIO_BYTES);
+      if (media === "too_big" || !media) {
+        await waSendText(from, media === "too_big"
+          ? "Esse áudio ficou grande demais. Me manda em áudios de até uns 5 minutos?"
+          : "Não consegui baixar o áudio. Tenta mandar de novo?");
+        return new Response("ok", { status: 200 });
+      }
+      const transcript = await groqTranscribe(media.bytes, media.mime);
+      if (!transcript) {
+        await waSendText(from, "Não consegui entender esse áudio (pode ter ficado sem fala clara). Tenta de novo, ou me manda por texto?");
+        return new Response("ok", { status: 200 });
+      }
+      text = transcript.slice(0, 2000);
+      transcribed = true;
+    } else if (msg.type === "text") {
+      text = String(msg.text?.body ?? "").trim();
+    } else {
+      return new Response("ok", { status: 200 }); // sticker, localização etc.
+    }
     if (!text) return new Response("ok", { status: 200 });
 
-    // ── Pareamento por código de 6 dígitos ──
-    if (/^\d{6}$/.test(text)) {
+    // ── Pareamento por código de 6 dígitos (só texto digitado) ──
+    if (!transcribed && /^\d{6}$/.test(text)) {
       const { data: pairing } = await supabase.from("whatsapp_links")
         .select("user_id").eq("pairing_code", text)
         .gt("pairing_expires_at", new Date().toISOString()).maybeSingle();
@@ -287,7 +498,7 @@ Deno.serve(async (req) => {
     }
 
     // ── Comandos ──
-    if (/^(parar|sair|stop|cancelar)$/i.test(text)) {
+    if (!transcribed && /^(parar|sair|stop|cancelar)$/i.test(text)) {
       await supabase.from("whatsapp_links").update({
         notify_retro: false, notify_briefing: false, notify_return: false,
       }).eq("user_id", link.user_id);
@@ -311,8 +522,13 @@ Deno.serve(async (req) => {
 
     const ent = await getEntitlements(supabase, link.user_id);
 
+    // Eco da transcrição: a pessoa confere o que o áudio virou antes de
+    // qualquer proposta/resposta (honestidade com o STT).
+    const transcriptPreface = transcribed ? `🎙 _"${text.slice(0, 180)}${text.length > 180 ? "…" : ""}"_` : undefined;
+
     // ── ROTA 1: claramente conversa → Conselheiro (cota de chat) ──
     if (looksConversational(text)) {
+      if (transcriptPreface) await waSendText(from, transcriptPreface);
       await counselorTurn(supabase, link.user_id, ent, from, text, url);
       return new Response("ok", { status: 200 });
     }
@@ -336,21 +552,13 @@ Deno.serve(async (req) => {
         return new Response("ok", { status: 200 });
       }
       if (events.length) {
-        // Proposta pendente (1 por usuário; a nova substitui a anterior)
-        await supabase.from("whatsapp_pending").upsert({
-          user_id: link.user_id, events, created_at: new Date().toISOString(),
-        });
-        const lines = events.slice(0, 8)
-          // deno-lint-ignore no-explicit-any
-          .map((e: any) => `• ${e.summary ?? e.kind} (+${xpForKind(String(e.kind))} XP)`).join("\n");
-        await waSendButtons(from,
-          `Entendi assim:\n\n${lines}${events.length > 8 ? `\n… e mais ${events.length - 8}` : ""}\n\nConfirmo?  Para ajustar detalhes, revise no app: ${url}/app`,
-          [{ id: "wa_confirm", title: "✓ Confirmar" }, { id: "wa_discard", title: "✗ Descartar" }]);
+        await proposeEvents(supabase, link.user_id, from, events, url, transcriptPreface);
         return new Response("ok", { status: 200 });
       }
       // Nada registrável: a tentativa NÃO consome o limite de captura —
       // a mensagem era conversa, e conversa é com o Conselheiro.
       await releaseUsage(supabase, reservationId);
+      if (transcriptPreface) await waSendText(from, transcriptPreface);
       await counselorTurn(supabase, link.user_id, ent, from, text, url);
       return new Response("ok", { status: 200 });
     }

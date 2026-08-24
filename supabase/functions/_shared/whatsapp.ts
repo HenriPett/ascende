@@ -110,6 +110,66 @@ export async function verifyWaSignature(rawBody: string, header: string | null):
   return diff === 0;
 }
 
+/* ─── Mídia recebida (áudio, imagem, documento) ─────────────────────────
+   Fluxo do Cloud API: o webhook entrega só um media_id; o download são duas
+   chamadas (GET /{id} → URL temporária → GET binário com o mesmo token). */
+
+export type WaMedia = { bytes: Uint8Array; mime: string } | "too_big" | null;
+
+export async function waDownloadMedia(mediaId: string, maxBytes: number): Promise<WaMedia> {
+  try {
+    const auth = { Authorization: `Bearer ${Deno.env.get("WHATSAPP_TOKEN")}` };
+    const metaRes = await fetch(`${GRAPH}/${mediaId}`, { headers: auth });
+    if (!metaRes.ok) { console.error("wa media meta", metaRes.status); return null; }
+    const meta = await metaRes.json();
+    if (Number(meta?.file_size) > maxBytes) return "too_big";
+    const binRes = await fetch(String(meta.url), { headers: auth });
+    if (!binRes.ok) { console.error("wa media bin", binRes.status); return null; }
+    const buf = new Uint8Array(await binRes.arrayBuffer());
+    if (buf.length > maxBytes) return "too_big";
+    return { bytes: buf, mime: String(meta.mime_type ?? "application/octet-stream").split(";")[0] };
+  } catch (e) {
+    console.error("wa media", e);
+    return null;
+  }
+}
+
+/** Base64 em blocos (evita estourar a pilha com arquivos grandes). */
+export function toBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
+/** Transcrição de áudio via Groq (whisper-large-v3-turbo, PT-BR).
+ *  Segredo: GROQ_API_KEY. Retorna null em falha (o chamador avisa o usuário). */
+export async function groqTranscribe(bytes: Uint8Array, mime: string): Promise<string | null> {
+  const key = Deno.env.get("GROQ_API_KEY");
+  if (!key) { console.error("GROQ_API_KEY ausente — áudio não transcrito"); return null; }
+  try {
+    const fd = new FormData();
+    const ext = mime.includes("mpeg") ? "mp3" : mime.includes("mp4") ? "m4a" : "ogg";
+    fd.append("file", new Blob([bytes.slice().buffer], { type: mime }), `audio.${ext}`);
+    fd.append("model", "whisper-large-v3-turbo");
+    fd.append("language", "pt");
+    fd.append("temperature", "0");
+    fd.append("response_format", "json");
+    const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+      method: "POST", headers: { Authorization: `Bearer ${key}` }, body: fd,
+    });
+    if (!res.ok) { console.error("groq", res.status, (await res.text()).slice(0, 300)); return null; }
+    const j = await res.json();
+    const text = typeof j?.text === "string" ? j.text.trim() : "";
+    return text || null;
+  } catch (e) {
+    console.error("groq", e);
+    return null;
+  }
+}
+
 /* ─── Gravação de eventos confirmados (versão servidor) ──────────────────
    Espelha src/lib/captureEvents.ts (saveProposedEvents): se mudar lá, mude
    aqui. Transações vão para `transactions` (o banco cria o evento derivado);
@@ -134,13 +194,17 @@ export async function saveEventsServer(
   for (const ev of events) {
     if (!ev || typeof ev.kind !== "string" || typeof ev.pillar !== "string") continue;
     if (ev.kind === "transaction" && Number(ev.amount) > 0) {
+      const occurred = /^\d{4}-\d{2}-\d{2}$/.test(String(ev.occurred_at ?? "")) &&
+          String(ev.occurred_at) <= todayIso
+        ? String(ev.occurred_at)
+        : todayIso; // itens de fatura trazem a própria data; relato usa hoje
       const { error } = await supabase.from("transactions").insert({
         user_id: userId,
         kind: ev.tx_kind === "income" ? "income" : "expense",
         amount: Number(ev.amount),
         category: ev.category ?? "Outros",
         description: ev.description ?? ev.summary ?? null,
-        occurred_at: todayIso,
+        occurred_at: occurred,
         source: "capture",
       });
       if (error) { console.error("wa save tx", error.message); continue; }

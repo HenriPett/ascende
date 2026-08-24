@@ -497,7 +497,7 @@ export default function Landing() {
             {
               icon: MessageCircle,
               title: "WhatsApp → registro",
-              desc: "\u201CGastei 47 no mercado e treinei\u201D por mensagem vira registro no painel — você só confirma no botão. E o Conselheiro responde por lá também, continuando a conversa no app.",
+              desc: "Mensagem, \u00e1udio ou foto: \u201Cgastei 47 e treinei\u201D falado no caminho de casa, o print do Pix ou a foto do prato viram registro — você só confirma no botão. E o Conselheiro responde por lá também.",
             },
             {
               icon: Camera,
@@ -573,7 +573,7 @@ export default function Landing() {
             <ul className="mt-4 space-y-2 text-sm">
               {[
                 "Registros manuais, hábitos e batalhas sem limite",
-                "Registro e Conselheiro também pelo WhatsApp",
+                "Registro e Conselheiro pelo WhatsApp — texto, áudio e foto",
                 "Diário, hidratação, XP, níveis e gráficos básicos",
                 "Captura inteligente: 3 por dia (10/dia nas 2 primeiras semanas)",
                 "Conselheiro: 15 mensagens por semana",
@@ -604,7 +604,7 @@ export default function Landing() {
                 "Conselheiro: 15 mensagens por dia (até 300/mês)",
                 "Briefing diário todas as manhãs — com aviso no seu WhatsApp",
                 "30 análises de refeição por mês",
-                "Análise de documentos: 10 PDFs por mês",
+                "Análise de documentos: 10 PDFs por mês (no app e pelo WhatsApp)",
                 "Até 5 planos ativos · 150 memórias do Conselheiro",
               ].map((f) => (
                 <li key={f} className="flex gap-2">
@@ -642,7 +642,7 @@ export default function Landing() {
               <Check className="w-4 h-4 text-gold" /> Já está aqui hoje
             </h3>
             <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-              <li>• Captura por frase, voz e foto — no app e pelo WhatsApp</li>
+              <li>• Captura por frase, voz e foto — no app e pelo WhatsApp (áudio transcrito na hora, foto de prato e print de Pix viram registro)</li>
               <li>• Conselheiro que vê os 4 pilares, no app e pelo WhatsApp (a conversa continua nos dois)</li>
               <li>• Retrospectiva semanal, briefing diário (Ascende+) e avisos no WhatsApp</li>
               <li>• Raio-X financeiro de 60s, importação de fatura, batalhas contra vícios</li>
@@ -655,7 +655,6 @@ export default function Landing() {
             </h3>
             <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
               <li>• Conexão bancária via Open Finance: sua fatura entrando sozinha, sem digitar nada</li>
-              <li>• Fotos e áudios direto pelo WhatsApp (print do Pix virando lançamento)</li>
               <li>• Aplicativo nativo com integração de saúde (sono e treinos entrando automaticamente)</li>
             </ul>
             <p className="mt-4 text-xs text-muted-foreground">
