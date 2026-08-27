@@ -202,7 +202,48 @@ export async function reserveUsage(
   return { id: (data as number | null) ?? null };
 }
 
-/** Devolve uma reserva quando a chamada de IA falhou (não consome cota). */
+/**
+ * Reserva ATOMICAMENTE uma unidade considerando ATÉ TRÊS janelas ao mesmo
+ * tempo (dia, semana, mês) — o formato do teto do Conselheiro. Contar cada
+ * janela num select separado antes de gravar deixava duas requisições
+ * simultâneas passarem juntas pela mesma verificação.
+ * Retorna { id } quando reservou; { id: null, window } com a janela que
+ * barrou ('daily' | 'weekly' | 'monthly'). cap null = janela sem limite.
+ * Falha do banco lança 503 (fail-closed).
+ */
+export async function reserveUsageWindows(
+  supabase: SupabaseClient, userId: string, feature: string,
+  windows: {
+    day?: { cap: number | null; since: string };
+    week?: { cap: number | null; since: string };
+    month?: { cap: number | null; since: string };
+  },
+): Promise<{ id: number | null; window: "daily" | "weekly" | "monthly" | null }> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase.rpc("reserve_ai_usage_windows", {
+    uid: userId, feat: feature,
+    cap_day: windows.day?.cap ?? null, since_day: windows.day?.since ?? nowIso,
+    cap_week: windows.week?.cap ?? null, since_week: windows.week?.since ?? nowIso,
+    cap_month: windows.month?.cap ?? null, since_month: windows.month?.since ?? nowIso,
+  });
+  if (error) {
+    console.error("reserveUsageWindows", error.message);
+    throw new Response(JSON.stringify({
+      error: "Não consegui verificar seu limite de uso agora. Tente novamente em instantes.",
+      code: "LIMIT_CHECK_UNAVAILABLE",
+    }), { status: 503, headers: { "Content-Type": "application/json" } });
+  }
+  const row = (data ?? {}) as { id?: number | null; window?: string | null };
+  return {
+    id: (row.id ?? null) as number | null,
+    window: (row.window ?? null) as "daily" | "weekly" | "monthly" | null,
+  };
+}
+
+/** Devolve uma reserva quando a chamada de IA falhou (não consome cota).
+ *  Reserva nunca usada é apagada; chamada que já rodou (e custou) é estornada
+ *  com success=false — sai da contagem de cota, mas a telemetria de tokens e
+ *  custo continua auditável. Ver release_ai_usage no setup.sql (seção 26). */
 export async function releaseUsage(supabase: SupabaseClient, reservationId: number | null | undefined): Promise<void> {
   if (!reservationId) return;
   const { error } = await supabase.rpc("release_ai_usage", { reservation_id: reservationId });

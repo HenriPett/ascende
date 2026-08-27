@@ -142,6 +142,11 @@ Deno.serve(async (req) => {
     }
 
     if (!r.is_food) {
+      // A foto não era comida: a pessoa não recebeu nada de útil, então a
+      // cota volta. A chamada já rodou e custou, mas release_ai_usage estorna
+      // (success=false) preservando a telemetria de tokens — o custo real
+      // continua auditável, só não é cobrado do limite dela.
+      await releaseUsage(supabase, reservationId);
       return json({ estimate: null, is_food: false });
     }
 

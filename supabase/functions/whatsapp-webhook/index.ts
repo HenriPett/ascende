@@ -25,7 +25,7 @@ import {
   buildSnapshot, MODEL_SMART, MODEL_FAST, SAFETY_RULES,
   CAPTURE_SYSTEM, CAPTURE_TOOL, STATEMENT_SYSTEM, STATEMENT_TOOL, normalizeStatementItems,
 } from "../_shared/lib.ts";
-import { anthropicCall, reserveUsage, releaseUsage } from "../_shared/usage.ts";
+import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage } from "../_shared/usage.ts";
 import {
   getEntitlements, spDayStartUtc, spWeekStartUtc, spMonthStartUtc,
   nextSpMonthStartUtc, spParts,
@@ -37,6 +37,10 @@ import {
 
 const PENDING_TTL_MIN = 60;     // proposta sem resposta expira em 1h
 const LEGACY_DAILY_LIMIT = 40;  // espelha o ai-chat enquanto premium_limits_enabled = false
+/* Teto de tentativas de pareamento por número (anti força-bruta do código de
+   6 dígitos). Generoso para quem digita errado, inútil para quem varre. */
+const PAIR_MAX_ATTEMPTS = 5;
+const PAIR_WINDOW_MIN = 15;     // mesma janela de validade do código
 
 /* Limites de mídia — espelham o app (capture: 5 MB de imagem; ai-chat: ~4,5 MB
    de PDF) mais o teto de áudio do canal (~16 MB cobre vários minutos de voz;
@@ -122,36 +126,41 @@ function looksConversational(text: string): boolean {
   return /^(o que|que |qual|quais|quanto|quando|onde|como|por ?que|pq |ser[áa] que|me (ajuda|ajude|explica|explique|diz|diga|fala|fale|monta|monte|d[áa])|pode |consegue |devo |vale a pena|preciso de (ajuda|conselho)|conselheiro[,:]?\s)/i.test(text.trim());
 }
 
-/** Espelho fiel dos limites do Conselheiro no ai-chat (mesma tabela, mesmas
- *  janelas SP). Retorna null se pode falar, ou a mensagem de limite. */
-async function chatLimitMessage(
+/** Espelho fiel dos limites do Conselheiro no ai-chat: MESMA cota, mesma
+ *  feature ('chat-principal') e mesmas janelas SP — a conversa é a mesma nos
+ *  dois canais. A contagem saiu de chat_messages (check-depois-insert, que
+ *  duas mensagens simultâneas atravessavam juntas) para a reserva atômica.
+ *  Retorna { id } quando pode falar, ou { message } com o texto do limite.
+ *  Aqui a reserva NÃO é passada para o anthropicCall: a chamada do WhatsApp
+ *  é registrada sob 'wa-conselheiro' (telemetria por canal), então a linha da
+ *  reserva fica como marcador de cota — é ela que o teto conta, nos dois canais. */
+async function reserveChatTurn(
   // deno-lint-ignore no-explicit-any
   supabase: any, userId: string, ent: Awaited<ReturnType<typeof getEntitlements>>, url: string,
-): Promise<string | null> {
-  const countChat = async (sinceIso: string) => {
-    const { count } = await supabase.from("chat_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId).eq("role", "user").gte("created_at", sinceIso);
-    return count ?? 0;
-  };
+): Promise<{ id: number | null; message: string | null }> {
   const upsell = ent.plan === "free" ? `\n\nNo Ascende+ são 15 mensagens por dia: ${url}/app/assinatura` : "";
-  if (ent.flags.premium_limits_enabled) {
-    const L = ent.limits;
-    if (L.chat_daily !== null && (await countChat(spDayStartUtc())) >= L.chat_daily) {
-      return `Você usou as ${L.chat_daily} mensagens de hoje com o Conselheiro. Amanhã ele volta — e registrar o dia por aqui continua funcionando normalmente.${upsell}`;
-    }
-    if (L.chat_weekly !== null && (await countChat(spWeekStartUtc())) >= L.chat_weekly) {
-      return `Você usou as ${L.chat_weekly} mensagens desta semana com o Conselheiro. Registrar o dia por aqui continua funcionando normalmente.${upsell}`;
-    }
-    if (L.chat_monthly !== null && (await countChat(spMonthStartUtc())) >= L.chat_monthly) {
-      return `Você usou as ${L.chat_monthly} mensagens deste mês com o Conselheiro.${upsell}`;
-    }
-    return null;
+  const L = ent.limits;
+  const premium = ent.flags.premium_limits_enabled;
+  const windows = premium
+    ? {
+        day: { cap: L.chat_daily, since: spDayStartUtc() },
+        week: { cap: L.chat_weekly, since: spWeekStartUtc() },
+        month: { cap: L.chat_monthly, since: spMonthStartUtc() },
+      }
+    : { day: { cap: LEGACY_DAILY_LIMIT, since: spDayStartUtc() } };
+
+  const { id, window } = await reserveUsageWindows(supabase, userId, "chat-principal", windows);
+  if (id !== null) return { id, message: null };
+  if (!premium) {
+    return { id: null, message: `Você atingiu o limite de ${LEGACY_DAILY_LIMIT} mensagens por dia com o Conselheiro. Amanhã ele estará aqui de novo.` };
   }
-  if ((await countChat(spDayStartUtc())) >= LEGACY_DAILY_LIMIT) {
-    return `Você atingiu o limite de ${LEGACY_DAILY_LIMIT} mensagens por dia com o Conselheiro. Amanhã ele estará aqui de novo.`;
+  if (window === "weekly") {
+    return { id: null, message: `Você usou as ${L.chat_weekly} mensagens desta semana com o Conselheiro. Registrar o dia por aqui continua funcionando normalmente.${upsell}` };
   }
-  return null;
+  if (window === "monthly") {
+    return { id: null, message: `Você usou as ${L.chat_monthly} mensagens deste mês com o Conselheiro.${upsell}` };
+  }
+  return { id: null, message: `Você usou as ${L.chat_daily} mensagens de hoje com o Conselheiro. Amanhã ele volta — e registrar o dia por aqui continua funcionando normalmente.${upsell}` };
 }
 
 /** Conversa com o Conselheiro: mesma cota, mesmo retrato e MESMO histórico
@@ -166,7 +175,7 @@ async function counselorTurn(
   // deno-lint-ignore no-explicit-any
   extraBlocks: any[] = [], historyLabel?: string,
 ): Promise<boolean> {
-  const limitMsg = await chatLimitMessage(supabase, userId, ent, url);
+  const { id: chatReservation, message: limitMsg } = await reserveChatTurn(supabase, userId, ent, url);
   if (limitMsg) { await waSendText(from, limitMsg); return false; }
 
   const [snapshot, { data: history }] = await Promise.all([
@@ -199,6 +208,7 @@ async function counselorTurn(
     messages,
   });
   if (!res.ok || !data) {
+    await releaseUsage(supabase, chatReservation);
     await waSendText(from, "O Conselheiro está indisponível agora. Sua mensagem não contou no limite: tente de novo em instantes.");
     return false;
   }
@@ -206,6 +216,7 @@ async function counselorTurn(
   const reply = (((data as any).content ?? []) as any[])
     .filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
   if (!reply) {
+    await releaseUsage(supabase, chatReservation);
     await waSendText(from, "O Conselheiro não conseguiu formular uma resposta agora. Tente reformular ou enviar de novo (não contou no limite).");
     return false;
   }
@@ -246,6 +257,10 @@ Deno.serve(async (req) => {
 
   // Sempre respondemos 200 (mesmo em erro interno): a Meta reenvia eventos
   // não confirmados e um bug nosso viraria tempestade de retries.
+  // `replyTo` vive fora do try para que um limite atingido (429) ou uma
+  // verificação indisponível (503) — que agora falham FECHADOS e são lançados
+  // como Response — virem uma mensagem honesta em vez de silêncio.
+  let replyTo: string | null = null;
   try {
     const raw = await req.text();
     if (!(await verifyWaSignature(raw, req.headers.get("x-hub-signature-256")))) {
@@ -259,6 +274,7 @@ Deno.serve(async (req) => {
 
     const from = String(msg.from ?? ""); // wa_id (dígitos, E.164 sem '+')
     if (!from) return new Response("ok", { status: 200 });
+    replyTo = from;
 
     const supabase = serviceClient();
     const url = appUrl();
@@ -468,13 +484,31 @@ Deno.serve(async (req) => {
 
     // ── Pareamento por código de 6 dígitos (só texto digitado) ──
     if (!transcribed && /^\d{6}$/.test(text)) {
+      // Teto de tentativas POR NÚMERO: 6 dígitos são força-brutáveis, e
+      // acertar um código vincula o número à conta alheia. O teto é atômico
+      // (advisory lock no banco) e fail-closed: erro de banco não libera.
+      const { data: mayTry, error: attemptErr } = await supabase.rpc("wa_pair_attempt", {
+        p_phone: from, max_attempts: PAIR_MAX_ATTEMPTS, window_min: PAIR_WINDOW_MIN,
+      });
+      if (attemptErr) {
+        console.error("wa_pair_attempt", attemptErr.message ?? attemptErr);
+        await waSendText(from, "Não consegui validar seu código agora. Tente de novo em instantes.");
+        return new Response("ok", { status: 200 });
+      }
+      if (mayTry !== true) {
+        await waSendText(from, `Muitas tentativas de código em pouco tempo. Aguarde ${PAIR_WINDOW_MIN} minutos, gere um código novo em Ajustes → WhatsApp e tente outra vez.`);
+        return new Response("ok", { status: 200 });
+      }
       const { data: pairing } = await supabase.from("whatsapp_links")
         .select("user_id").eq("pairing_code", text)
-        .gt("pairing_expires_at", new Date().toISOString()).maybeSingle();
+        .gt("pairing_expires_at", new Date().toISOString())
+        .limit(1).maybeSingle();
       if (!pairing) {
         await waSendText(from, "Esse código não confere ou expirou. Gere um novo em Ajustes → WhatsApp no app e me mande em até 15 minutos.");
         return new Response("ok", { status: 200 });
       }
+      // Acertou: o histórico de tentativas daquele número não precisa mais existir.
+      await supabase.rpc("wa_pair_clear", { p_phone: from });
       // Número já vinculado a OUTRA conta: solta o vínculo antigo (o número
       // pertence a quem o possui agora).
       await supabase.from("whatsapp_links").update({ phone: null, linked_at: null })
@@ -569,6 +603,12 @@ Deno.serve(async (req) => {
     return new Response("ok", { status: 200 });
   } catch (e) {
     console.error("whatsapp-webhook", e);
+    if (replyTo) {
+      const tooMany = e instanceof Response && e.status === 429;
+      await waSendText(replyTo, tooMany
+        ? "Muitas mensagens em pouco tempo por aqui. Respire e me chame de novo em alguns minutos."
+        : "Deu um problema do meu lado agora. Tenta de novo em instantes?").catch(() => {});
+    }
     return new Response("ok", { status: 200 });
   }
 });

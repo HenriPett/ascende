@@ -45,15 +45,24 @@ Deno.serve(async (req) => {
     if (ent.flags.premium_limits_enabled) {
       const isPlus = ent.plan === "ascend_plus";
       if (isPlus) {
+        // DECISÃO (auditoria, achado 6): a cota mensal de documentos é UMA só.
+        // Antes, importar fatura reservava sob a feature 'import-statement' e
+        // o PDF no Conselheiro sob 'chat-documento'; como reserve_ai_usage
+        // conta por feature, o mesmo teto valia duas vezes e o Ascende+ recebia
+        // 20 análises/mês onde a página de assinatura promete 10. A promessa
+        // pública é a fonte de verdade, então as duas superfícies passam a
+        // dividir a MESMA feature — 10 PDFs/mês no total, venham de onde vierem.
         const cap = ent.limits.document_analyses_monthly ?? 10;
-        const { id } = await reserveUsage(supabase, user.id, "import-statement", cap, spMonthStartUtc());
+        const { id } = await reserveUsage(supabase, user.id, "chat-documento", cap, spMonthStartUtc());
         if (id === null) {
           return limitResponse(req, "statement_import", cap, nextSpMonthStartUtc(),
             `Você usou as ${cap} análises de documento deste mês.`);
         }
         reservationId = id;
       } else {
-        // Gratuito: 1 importação, no primeiro mês de conta.
+        // Gratuito: 1 importação, no primeiro mês de conta. Continua numa
+        // feature própria ('import-statement'): é um brinde de aquisição por
+        // conta, não um adiantamento da cota mensal do Ascende+.
         const createdAt = new Date(user.created_at ?? Date.now());
         const ageDays = (Date.now() - createdAt.getTime()) / 86_400_000;
         if (ageDays > FREE_WINDOW_DAYS) {

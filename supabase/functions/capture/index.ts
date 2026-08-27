@@ -52,8 +52,18 @@ Deno.serve(async (req) => {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
+  // A reserva vive FORA do try: o catch externo precisa devolvê-la. Antes,
+  // um erro inesperado (rede, banco) consumia definitivamente uma captura do
+  // dia — o oposto do que a mensagem de erro promete ao usuário.
+  const supabase = serviceClient();
+  let reservationId: number | null = null;
+  const refund = async () => {
+    if (reservationId === null) return;
+    await releaseUsage(supabase, reservationId);
+    reservationId = null;
+  };
+
   try {
-    const supabase = serviceClient();
     const user = await requireUser(req, supabase);
     await assertRateLimit(supabase, user.id, "capture", 80, 5); // anti-abuso (independe de plano)
 
@@ -75,7 +85,6 @@ Deno.serve(async (req) => {
     // tentativa fracassada não consome limite (plano §3.4/§3.6).
     // Imagem usa a MESMA cota da captura: é só outra forma da mesma frase.
     const ent = await getEntitlements(supabase, user.id);
-    let reservationId: number | null = null;
     if (ent.flags.premium_limits_enabled && ent.limits.capture_daily !== null) {
       const { id } = await reserveUsage(supabase, user.id, "capture", ent.limits.capture_daily, spDayStartUtc());
       if (id === null) {
@@ -104,7 +113,7 @@ Deno.serve(async (req) => {
       }, { reservationId });
 
       if (!res.ok || !data) {
-        await releaseUsage(supabase, reservationId);
+        await refund();
         return json({ error: "Não consegui ler a imagem agora. Tente de novo em instantes — a tentativa não contou no seu limite." }, 502);
       }
       // deno-lint-ignore no-explicit-any
@@ -138,11 +147,13 @@ Deno.serve(async (req) => {
       supabase, user.id, text, "capture", ent.limits.memory_cap, { reservationId },
     );
     if (!ok) {
-      await releaseUsage(supabase, reservationId);
+      await refund();
       return json({ error: "Não consegui interpretar agora. Tente de novo em instantes — a tentativa não contou no seu limite." }, 502);
     }
     return json({ events, learned });
   } catch (e) {
+    // Erro inesperado: devolve a reserva antes de sair.
+    await refund().catch((err) => console.error("refund", err));
     if (e instanceof Response) return e;
     console.error(e);
     return json({ error: "Erro interno." }, 500);

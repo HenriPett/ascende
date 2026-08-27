@@ -18,12 +18,12 @@ Deno.serve(async (req) => {
 
     const ent = await getEntitlements(supabase, user.id);
 
-    const countChat = async (sinceIso: string) => {
-      const { count } = await supabase.from("chat_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id).eq("role", "user").gte("created_at", sinceIso);
-      return count ?? 0;
-    };
+    // O teto do Conselheiro passou a ser reservado atomicamente em ai_usage
+    // sob 'chat-principal' (app e WhatsApp compartilham a mesma cota), então a
+    // TELA precisa contar a mesma coisa que o servidor cobra — contar
+    // chat_messages aqui mostraria um número diferente do limite real.
+    const countChat = (sinceIso: string) =>
+      countUsage(supabase, user.id, ["chat-principal"], sinceIso, { strict: false });
     const [chatToday, chatWeek, chatMonth, captureToday, mealsMonth, bodyMonth, docsMonth, pricingRow] =
       await Promise.all([
         countChat(spDayStartUtc()),
@@ -34,6 +34,8 @@ Deno.serve(async (req) => {
         countUsage(supabase, user.id, ["capture"], spDayStartUtc(), { strict: false }),
         countUsage(supabase, user.id, ["analyze-meal"], spMonthStartUtc(), { strict: false }),
         countUsage(supabase, user.id, ["analyze-body"], spMonthStartUtc(), { strict: false }),
+        // Cota ÚNICA de documentos: importação de fatura e PDF no Conselheiro
+        // reservam a mesma feature (ver import-statement, achado 6).
         countUsage(supabase, user.id, ["chat-documento"], spMonthStartUtc(), { strict: false }),
         supabase.from("app_settings").select("value").eq("key", "pricing").maybeSingle(),
       ]);

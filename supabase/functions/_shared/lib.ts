@@ -1,7 +1,7 @@
 // Módulo compartilhado das funções do Ascende
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { anthropicCall } from "./usage.ts";
-import { spParts, spMonthStartUtc } from "./entitlements.ts";
+import { spParts, spMonthStartUtc, spWeekStartUtc } from "./entitlements.ts";
 
 // Defina o secret APP_ORIGIN para restringir quais sites chamam as funções pelo
 // navegador. Aceita várias origens separadas por vírgula (ex.: produção + domínio
@@ -58,24 +58,31 @@ export async function requireUser(req: Request, supabase: SupabaseClient) {
  * Proteção de custo/abuso: no máximo `max` chamadas da função `fn` por usuário
  * na janela de `windowMin` minutos. Estourou, lança 429 com mensagem amigável.
  * Usa a tabela fn_calls (RLS sem policies: só o service role escreve/lê).
+ *
+ * Endurecido (auditoria, achado 3):
+ * • ATÔMICO — contagem e registro acontecem sob advisory lock no banco
+ *   (reserve_fn_call), então N requisições simultâneas não passam mais juntas.
+ * • FAIL-CLOSED — a versão anterior fazia `if (!error && count >= max)`: erro
+ *   de banco liberava a chamada. Agora erro vira 503 e interrompe.
  */
 export async function assertRateLimit(
   supabase: SupabaseClient, userId: string, fn: string, max: number, windowMin: number,
 ) {
-  const since = new Date(Date.now() - windowMin * 60_000).toISOString();
-  const { count, error } = await supabase.from("fn_calls")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId).eq("fn", fn).gte("called_at", since);
-  if (!error && (count ?? 0) >= max) {
+  const { data, error } = await supabase.rpc("reserve_fn_call", {
+    uid: userId, fn_name: fn, max_calls: max, window_min: windowMin,
+  });
+  if (error) {
+    console.error("assertRateLimit", fn, error.message ?? error);
+    throw new Response(JSON.stringify({
+      error: "Não consegui validar sua solicitação agora. Tente novamente em instantes.",
+      code: "RATE_CHECK_UNAVAILABLE",
+    }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+  if (data !== true) {
     throw new Response(JSON.stringify({
       error: "Muitas solicitações em pouco tempo. Respire e tente de novo em alguns minutos.",
     }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
-  // Registra a chamada e faz uma limpeza barata do que passou de 1 dia
-  await supabase.from("fn_calls").insert({ user_id: userId, fn });
-  await supabase.from("fn_calls").delete()
-    .eq("user_id", userId).eq("fn", fn)
-    .lt("called_at", new Date(Date.now() - 864e5).toISOString());
 }
 
 const BRL = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -424,8 +431,12 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
 
     // Meta calórica do dia (o Conselheiro deve saber quanto falta HOJE — em SP)
     const todayIso = todaySpIso;
+    // occurred_at é um instante UTC: comparar `slice(0,10)` com a data de SP
+    // jogava toda refeição registrada entre 21h e 23h59 para o dia seguinte
+    // (o jantar sumia do "faltam X kcal"). Proteína, água e sono já usavam
+    // spParts — agora as calorias também.
     const kcalToday = kinds["meal"]
-      .filter((e) => e.occurred_at.slice(0, 10) === todayIso)
+      .filter((e) => spParts(new Date(e.occurred_at)).dateIso === todayIso)
       .reduce((sum, e) => sum + (Number((e.payload as any)?.calories) || 0), 0);
     const kcalGoal = Number(p.calorie_goal_kcal) || 0;
     if (kcalGoal > 0) {
@@ -442,21 +453,31 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
         .reduce((sum, e) => sum + (Number((e.payload as any)?.protein_g) || 0), 0);
       lines.push(`META DE PROTEÍNA DIÁRIA: ${protGoal} g. Hoje: ${Math.round(protToday)} g.`);
     }
+  }
 
-    // Metas dos demais pilares (gasto do dia, treinos na semana, sono)
+  // Metas dos demais pilares (gasto do dia, treinos na semana, sono).
+  // Ficavam aninhadas no bloco de ALIMENTAÇÃO: quem não registrava refeição
+  // há 30 dias — ou desligava o escopo de alimentação — perdia o teto de
+  // gasto, a meta de treinos e a de sono em TODAS as superfícies de IA, e o
+  // Conselheiro passava a tratá-las como "meta ainda sem valor". Agora cada
+  // uma vive sob o escopo de privacidade do SEU pilar.
+  if (scopes.prosperidade) {
     const spendLimit = Number(p.daily_spend_limit) || 0;
     if (spendLimit > 0) {
+      // transactions.occurred_at é `date`: a string já é o dia civil, sem fuso.
       const spentToday = (txs ?? [])
-        .filter((t: any) => t.kind === "expense" && String(t.occurred_at).slice(0, 10) === todayIso)
+        .filter((t: any) => t.kind === "expense" && String(t.occurred_at).slice(0, 10) === todaySpIso)
         .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
       lines.push(`TETO DE GASTO DIÁRIO: ${BRL(spendLimit)}. Hoje: ${BRL(spentToday)} gastos` +
         (spentToday <= spendLimit ? ` (${BRL(spendLimit - spentToday)} disponíveis).` : ` (${BRL(spentToday - spendLimit)} acima do teto).`));
     }
+  }
+  if (scopes.vitalidade) {
     const wwGoal = Number(p.weekly_workouts_goal) || 0;
     if (wwGoal > 0) {
-      const weekStart = new Date();
-      weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // segunda-feira
-      weekStart.setHours(0, 0, 0, 0);
+      // Segunda-feira 00:00 EM SÃO PAULO. Antes usava a hora local do runtime
+      // (UTC no Deno), então a semana começava domingo às 21h.
+      const weekStart = new Date(spWeekStartUtc());
       const workoutsWeek = (kinds["workout"] ?? []).filter((e) => new Date(e.occurred_at) >= weekStart).length;
       lines.push(`META DE TREINOS: ${wwGoal}/semana. Esta semana (desde segunda): ${workoutsWeek} treino(s)` +
         (workoutsWeek >= wwGoal ? " — meta da semana batida." : ` — faltam ${wwGoal - workoutsWeek}.`));
@@ -464,7 +485,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     const sleepGoal = Number(p.sleep_goal_h) || 0;
     if (sleepGoal > 0) {
       const sleptToday = (kinds["sleep"] ?? [])
-        .filter((e) => spParts(new Date(e.occurred_at)).dateIso === todayIso)
+        .filter((e) => spParts(new Date(e.occurred_at)).dateIso === todaySpIso)
         .map((e) => Number((e.payload as any)?.hours) || 0)[0] ?? null;
       lines.push(`META DE SONO: ${sleepGoal}h/noite.` +
         (sleptToday !== null ? ` Última noite: ${sleptToday}h.` : " Sono de hoje ainda não registrado."));
