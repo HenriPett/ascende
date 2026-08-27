@@ -12,7 +12,9 @@ import { levelTitle, nextTitle, xpReasonLabel } from "@/lib/xp";
 import { monthStartISO } from "@/lib/format";
 import { daysAgoISOInSP } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
-import { Flame, TrendingUp, TrendingDown, Minus, CalendarCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Flame, TrendingUp, TrendingDown, Minus, CalendarCheck, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
 
 function clamp(n: number) { return Math.max(0, Math.min(100, Math.round(n))); }
 
@@ -50,20 +52,32 @@ export default function Score() {
   const title = levelTitle(level);
   const upcoming = nextTitle(level);
 
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["score-data", user?.id],
     enabled: !!user,
     queryFn: async () => {
       const since14 = new Date(Date.now() - 14 * 864e5).toISOString();
       const since7 = new Date(Date.now() - 7 * 864e5).toISOString();
-      const [{ data: events }, { data: txs }, { data: habits }, { data: logs }, { data: weekXp }] = await Promise.all([
+      const [events, txs, habits, logs, weekXp] = await Promise.all([
         supabase.from("life_events").select("pillar,kind,occurred_at,payload").eq("user_id", user!.id).gte("occurred_at", since14),
         supabase.from("transactions").select("kind,amount").eq("user_id", user!.id).gte("occurred_at", monthStartISO()),
         supabase.from("habits").select("id").eq("user_id", user!.id).eq("active", true),
         supabase.from("habit_logs").select("log_date").eq("user_id", user!.id).gte("log_date", daysAgoISOInSP(13)),
         supabase.from("xp_log").select("points,reason,created_at").eq("user_id", user!.id).gte("created_at", since7).order("created_at", { ascending: false }).limit(60),
       ]);
-      return { events: events ?? [], txs: txs ?? [], habitsCount: (habits ?? []).length, logs: logs ?? [], weekXp: weekXp ?? [] };
+      // Antes o `error` de cada chamada era descartado no destructuring, e
+      // uma falha virava lista vazia — indistinguível de "você não registrou
+      // nada". Um indicador que erra para baixo em silêncio é pior que
+      // indicador nenhum: propague e deixe a tela dizer que falhou.
+      const failed = [events, txs, habits, logs, weekXp].find((r) => r.error);
+      if (failed?.error) throw failed.error;
+      return {
+        events: events.data ?? [],
+        txs: txs.data ?? [],
+        habitsCount: (habits.data ?? []).length,
+        logs: logs.data ?? [],
+        weekXp: weekXp.data ?? [],
+      };
     },
   });
 
@@ -241,18 +255,32 @@ export default function Score() {
             </div>
             <div className="rounded-lg border border-white/10 px-3 py-2" style={{ background: "hsl(0 0% 100% / 0.07)" }}>
               <p className="text-[11px] text-white/55 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> XP na semana</p>
-              <p className="text-sm font-semibold">{xpWeek}</p>
+              <p className="text-sm font-semibold">{data ? xpWeek : "—"}</p>
             </div>
             <div className="rounded-lg border border-white/10 px-3 py-2" style={{ background: "hsl(0 0% 100% / 0.07)" }}>
               <p className="text-[11px] text-white/55 flex items-center gap-1"><CalendarCheck className="w-3 h-3" /> Dias ativos (7d)</p>
-              <p className="text-sm font-semibold">{activeDays}/7</p>
+              <p className="text-sm font-semibold">{data ? `${activeDays}/7` : "—"}</p>
             </div>
           </div>
         </div>
       </Card>
 
       {/* De onde veio seu XP */}
-      {xpFeed.length > 0 && (
+      {isLoading && (
+        <Card className="p-4">
+          <h2 className="font-display font-semibold mb-3">De onde veio seu XP (7 dias)</h2>
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Skeleton className="h-5 w-[3.25rem] rounded-full shrink-0" />
+                <Skeleton className="h-4 flex-1" />
+                <Skeleton className="h-3 w-14 shrink-0" />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+      {!isLoading && xpFeed.length > 0 && (
         <Card className="p-4">
           <h2 className="font-display font-semibold mb-3">De onde veio seu XP (7 dias)</h2>
           <div className="space-y-1.5">
@@ -274,7 +302,45 @@ export default function Score() {
           diferentes em um único número escondia mais do que mostrava. Cada
           pilar tem seu indicador e sua tendência, separados. */}
 
-      {/* Por pilar (só os ativos) */}
+      {/* Por pilar (só os ativos).
+          Carregando e falha têm cara própria: um dashboard de zeros é
+          indistinguível de "você não registrou nada" e mente com confiança. */}
+      {isError && (
+        <Card className="p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0 space-y-2">
+            <p className="text-sm font-medium">Não consegui carregar seus indicadores.</p>
+            <p className="text-xs text-muted-foreground">
+              Isto é uma falha de conexão — não um retrato do seu mês. Seus registros
+              continuam salvos, e o XP acima não depende desta consulta.
+            </p>
+            <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
+              {isFetching
+                ? (<><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Tentando...</>)
+                : (<><RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Tentar de novo</>)}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {isLoading && (
+        <div className="space-y-2.5">
+          {shownPillars.map((p) => (
+            <Card key={p.id} className="p-4">
+              <div className="flex items-center gap-3 mb-2">
+                <Skeleton className="w-4 h-4 rounded" />
+                <Skeleton className="h-4 w-24" />
+                <span className="flex-1" />
+                <Skeleton className="h-4 w-12" />
+              </div>
+              <Skeleton className="h-2 w-full rounded-full" />
+              <Skeleton className="h-3 w-3/4 mt-2" />
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {!isLoading && !isError && (
       <div className="space-y-2.5">
         {shownPillars.map((p) => {
           const s = scores[p.id];
@@ -316,6 +382,7 @@ export default function Score() {
           );
         })}
       </div>
+      )}
 
       {/* Pilares pausados: uma linha discreta, não três cards apagados */}
       {pausedPillars.length > 0 && (

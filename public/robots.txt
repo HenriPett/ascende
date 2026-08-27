@@ -1,2 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /app
+Disallow: /onboarding
+Disallow: /auth
+
+Sitemap: https://ascende.app/sitemap.xml

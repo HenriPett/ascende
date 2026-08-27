@@ -30,7 +30,7 @@ export default function FirstTimeTip({ id, className }: { id: GuideId; className
       <div className="flex items-center justify-between gap-2 pt-0.5">
         <button
           type="button"
-          className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           onClick={() => {
             disableAll();
             toast.success("Dicas desligadas. Se mudar de ideia, reative em Ajustes.");

@@ -1,15 +1,22 @@
-import { useTheme } from "next-themes";
 import { Toaster as Sonner, toast } from "sonner";
+
+import { useTheme } from "@/hooks/useTheme";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
+  // Antes vinha de `next-themes`, que nunca teve provider montado neste app:
+  // o hook devolvia `undefined`, caía em "system" e os toasts ignoravam a
+  // escolha manual de tema. O tema real é o do nosso próprio hook.
+  const { isDark } = useTheme();
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={isDark ? "dark" : "light"}
       className="toaster group"
+      // Os toasts saem em `top-center`: sem o inset, encostam na status bar /
+      // Dynamic Island em standalone e em WKWebView.
+      offset="calc(env(safe-area-inset-top, 0px) + 1rem)"
       toastOptions={{
         classNames: {
           toast:

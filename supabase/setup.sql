@@ -1040,3 +1040,147 @@ end; $$;
 revoke execute on function public.claim_blueprint(uuid) from public;
 revoke execute on function public.claim_blueprint(uuid) from anon, authenticated;
 grant execute on function public.award_first_steps_milestone() to authenticated;
+-- ═══════════════════════════════════════════════════════════════
+-- ENDURECIMENTO (auditoria "achados-forge") — seções 25 a 30.
+-- Idempotente: pode rodar em banco já existente.
+-- ═══════════════════════════════════════════════════════════════
+
+-- ─── 25. GUIA DE PRIMEIRAS VEZES (achado 7) ─────────────────────
+-- A coluna era lida e escrita pelo app (useGuides/useProfile) mas nunca
+-- existiu em nenhum script: o update falhava com PGRST204 (só console.error)
+-- e as dicas de primeira vez reapareciam para sempre.
+alter table public.profiles
+  add column if not exists guides_seen text[] not null default '{}';
+
+-- ─── 26. DEVOLUÇÃO DE COTA QUE FUNCIONA MESMO APÓS A CHAMADA (achado 5) ──
+-- A versão anterior só apagava a linha enquanto ela ainda era 'reserva'.
+-- Depois de uma chamada bem-sucedida, `anthropicCall` sobrescreve o model
+-- com o modelo real — e o delete virava no-op silencioso, então caminhos
+-- como "a foto não é comida" cobravam a cota mesmo devolvendo-a no código.
+-- Agora: reserva nunca usada some; chamada já paga é ESTORNADA (success=false
+-- sai da contagem de reserve_ai_usage/countUsage) preservando a telemetria
+-- de tokens e custo, que é real e precisa continuar auditável.
+create or replace function public.release_ai_usage(reservation_id bigint)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  delete from public.ai_usage where id = reservation_id and model = 'reserva';
+  if not found then
+    update public.ai_usage
+       set success = false,
+           error_code = coalesce(error_code, 'refunded')
+     where id = reservation_id;
+  end if;
+end; $$;
+revoke all on function public.release_ai_usage(bigint) from anon, authenticated;
+
+-- ─── 27. RESERVA DE COTA COM VÁRIAS JANELAS (achado 3) ──────────
+-- O teto do Conselheiro tem até três janelas simultâneas (dia, semana, mês).
+-- Contá-las com selects separados antes de gravar deixava duas requisições
+-- simultâneas passarem juntas. Aqui a decisão inteira acontece sob o mesmo
+-- advisory lock e devolve QUAL janela barrou (o app precisa da mensagem e do
+-- reset_at corretos). cap null = janela sem limite.
+create or replace function public.reserve_ai_usage_windows(
+  uid uuid, feat text,
+  cap_day int, since_day timestamptz,
+  cap_week int, since_week timestamptz,
+  cap_month int, since_month timestamptz
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare n int; new_id bigint;
+begin
+  perform pg_advisory_xact_lock(hashtext(uid::text || ':' || feat));
+
+  if cap_day is not null then
+    select count(*) into n from public.ai_usage
+     where user_id = uid and feature = feat and success and created_at >= since_day;
+    if n >= cap_day then return jsonb_build_object('id', null, 'window', 'daily'); end if;
+  end if;
+
+  if cap_week is not null then
+    select count(*) into n from public.ai_usage
+     where user_id = uid and feature = feat and success and created_at >= since_week;
+    if n >= cap_week then return jsonb_build_object('id', null, 'window', 'weekly'); end if;
+  end if;
+
+  if cap_month is not null then
+    select count(*) into n from public.ai_usage
+     where user_id = uid and feature = feat and success and created_at >= since_month;
+    if n >= cap_month then return jsonb_build_object('id', null, 'window', 'monthly'); end if;
+  end if;
+
+  insert into public.ai_usage (user_id, feature, model, success)
+  values (uid, feat, 'reserva', true)
+  returning id into new_id;
+  return jsonb_build_object('id', new_id, 'window', null);
+end; $$;
+revoke all on function public.reserve_ai_usage_windows(uuid, text, int, timestamptz, int, timestamptz, int, timestamptz) from anon, authenticated;
+
+-- ─── 28. RATE LIMIT ANTI-ABUSO ATÔMICO (achado 3) ───────────────
+-- `assertRateLimit` contava fn_calls e só depois inseria: além da corrida,
+-- QUALQUER erro de banco na contagem liberava a chamada (fail-open num
+-- controle de custo). Agora contagem + registro acontecem sob advisory lock,
+-- e a função de borda trata erro como 503 (fail-closed).
+-- Retorna true quando a chamada pode seguir.
+create or replace function public.reserve_fn_call(
+  uid uuid, fn_name text, max_calls int, window_min int
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  perform pg_advisory_xact_lock(hashtext('fn:' || uid::text || ':' || fn_name));
+  select count(*) into n from public.fn_calls
+   where user_id = uid and fn = fn_name
+     and called_at >= now() - make_interval(mins => window_min);
+  if n >= max_calls then return false; end if;
+  insert into public.fn_calls (user_id, fn) values (uid, fn_name);
+  delete from public.fn_calls
+   where user_id = uid and fn = fn_name and called_at < now() - interval '1 day';
+  return true;
+end; $$;
+revoke all on function public.reserve_fn_call(uuid, text, int, int) from anon, authenticated;
+
+-- ─── 29. FORÇA-BRUTA DO CÓDIGO DE PAREAMENTO DO WHATSAPP (achado 1) ──
+-- O webhook casava `pairing_code` sem nenhum teto de tentativas por número.
+-- Com o App Secret ausente (que agora falha fechado, mas era fail-open),
+-- 6 dígitos eram força-brutáveis até sequestrar a conta de outra pessoa.
+-- Aqui o teto é por telefone, atômico, e vale mesmo com assinatura válida.
+create table if not exists public.whatsapp_pair_attempts (
+  id bigint generated always as identity primary key,
+  phone text not null,
+  attempted_at timestamptz not null default now()
+);
+create index if not exists wa_pair_attempts_phone
+  on public.whatsapp_pair_attempts (phone, attempted_at desc);
+alter table public.whatsapp_pair_attempts enable row level security;
+-- RLS sem policies: só o service role (webhook) lê e escreve.
+
+-- true = pode tentar (a tentativa fica registrada). false = teto estourado.
+create or replace function public.wa_pair_attempt(
+  p_phone text, max_attempts int, window_min int
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  perform pg_advisory_xact_lock(hashtext('wa_pair:' || p_phone));
+  select count(*) into n from public.whatsapp_pair_attempts
+   where phone = p_phone and attempted_at >= now() - make_interval(mins => window_min);
+  if n >= max_attempts then return false; end if;
+  insert into public.whatsapp_pair_attempts (phone) values (p_phone);
+  delete from public.whatsapp_pair_attempts
+   where attempted_at < now() - interval '1 day';
+  return true;
+end; $$;
+revoke all on function public.wa_pair_attempt(text, int, int) from anon, authenticated;
+
+-- Pareamento concluído: zera o histórico de tentativas daquele número.
+create or replace function public.wa_pair_clear(p_phone text)
+returns void language sql security definer set search_path = public as $$
+  delete from public.whatsapp_pair_attempts where phone = p_phone;
+$$;
+revoke all on function public.wa_pair_clear(text) from anon, authenticated;
+
+-- ─── 30. XP AGREGADO NO BANCO (achado 8) ────────────────────────
+-- O app somava toda a xp_log no navegador e o PostgREST cortava a resposta no
+-- `max-rows` do projeto (1000 por padrão): passando disso, XP e nível paravam
+-- de subir. `xp_total` já existia (§10) e é o que o retrato da IA usa; o
+-- grant abaixo deixa explícito que o cliente também pode chamá-lo.
+-- Continua SEM security definer de propósito: roda como o usuário, então o
+-- RLS de xp_log garante que ninguém lê o total de outra conta.
+grant execute on function public.xp_total(uuid) to authenticated;

@@ -214,7 +214,7 @@ function SosDialog({ battle }: { battle: Battle }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="border-gold/40 text-gold hover:text-gold">
+        <Button variant="outline" size="sm" className="border-gold/40 text-gold-ink hover:text-gold-ink">
           <LifeBuoy className="w-4 h-4 mr-1.5" /> Tô com vontade agora
         </Button>
       </DialogTrigger>
@@ -228,7 +228,7 @@ function SosDialog({ battle }: { battle: Battle }) {
         <div className="space-y-2.5">
           {battle.emergency_plan.map((step, i) => (
             <div key={i} className="flex items-start gap-3 rounded-lg border bg-card p-4">
-              <span className="font-display font-semibold text-gold text-lg leading-none">{i + 1}</span>
+              <span className="font-display font-semibold text-gold-ink text-lg leading-none">{i + 1}</span>
               <p className="text-base font-medium">{step}</p>
             </div>
           ))}
@@ -331,7 +331,7 @@ export default function Batalhas() {
             {/* Os 3 números — o acumulado em primeiro, porque ele nunca zera */}
             <div className="grid grid-cols-3 gap-2.5 text-center">
               <div className="rounded-lg bg-gold/10 border border-gold/20 p-3">
-                <p className="font-display text-2xl font-semibold text-gold">{stats.totalClean}</p>
+                <p className="font-display text-2xl font-semibold text-gold-ink">{stats.totalClean}</p>
                 <p className="text-[11px] text-muted-foreground leading-tight">dias limpos acumulados<br />(nunca zera)</p>
               </div>
               <div className="rounded-lg border p-3">
@@ -357,7 +357,7 @@ export default function Batalhas() {
               </div>
             )}
             {!stats.nextMilestone && stats.currentStreak >= MILESTONES[MILESTONES.length - 1] && (
-              <p className="text-xs text-gold">✦ Você passou dos 90 dias. Isso já é outra vida.</p>
+              <p className="text-xs text-gold-ink">✦ Você passou dos 90 dias. Isso já é outra vida.</p>
             )}
 
             {stats.relapses > 0 && (

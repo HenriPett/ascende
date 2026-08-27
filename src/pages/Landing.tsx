@@ -9,6 +9,7 @@ import {
   UtensilsCrossed, Check, Camera, Mic, ScanLine, Paperclip, Swords, ShieldCheck,
 } from "lucide-react";
 import Logo from "@/components/core/Logo";
+import SiteFooter from "@/components/core/SiteFooter";
 
 /* ─────────────────────────────────────────────────────────────────
    Demo animado da captura: a frase é "digitada" e vira registros
@@ -202,15 +203,17 @@ function TryItDemo() {
               })}
               <p className="text-[11px] text-muted-foreground pt-1">
                 Prévia simplificada, feita no seu navegador. A IA completa entende valores,
-                categorias, macros e contexto — e registra de verdade.{" "}
-                <Link to="/auth" className="underline underline-offset-2 text-foreground">Criar conta grátis</Link>
+                categorias, macros e contexto — e registra de verdade.
               </p>
+              <Button asChild className="w-full mt-1">
+                <Link to="/auth?intent=signup">Continuar com a IA completa <ArrowRight className="w-3.5 h-3.5 ml-1.5" /></Link>
+              </Button>
             </>
           ) : (
             <p className="text-sm text-muted-foreground rounded-md border p-2.5">
               Essa frase a prévia local não pegou — mas a IA completa entende. Conte ações do dia
               (gastos, treino, sono, refeições, humor) ou{" "}
-              <Link to="/auth" className="underline underline-offset-2 text-foreground">crie a conta grátis</Link>{" "}
+              <Link to="/auth?intent=signup" className="underline underline-offset-2 text-foreground">crie a conta grátis</Link>{" "}
               e teste com a frase que quiser.
             </p>
           )}
@@ -232,7 +235,7 @@ export default function Landing() {
               <Link to="/auth">Entrar</Link>
             </Button>
             <Button asChild>
-              <Link to="/auth">Começar grátis</Link>
+              <Link to="/auth?intent=signup">Começar grátis</Link>
             </Button>
           </div>
         </div>
@@ -247,8 +250,8 @@ export default function Landing() {
           aria-hidden
         />
         <div className="container relative pt-16 pb-14 md:pt-24 md:pb-20 text-center">
-          <p className="text-xs font-semibold tracking-[0.28em] uppercase text-gold mb-5 animate-fade-up">
-            Seu hub de qualidade de vida
+          <p className="text-xs font-semibold tracking-[0.28em] uppercase text-gold-ink mb-5 animate-fade-up">
+            O único app que vê a sua vida inteira
           </p>
           <h1 className="font-display text-[2.6rem] leading-[1.05] md:text-7xl font-semibold tracking-tight max-w-4xl mx-auto animate-fade-up">
             A vida não é dividida
@@ -268,9 +271,15 @@ export default function Landing() {
           </div>
           <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up">
             <Button asChild size="lg" className="px-9 h-12 text-base">
-              <Link to="/auth">Começar minha subida <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
+              <Link to="/auth?intent=signup">Começar minha subida <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
             </Button>
             <span className="text-xs text-muted-foreground">Grátis para começar · 2 minutos · sem cartão</span>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground animate-fade-up">
+            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-gold-ink" /> Grátis para sempre no essencial</span>
+            <span className="inline-flex items-center gap-1.5"><Lock className="w-3.5 h-3.5 text-gold-ink" /> Seus dados nunca são vendidos</span>
+            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-gold-ink" /> Sem anúncios. Nunca.</span>
           </div>
 
           <div className="mt-12 md:mt-16">
@@ -366,7 +375,7 @@ export default function Landing() {
         <h2 className="font-display text-3xl md:text-4xl font-semibold leading-tight">
           Feito para você usar 10 segundos por dia.
           <br />
-          <span className="text-gold">E ir viver.</span>
+          <span className="text-gold-ink">E ir viver.</span>
         </h2>
         <p className="mt-5 text-muted-foreground max-w-2xl mx-auto">
           Todo app quer mais do seu tempo. O Ascende foi desenhado para o contrário:
@@ -726,27 +735,62 @@ export default function Landing() {
         </h2>
         <p className="mt-4 text-muted-foreground">Hoje: criar a conta. Amanhã: uma frase por dia.</p>
         <Button asChild size="lg" className="mt-8 px-10 h-12 text-base">
-          <Link to="/auth">Criar minha conta grátis <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
+          <Link to="/auth?intent=signup">Criar minha conta grátis <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
         </Button>
       </section>
 
       {/* ─── Rodapé ─── */}
-      <footer className="border-t">
-        <div className="container py-8 text-center">
-          <p className="text-xs text-muted-foreground max-w-2xl mx-auto">
-            O Ascende não substitui médicos, nutricionistas, psicólogos ou consultores de investimento,
-            e não faz recomendações de produtos financeiros. Se você estiver passando por um momento
-            difícil, o CVV atende 24h pelo telefone 188.
-          </p>
-          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-4 text-xs">
-            <Link to="/recusas" className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">O que o Ascende recusa</Link>
-            <Link to="/privacidade" className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">Política de Privacidade</Link>
-            <Link to="/termos" className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">Termos e Condições</Link>
-            <Link to="/aviso-legal" className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">Aviso Legal</Link>
-          </div>
-          <p className="text-xs text-muted-foreground mt-3">© {new Date().getFullYear()} Ascende</p>
-        </div>
-      </footer>
+      <SiteFooter />
+
+      {/* SEO: marcação estruturada do FAQ acima (conteúdo espelhado manualmente) */}
+      <script type="application/ld+json">
+        {JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: [
+            {
+              "@type": "Question",
+              name: "Quanto custa?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "Criar conta e começar é grátis, para sempre: você registra sua vida, acompanha hábitos, XP e indicadores sem pagar nada. O Ascende+ (R$ 29,90/mês ou R$ 239,90/ano) amplia os recursos de IA — mais mensagens do Conselheiro, briefing diário, mais análises por foto e por documento.",
+              },
+            },
+            {
+              "@type": "Question",
+              name: "Preciso organizar a vida inteira de uma vez?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "Não. A maioria começa pelo corpo e pelo dinheiro — o plano alimentar dentro do orçamento é o primeiro \"uau\" de quase todo mundo. Os outros pilares você ativa quando fizer sentido.",
+              },
+            },
+            {
+              "@type": "Question",
+              name: "A IA substitui médico, nutricionista ou psicólogo?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "Não, e ela mesma vai te dizer isso. O Conselheiro organiza sua vida e conecta seus dados, mas decisões clínicas, terapêuticas e de investimento continuam com os profissionais certos.",
+              },
+            },
+            {
+              "@type": "Question",
+              name: "E a minha fé, entra como nesse app? E se eu não tiver religião?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "Do seu jeito, nos dois casos. Quem tem uma prática define o nome dela — oração, meditação, culto, silêncio. Quem não tem religião ativa o modo \"Mente & Foco\" nos ajustes, sem nenhum vocabulário espiritual.",
+              },
+            },
+            {
+              "@type": "Question",
+              name: "Meus dados estão seguros?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "Seus registros são seus. Cada conta só acessa os próprios dados, nada é vendido ou usado para anúncios, fotos analisadas pela IA não são armazenadas, e você pode solicitar a exclusão total da conta quando quiser.",
+              },
+            },
+          ],
+        })}
+      </script>
     </div>
   );
 }

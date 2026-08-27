@@ -142,8 +142,19 @@
 
   h1, h2, h3 { letter-spacing: -0.02em; }
 
+  /* Movimento reduzido: 0.01ms em vez de `none`. Zerar a duração ainda
+     dispara `transitionend`/`animationend` — de que Radix e Vaul dependem
+     para desmontar diálogos e gavetas. Com `none`, o evento nunca vem e o
+     componente pode ficar preso na tela. */
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation: none !important; transition: none !important; }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-delay: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      transition-delay: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
@@ -160,14 +171,28 @@
     border-color: hsl(0 0% 100% / 0.08);
   }
 
-  /* ── Éter: atmosfera de fundo (auras de ouro e lilás) ── */
+  /* ── Éter: atmosfera de fundo (auras de ouro e lilás) ──
+     A aura vive numa camada `::before` fixa, não em `background-attachment:
+     fixed`. No Safari/WKWebView o attachment fixo repinta o gradiente de
+     página inteira a cada quadro de rolagem; uma camada fixa própria é
+     promovida uma vez e fica parada enquanto o conteúdo rola por cima.
+     `isolation: isolate` cria o contexto de empilhamento que deixa o
+     `z-index: -1` ficar acima do fundo do elemento e abaixo do conteúdo. */
   .bg-ether {
+    position: relative;
+    isolation: isolate;
+  }
+  .bg-ether::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
     background-image:
       radial-gradient(56rem 30rem at 85% -8rem, hsl(var(--gold) / 0.10), transparent 65%),
       radial-gradient(44rem 26rem at -10% 45%, hsl(var(--mente) / 0.06), transparent 60%);
-    background-attachment: fixed;
   }
-  .dark .bg-ether {
+  .dark .bg-ether::before {
     background-image:
       radial-gradient(56rem 30rem at 85% -8rem, hsl(var(--gold) / 0.09), transparent 65%),
       radial-gradient(44rem 26rem at -10% 45%, hsl(var(--mente) / 0.08), transparent 60%);
@@ -215,6 +240,12 @@
   }
 
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  /* Com `viewport-fit=cover` o conteúdo passa por baixo da status bar /
+     Dynamic Island em standalone e em WKWebView. `safe-top` protege o
+     cabeçalho; `h-safe-top` é a altura desse recuo, para quem precisa
+     descontá-la de um `top`/`height` calculado. */
+  .safe-top { padding-top: env(safe-area-inset-top); }
+  .h-safe-top { height: env(safe-area-inset-top, 0px); }
 
   /* Textura de papel para o diário */
   .journal-paper {

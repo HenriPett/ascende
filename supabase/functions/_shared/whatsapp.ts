@@ -93,10 +93,17 @@ export function waSendTemplate(
   });
 }
 
-/** Valida a assinatura HMAC-SHA256 do webhook (X-Hub-Signature-256). */
+/** Valida a assinatura HMAC-SHA256 do webhook (X-Hub-Signature-256).
+ *  FAIL-CLOSED: sem WHATSAPP_APP_SECRET nada é aceito. A versão anterior
+ *  devolvia `true` quando o secret faltava e, como o webhook roda com
+ *  verify_jwt = false, qualquer um podia forjar o `from` e se passar por
+ *  outra pessoa (inclusive força-brutando o código de pareamento). */
 export async function verifyWaSignature(rawBody: string, header: string | null): Promise<boolean> {
   const secret = Deno.env.get("WHATSAPP_APP_SECRET");
-  if (!secret) { console.warn("WHATSAPP_APP_SECRET ausente — assinatura não verificada"); return true; }
+  if (!secret) {
+    console.error("WHATSAPP_APP_SECRET ausente — webhook do WhatsApp recusado (fail-closed)");
+    return false;
+  }
   if (!header?.startsWith("sha256=")) return false;
   const key = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],

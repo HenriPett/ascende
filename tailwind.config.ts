@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 export default {
   darkMode: ["class"],
@@ -59,5 +60,12 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    // `coarse:` = @media (pointer: coarse) — só dedo, nunca mouse. Usado para
+    // ampliar a área de toque dos botões sem inchar a interface no desktop.
+    plugin(({ addVariant }) => {
+      addVariant("coarse", "@media (pointer: coarse)");
+    }),
+  ],
 } satisfies Config;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -76,6 +76,44 @@ export default function Ajustes() {
 
   const togglePillar = (id: PillarId, on: boolean) =>
     setPillars((p) => (on ? [...new Set([...p, id])] : p.filter((x) => x !== id)));
+
+  /* ── Alteração não salva, visível (análise UX item 8) ──────────────────
+     Metade desta página salva sozinha (tema, trackers, escopos) e a outra
+     metade dependia de um botão no MEIO do scroll — com um aviso pedindo
+     para a pessoa lembrar dele. Agora o formulário se compara com o perfil
+     salvo e, enquanto houver diferença, uma barra fixa acompanha a rolagem:
+     o estado deixa de ser invisível e não dá mais para sair sem perceber. */
+  const savedSnapshot = useMemo(() => ({
+    name: profile?.name ?? "",
+    goal: profile?.goal ?? "",
+    income: profile?.monthly_income != null ? String(profile.monthly_income) : "",
+    budget: profile?.monthly_budget != null ? String(profile.monthly_budget) : "",
+    foodSpend: profile?.est_food_spend != null ? String(profile.est_food_spend) : "",
+    spirit: profile?.spirituality_label ?? "",
+    hasReligion: profile?.has_religion !== false,
+    birthYear: profile?.birth_year ? String(profile.birth_year) : "",
+    sex: profile?.sex ?? "nao_informar",
+    heightCm: profile?.height_cm ? String(profile.height_cm) : "",
+    activity: profile?.activity_level ?? "nao_informar",
+    restrictions: (profile?.dietary_restrictions ?? []).join("|"),
+    pillars: [...(profile?.pillars ?? [])].sort().join("|"),
+  }), [profile]);
+
+  const dirty = !!profile && (
+    name !== savedSnapshot.name ||
+    goal !== savedSnapshot.goal ||
+    income !== savedSnapshot.income ||
+    budget !== savedSnapshot.budget ||
+    foodSpend !== savedSnapshot.foodSpend ||
+    spirit !== savedSnapshot.spirit ||
+    hasReligion !== savedSnapshot.hasReligion ||
+    birthYear !== savedSnapshot.birthYear ||
+    sex !== savedSnapshot.sex ||
+    heightCm !== savedSnapshot.heightCm ||
+    activity !== savedSnapshot.activity ||
+    restrictions.join("|") !== savedSnapshot.restrictions ||
+    [...pillars].sort().join("|") !== savedSnapshot.pillars
+  );
 
   const save = async () => {
     if (!user) return;
@@ -429,7 +467,10 @@ export default function Ajustes() {
               <Plus className="w-4 h-4" />
             </Button>
           </div>
-          <p className="text-[11px] text-muted-foreground">Lembre de tocar em "Salvar ajustes" no fim da página.</p>
+          <p className="text-[11px] text-muted-foreground">
+            Restrições, perfil e pilares entram junto no botão Salvar — o aviso aparece
+            embaixo enquanto houver algo pendente.
+          </p>
         </div>
       </Card>
 
@@ -504,8 +545,10 @@ export default function Ajustes() {
         )}
       </Card>
 
-      <Button className="w-full" onClick={save} disabled={saving}>
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar ajustes"}
+      <Button className="w-full" onClick={save} disabled={saving || !dirty}>
+        {saving
+          ? <Loader2 className="w-4 h-4 animate-spin" />
+          : dirty ? "Salvar ajustes" : "Tudo salvo"}
       </Button>
 
       {/* WhatsApp: captura por mensagem + avisos que trazem de volta ao app */}
@@ -625,7 +668,7 @@ export default function Ajustes() {
             <button
               type="button" onClick={() => deleteMemory(m.id)}
               aria-label={`Apagar memória: ${m.content}`}
-              className="text-muted-foreground hover:text-destructive shrink-0 mt-0.5"
+              className="shrink-0 -m-2 grid h-11 w-11 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
             >
               <X className="w-4 h-4" />
             </button>
@@ -721,6 +764,25 @@ export default function Ajustes() {
       <Button variant="ghost" className="w-full text-muted-foreground" onClick={signOut}>
         <LogOut className="w-4 h-4 mr-1.5" /> Sair da conta
       </Button>
+
+      {/* Barra de alterações não salvas: acompanha a rolagem e fica acima da
+          navegação flutuante do mobile (mesmo cálculo usado no Conselheiro). */}
+      {dirty && (
+        <div
+          className="fixed inset-x-0 z-20 px-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))] md:bottom-4"
+          role="status"
+        >
+          <div className="max-w-2xl mx-auto flex items-center gap-3 rounded-full glass shadow-lg shadow-black/10 py-2 pl-4 pr-2 animate-fade-up">
+            <p className="text-xs font-medium flex-1 min-w-0">
+              Alterações não salvas
+              <span className="hidden sm:inline text-muted-foreground font-normal"> — nada foi gravado ainda</span>
+            </p>
+            <Button size="sm" className="shrink-0 rounded-full" onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

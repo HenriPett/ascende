@@ -4,7 +4,7 @@ import {
   MODEL_SMART, MODEL_FAST, SAFETY_RULES, extractEventsAndMemories,
   STATEMENT_TOOL, STATEMENT_SYSTEM, normalizeStatementItems,
 } from "../_shared/lib.ts";
-import { anthropicCall, reserveUsage, releaseUsage } from "../_shared/usage.ts";
+import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage } from "../_shared/usage.ts";
 import {
   getEntitlements, limitResponse, spParts,
   spDayStartUtc, spWeekStartUtc, spMonthStartUtc,
@@ -165,8 +165,23 @@ Deno.serve(async (req) => {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
+  // Reservas de cota vivas FORA do try: o catch externo precisa devolvê-las.
+  // Antes elas só eram devolvidas nos caminhos de falha previstos, e um erro
+  // inesperado (timeout de rede, banco fora) consumia definitivamente uma
+  // análise de documento do mês — o oposto do que a mensagem promete.
+  const supabase = serviceClient();
+  const docReservations: number[] = [];
+  let chatReservation: number | null = null;
+  let chatConsumed = false;
+  const refundAll = async () => {
+    for (const r of docReservations.splice(0)) await releaseUsage(supabase, r);
+    if (chatReservation !== null && !chatConsumed) {
+      await releaseUsage(supabase, chatReservation);
+      chatReservation = null;
+    }
+  };
+
   try {
-    const supabase = serviceClient();
     const user = await requireUser(req, supabase);
     await assertRateLimit(supabase, user.id, "ai-chat", 60, 5);
     const { message, attachments } = await req.json();
@@ -203,29 +218,41 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Limites do Conselheiro — validados NO SERVIDOR, por plano, no fuso de São Paulo
-    const docReservations: number[] = [];
+    // Limites do Conselheiro — validados NO SERVIDOR, por plano, no fuso de
+    // São Paulo. A contagem saiu de chat_messages (check-depois-insert, que
+    // duas requisições simultâneas atravessavam juntas) para a reserva
+    // atômica em ai_usage sob a feature 'chat-principal' — a mesma linha que
+    // depois recebe os tokens reais da chamada, sem contagem dupla.
     const ent = await getEntitlements(supabase, user.id);
-    const countChat = async (sinceIso: string) => {
-      const { count } = await supabase.from("chat_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id).eq("role", "user").gte("created_at", sinceIso);
-      return count ?? 0;
-    };
-    if (ent.flags.premium_limits_enabled) {
-      const L = ent.limits;
-      if (L.chat_daily !== null && (await countChat(spDayStartUtc())) >= L.chat_daily) {
-        return limitResponse(req, "counselor", L.chat_daily, nextSpDayStartUtc(),
-          `Você usou as ${L.chat_daily} mensagens de hoje com o Conselheiro.`);
+    const L = ent.limits;
+    const premium = ent.flags.premium_limits_enabled;
+    const chatWindows = premium
+      ? {
+          day: { cap: L.chat_daily, since: spDayStartUtc() },
+          week: { cap: L.chat_weekly, since: spWeekStartUtc() },
+          month: { cap: L.chat_monthly, since: spMonthStartUtc() },
+        }
+      : { day: { cap: LEGACY_DAILY_LIMIT, since: spDayStartUtc() } };
+
+    const chatRes = await reserveUsageWindows(supabase, user.id, "chat-principal", chatWindows);
+    if (chatRes.id === null) {
+      if (!premium) {
+        return json({ error: `Você atingiu o limite de ${LEGACY_DAILY_LIMIT} mensagens por dia. Amanhã o Conselheiro estará aqui de novo.` }, 429);
       }
-      if (L.chat_weekly !== null && (await countChat(spWeekStartUtc())) >= L.chat_weekly) {
-        return limitResponse(req, "counselor", L.chat_weekly, nextSpWeekStartUtc(),
+      if (chatRes.window === "weekly") {
+        return limitResponse(req, "counselor", L.chat_weekly ?? 0, nextSpWeekStartUtc(),
           `Você usou as ${L.chat_weekly} mensagens desta semana com o Conselheiro.`);
       }
-      if (L.chat_monthly !== null && (await countChat(spMonthStartUtc())) >= L.chat_monthly) {
-        return limitResponse(req, "counselor", L.chat_monthly, nextSpMonthStartUtc(),
+      if (chatRes.window === "monthly") {
+        return limitResponse(req, "counselor", L.chat_monthly ?? 0, nextSpMonthStartUtc(),
           `Você usou as ${L.chat_monthly} mensagens deste mês com o Conselheiro.`);
       }
+      return limitResponse(req, "counselor", L.chat_daily ?? LEGACY_DAILY_LIMIT, nextSpDayStartUtc(),
+        `Você usou as ${L.chat_daily} mensagens de hoje com o Conselheiro.`);
+    }
+    chatReservation = chatRes.id;
+
+    if (premium) {
       // Anexos de PDF/documento fazem parte do Ascende+ (com limite mensal).
       // A cota é RESERVADA atomicamente aqui e DEVOLVIDA se a análise falhar:
       // uma tentativa fracassada nunca consome o limite (plano §3.4/§3.6).
@@ -235,7 +262,7 @@ Deno.serve(async (req) => {
         for (let i = 0; i < docCount; i++) {
           const { id } = await reserveUsage(supabase, user.id, "chat-documento", cap, spMonthStartUtc());
           if (id === null) {
-            for (const r of docReservations) await releaseUsage(supabase, r);
+            await refundAll();
             return limitResponse(req, "document_analysis", cap, nextSpMonthStartUtc(),
               cap === 0
                 ? "A análise de documentos (PDF) faz parte do Ascende+."
@@ -244,8 +271,6 @@ Deno.serve(async (req) => {
           docReservations.push(id);
         }
       }
-    } else if ((await countChat(spDayStartUtc())) >= LEGACY_DAILY_LIMIT) {
-      return json({ error: `Você atingiu o limite de ${LEGACY_DAILY_LIMIT} mensagens por dia. Amanhã o Conselheiro estará aqui de novo.` }, 429);
     }
 
     // Contexto: retrato multi-pilar + histórico recente
@@ -307,13 +332,13 @@ Deno.serve(async (req) => {
       tools: [SAVE_PLAN_TOOL, UPDATE_PROFILE_TOOL, PROPOSE_HABITS_TOOL],
       tool_choice: { type: "auto" },
       messages,
-    });
+    }, { reservationId: chatReservation });
 
     if (!res.ok || !mainData) {
       // A resposta principal falhou: nada é salvo (nem mensagem, nem memórias,
-      // nem eventos) e as reservas de análise de documento são devolvidas —
-      // tentativa fracassada não consome limite (plano §3.3/§3.4).
-      for (const r of docReservations) await releaseUsage(supabase, r);
+      // nem eventos) e TODAS as reservas são devolvidas (documento e a própria
+      // mensagem) — tentativa fracassada não consome limite (plano §3.3/§3.4).
+      await refundAll();
       return json({
         error: "O Conselheiro está indisponível agora. Sua mensagem não foi perdida: tente enviar de novo em instantes.",
         recoverable: true,
@@ -565,7 +590,7 @@ Deno.serve(async (req) => {
       reply = "Pensei em compromissos diários a partir da sua meta — escolha no cartão abaixo quais fazem sentido para você.";
     }
     if (!reply.trim()) {
-      for (const r of docReservations) await releaseUsage(supabase, r);
+      await refundAll();
       return json({
         error: "O Conselheiro não conseguiu formular uma resposta agora. Tente reformular ou enviar de novo.",
         recoverable: true,
@@ -577,6 +602,7 @@ Deno.serve(async (req) => {
       { user_id: user.id, role: "assistant", content: reply },
     ]);
     if (insertErr) console.error("chat_messages insert", insertErr);
+    chatConsumed = true; // daqui pra frente a mensagem foi entregue: cota é devida
 
     const [{ events: captured, learned }, statement] = await Promise.all([extractPromise, statementPromise]);
     return json({
@@ -586,6 +612,8 @@ Deno.serve(async (req) => {
       statement_note: statement.note,
     });
   } catch (e) {
+    // Erro inesperado (rede, banco): devolve o que foi reservado antes de sair.
+    await refundAll().catch((err) => console.error("refundAll", err));
     if (e instanceof Response) return e;
     console.error(e);
     return json({ error: "Erro interno." }, 500);
