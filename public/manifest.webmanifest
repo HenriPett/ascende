@@ -1,7 +1,8 @@
 {
-  "name": "Ascende — Suba de nível na vida real",
+  "id": "/app",
+  "name": "Ascende — O app que vê a sua vida inteira",
   "short_name": "Ascende",
-  "description": "Finanças, corpo, alimentação e mente no mesmo lugar, com uma IA que conhece o quadro inteiro.",
+  "description": "O único app que vê a sua vida inteira: corpo, dinheiro, alimentação e mente no mesmo lugar, com uma IA que conecta os pontos.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",
@@ -11,5 +12,13 @@
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Registrar meu dia",
+      "short_name": "Registrar",
+      "description": "Conte numa frase o que aconteceu hoje",
+      "url": "/app"
+    }
   ]
 }

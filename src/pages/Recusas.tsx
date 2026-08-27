@@ -6,6 +6,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import Logo from "@/components/core/Logo";
+import SiteFooter from "@/components/core/SiteFooter";
 import { ShieldCheck, ArrowRight } from "lucide-react";
 
 const RECUSAS: { title: string; detail: string }[] = [
@@ -49,9 +50,12 @@ const RECUSAS: { title: string; detail: string }[] = [
 export default function Recusas() {
   return (
     <div className="min-h-dvh bg-background bg-ether">
+      {/* Mesmo chrome da Landing (h-16, logo no tamanho padrão): quem chega
+          aqui por um link solto precisa reconhecer a mesma marca, não uma
+          página avulsa. */}
       <header className="sticky top-0 z-40 glass border-x-0 border-t-0 rounded-none">
-        <div className="container flex items-center justify-between h-14">
-          <Link to="/" aria-label="Ascende — início"><Logo size="sm" /></Link>
+        <div className="container flex items-center justify-between h-16">
+          <Link to="/" aria-label="Ascende — início"><Logo /></Link>
           <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
             Voltar ao início
           </Link>
@@ -59,7 +63,7 @@ export default function Recusas() {
       </header>
 
       <main className="container py-10 md:py-14 max-w-2xl">
-        <p className="text-xs uppercase tracking-widest text-gold mb-3 font-semibold">Nosso contrato público</p>
+        <p className="text-xs uppercase tracking-widest text-gold-ink mb-3 font-semibold">Nosso contrato público</p>
         <h1 className="font-display text-3xl md:text-4xl font-semibold leading-tight">
           O que o Ascende recusa
         </h1>
@@ -74,7 +78,7 @@ export default function Recusas() {
           {RECUSAS.map((r, i) => (
             <li key={r.title} className="rounded-xl border bg-card p-5">
               <div className="flex items-start gap-3">
-                <span className="w-7 h-7 rounded-full bg-gold/10 text-gold grid place-items-center font-display font-semibold text-sm shrink-0">
+                <span className="w-7 h-7 rounded-full bg-gold/10 text-gold-ink grid place-items-center font-display font-semibold text-sm shrink-0">
                   {i + 1}
                 </span>
                 <div>
@@ -100,7 +104,7 @@ export default function Recusas() {
 
         <div className="mt-10 text-center">
           <Button asChild size="lg">
-            <Link to="/auth">Começar grátis <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
+            <Link to="/auth?intent=signup">Começar grátis <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
           </Button>
           <p className="mt-3 text-xs text-muted-foreground">
             Dúvidas sobre dados? Veja também a{" "}
@@ -108,6 +112,11 @@ export default function Recusas() {
           </p>
         </div>
       </main>
+
+      {/* Rodapé igual ao da Landing (POSICIONAMENTO §F.3): esta página recebe
+          tráfego frio de gente que nunca viu a home — sem ele parecia órfã
+          justamente para quem chegou desconfiado. */}
+      <SiteFooter />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,11 @@ import Logo from "@/components/core/Logo";
 import { Checkbox } from "@/components/ui/checkbox";
 import { LEGAL_VERSION } from "@/lib/legal";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, MailCheck, Sparkles, Check } from "lucide-react";
+import { Loader2, MailCheck, Sparkles, Check, KeyRound } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { loadGis, makeNoncePair, isStandalone } from "@/lib/googleIdentity";
 
@@ -27,6 +30,28 @@ export default function Auth() {
   // motivação do funil não pode morrer num toast de 4 segundos.
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [resendIn, setResendIn] = useState(0);
+  const [searchParams] = useSearchParams();
+
+  // Achado 1 do funil: os CTAs da Landing prometem "criar conta grátis" e
+  // caíam na aba Entrar. A Landing passa ?intent=signup e esta tela abre
+  // direto no cadastro. Lido uma única vez: trocar de aba na mão depois
+  // não pode ser desfeito por um re-render.
+  const [initialTab] = useState(() =>
+    searchParams.get("intent") === "signup" ? "signup" : "signin"
+  );
+
+  // ── Recuperação de senha ──
+  // O e-mail de redefinição volta para /auth?recovery=1 (rota que já existe;
+  // o fluxo é "implicit", então os tokens chegam no fragmento e o supabase-js
+  // cria a sessão sozinho). O query param sobrevive a essa limpeza do hash —
+  // por isso ele, e não o hash, é o sinal de que estamos redefinindo.
+  const [recovery] = useState(() => searchParams.get("recovery") === "1");
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -45,8 +70,11 @@ export default function Auth() {
   useEffect(() => {
     // Já logado visitando /auth: rota pelo /auth/callback, que aplica o gate
     // de consentimento quando faltar e decide onboarding × app.
+    // Em modo recuperação a sessão existe de propósito (veio do link do
+    // e-mail) e a pessoa ainda precisa definir a senha nova — não roteia.
+    if (recovery) return;
     if (!authLoading && user) navigate("/auth/callback", { replace: true });
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, recovery]);
 
   // ── Login social (Fase 1: Google; Apple pronto para ligar na Fase 2) ──
   // O consentimento LGPD acontece no /auth/callback (gate) — por isso o
@@ -168,6 +196,7 @@ export default function Auth() {
   // ganhar foco; 2) senão, destrava o botão em vez de girar para sempre.
   // pageshow cobre o bfcache.
   useEffect(() => {
+    if (recovery) return;
     let checking = false;
     const onReturn = async () => {
       if (document.visibilityState !== "visible" || checking) return;
@@ -191,7 +220,44 @@ export default function Auth() {
       window.removeEventListener("focus", onReturn);
       document.removeEventListener("visibilitychange", onReturn);
     };
-  }, [navigate]);
+  }, [navigate, recovery]);
+
+  // Pede o link de redefinição. Resposta sempre igual (enviado/não enviado
+  // são indistinguíveis) para não transformar a tela num verificador de
+  // quem tem conta aqui — o app guarda coisa íntima demais para isso.
+  const sendReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (forgotLoading) return;
+    setForgotLoading(true);
+    await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+      redirectTo: `${window.location.origin}/auth?recovery=1`,
+    });
+    setForgotLoading(false);
+    setForgotSent(true);
+  };
+
+  const openForgot = () => {
+    setForgotEmail(email);
+    setForgotSent(false);
+    setForgotOpen(true);
+  };
+
+  // Sessão de recuperação já ativa: só falta gravar a senha nova.
+  const submitNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 8) { toast.error("A senha precisa ter pelo menos 8 caracteres."); return; }
+    setSavingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setSavingPassword(false);
+    if (error) {
+      toast.error("Não consegui salvar a senha nova. Peça um link novo e tente de novo.");
+      return;
+    }
+    toast.success("Senha atualizada!");
+    // Sessão válida em mãos: o callback aplica o gate de consentimento e
+    // decide onboarding × app, igual a qualquer outra entrada.
+    navigate("/auth/callback", { replace: true });
+  };
 
   const signIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,6 +314,99 @@ export default function Auth() {
       setResendIn(30);
     }
   };
+
+  // Diálogo do "esqueci minha senha" — usado na aba Entrar e também na tela
+  // de link expirado, onde pedir outro é a única saída útil.
+  const forgotDialog = (
+    <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="font-display">
+            {forgotSent ? "Link a caminho" : "Esqueceu a senha?"}
+          </DialogTitle>
+          <DialogDescription>
+            {forgotSent
+              ? "Se existir uma conta com esse e-mail, o link de redefinição chega em instantes. Confira também a caixa de spam."
+              : "Diga o e-mail da conta e enviamos um link para você criar uma senha nova."}
+          </DialogDescription>
+        </DialogHeader>
+        {forgotSent ? (
+          <Button className="w-full" onClick={() => setForgotOpen(false)}>Entendi</Button>
+        ) : (
+          <form onSubmit={sendReset} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="email-reset">E-mail</Label>
+              <Input id="email-reset" type="email" required autoComplete="email"
+                value={forgotEmail} onChange={(ev) => setForgotEmail(ev.target.value)} />
+            </div>
+            <Button type="submit" className="w-full" disabled={forgotLoading}>
+              {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Enviar link"}
+            </Button>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+
+  // ── Redefinição de senha (voltou do link do e-mail) ──
+  if (recovery) {
+    if (authLoading) {
+      return (
+        <div className="min-h-dvh grid place-items-center bg-background">
+          <div className="flex flex-col items-center gap-4">
+            <Logo size="lg" />
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="min-h-dvh grid place-items-center bg-background px-4">
+        <div className="w-full max-w-sm">
+          <Link to="/" className="flex items-center justify-center mb-6"><Logo size="lg" /></Link>
+          <Card className="p-6 space-y-4">
+            <div className="w-12 h-12 rounded-full bg-gold/10 grid place-items-center mx-auto">
+              <KeyRound className="w-6 h-6 text-gold-ink" />
+            </div>
+            {user ? (
+              <>
+                <div className="text-center">
+                  <h1 className="font-display text-xl font-semibold">Crie uma senha nova</h1>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Depois de salvar, você já entra direto — sem precisar digitar de novo.
+                  </p>
+                </div>
+                <form onSubmit={submitNewPassword} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="pass-new">Nova senha (mínimo 8 caracteres)</Label>
+                    <Input id="pass-new" type="password" required autoComplete="new-password"
+                      value={newPassword} onChange={(ev) => setNewPassword(ev.target.value)} />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={savingPassword}>
+                    {savingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar e entrar"}
+                  </Button>
+                </form>
+              </>
+            ) : (
+              <>
+                <div className="text-center">
+                  <h1 className="font-display text-xl font-semibold">Este link não vale mais</h1>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Links de redefinição expiram e só funcionam uma vez. Peça outro — leva 10 segundos.
+                  </p>
+                </div>
+                <Button className="w-full" onClick={openForgot}>Pedir um link novo</Button>
+                <Button asChild variant="ghost" className="w-full">
+                  <Link to="/auth">Voltar para o login</Link>
+                </Button>
+              </>
+            )}
+          </Card>
+          {forgotDialog}
+        </div>
+      </div>
+    );
+  }
 
   // Tela dedicada: enquanto o link não é clicado, mostramos o que espera
   // do outro lado — a motivação continua viva até o e-mail chegar.
@@ -353,7 +512,7 @@ export default function Auth() {
             <div className="h-px flex-1 bg-border" />
           </div>
 
-          <Tabs defaultValue="signin">
+          <Tabs defaultValue={initialTab}>
             <TabsList className="grid grid-cols-2 w-full mb-4">
               <TabsTrigger value="signin">Entrar</TabsTrigger>
               <TabsTrigger value="signup">Criar conta</TabsTrigger>
@@ -374,6 +533,13 @@ export default function Auth() {
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Entrar"}
                 </Button>
+                <button
+                  type="button"
+                  onClick={openForgot}
+                  className="w-full text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                >
+                  Esqueci minha senha
+                </button>
               </form>
             </TabsContent>
 
@@ -417,6 +583,7 @@ export default function Auth() {
             </TabsContent>
           </Tabs>
         </Card>
+        {forgotDialog}
         <p className="text-center text-xs text-muted-foreground mt-4">
           Seus dados são privados e você pode exportá-los ou apagá-los quando quiser.
         </p>

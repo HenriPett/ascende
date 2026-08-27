@@ -1,28 +1,62 @@
 <!doctype html>
 <html lang="pt-BR">
   <head>
-    <script src="/clarity.js"></script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-    <meta name="theme-color" content="#FCFAF4" />
+    <meta name="theme-color" content="#FCFAF4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0e0e12" media="(prefers-color-scheme: dark)" />
     <title>Ascende — O app que vê a sua vida inteira</title>
     <meta name="description" content="Seu app de dieta não sabe quanto você ganha. O Ascende monta o plano do seu corpo dentro do seu orçamento — porque é o único app que vê a sua vida inteira. Você conta seu dia numa frase; ele cuida do resto." />
+    <link rel="canonical" href="https://ascende.app/" />
+
+    <!-- Compartilhamento social (WhatsApp, X, etc.) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Ascende" />
+    <meta property="og:url" content="https://ascende.app/" />
+    <meta property="og:title" content="Ascende — O app que vê a sua vida inteira" />
+    <meta property="og:description" content="Seu app de dieta não sabe quanto você ganha. O Ascende monta o plano do seu corpo dentro do seu orçamento — porque é o único app que vê a sua vida inteira." />
+    <meta property="og:image" content="https://ascende.app/icon-512.png" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Ascende — O app que vê a sua vida inteira" />
+    <meta name="twitter:description" content="O único app que vê a sua vida inteira: corpo, dinheiro, alimentação e mente no mesmo lugar." />
+    <meta name="twitter:image" content="https://ascende.app/icon-512.png" />
 
     <!-- PWA / Adicionar à Tela de Início -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Ascende" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Outfit:wght@400;500;600;700&display=swap" />
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Ascende",
+        "url": "https://ascende.app/",
+        "description": "O único app que vê a sua vida inteira: corpo, dinheiro, alimentação e mente no mesmo lugar, com uma IA que conecta os pontos.",
+        "applicationCategory": "LifestyleApplication",
+        "operatingSystem": "Web, iOS (PWA)",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "BRL"
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Analytics no fim do body: não bloqueia o primeiro paint do herói -->
+    <script src="/clarity.js" defer></script>
   </body>
 </html>
