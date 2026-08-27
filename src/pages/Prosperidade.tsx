@@ -72,13 +72,20 @@ const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v); } ca
    gráficos e Conselheiro com valor real no primeiro dia, sem um
    único lançamento manual.
 ────────────────────────────────────────────────────────────────── */
-function RaioX({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
+function RaioX({ initialIncome, onDone, onSkip }: {
+  /** Renda já declarada (onboarding/Ajustes): entra preenchida — o Raio-X
+   *  nunca pergunta de novo o que a pessoa já contou. */
+  initialIncome?: number;
+  onDone: () => void;
+  onSkip: () => void;
+}) {
   const { user } = useAuth();
   const { refresh: refreshProfile } = useProfile();
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [income, setIncome] = useState("");
+  const knownIncome = (initialIncome ?? 0) > 0;
+  const [income, setIncome] = useState(knownIncome ? String(initialIncome) : "");
   const [salaryAsRecurring, setSalaryAsRecurring] = useState(true);
   const [fixed, setFixed] = useState<Record<number, string>>({});
   const [variable, setVariable] = useState<Record<string, string>>({});
@@ -168,7 +175,14 @@ function RaioX({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
   const steps = [
     // 0 — renda
     <div key="income" className="space-y-3">
-      <p className="text-sm font-medium">Quanto entra por mês, mais ou menos?</p>
+      <p className="text-sm font-medium">
+        {knownIncome ? "Sua renda continua essa?" : "Quanto entra por mês, mais ou menos?"}
+      </p>
+      {knownIncome && (
+        <p className="text-xs text-muted-foreground -mt-1.5">
+          Você já tinha contado — deixamos preenchido. Ajuste se mudou.
+        </p>
+      )}
       <Input inputMode="decimal" placeholder="Ex.: 4500" value={income}
         onChange={(e) => setIncome(e.target.value)} aria-label="Renda mensal aproximada (R$)" />
       <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
@@ -373,9 +387,14 @@ export default function Prosperidade() {
     () => buildMonthMap(monthlyIncome, curIncome, recurrings ?? [], composition),
     [monthlyIncome, curIncome, recurrings, composition],
   );
-  const hasAnyLayer = monthlyIncome > 0 || (estimates ?? []).length > 0 ||
+  // Renda declarada NÃO é o mês mapeado (análise UX: item 1). Quem só contou
+  // a renda no onboarding não tem gasto nenhum no mapa — mostrar "sobra para
+  // viver = renda inteira" seria mentira, e o Raio-X (o recurso que a landing
+  // vende) ficava inalcançável para exatamente essa pessoa. O que destrava o
+  // mapa e os gráficos é a CAMADA DE GASTO: fixos, estimativas ou lançamentos.
+  const hasSpendingLayer = (estimates ?? []).length > 0 ||
     (recurrings ?? []).length > 0 || (txs ?? []).length > 0;
-  const showRaiox = !isLoading && !hasAnyLayer && !raioxSkipped;
+  const showRaiox = !isLoading && !hasSpendingLayer && !raioxSkipped;
 
   // ── Dados dos gráficos ───────────────────────────────────────
   const monthKeys: string[] = [];
@@ -462,7 +481,10 @@ export default function Prosperidade() {
   // ganha o conserto em um toque — senão o saldo do mês nasce negativo.
   const [salaryFixDismissed, setSalaryFixDismissed] = useState(() => lsGet("prosperidade-salary-fix-dismiss") === "1");
   const [salaryFixSaving, setSalaryFixSaving] = useState(false);
-  const needsSalaryFix = !isLoading && monthlyIncome > 0 && curIncome === 0 &&
+  // Só faz sentido depois que o mês está mapeado: sem camada de gasto, quem
+  // resolve o salário é o próprio Raio-X (checkbox "lançar como entrada fixa"),
+  // e este card viraria só mais um alerta na cara de quem acabou de chegar.
+  const needsSalaryFix = !isLoading && hasSpendingLayer && monthlyIncome > 0 && curIncome === 0 &&
     (recurrings ?? []).every((r) => r.kind !== "income") && !salaryFixDismissed;
 
   const adoptSalaryRecurring = async () => {
@@ -589,24 +611,29 @@ export default function Prosperidade() {
       {/* ── Raio-X de 60s: o empty state que mapeia o mês ─────── */}
       {showRaiox && (
         <RaioX
+          initialIncome={monthlyIncome}
           onDone={() => { /* queries já invalidadas dentro do componente */ }}
           onSkip={() => { lsSet("prosperidade-raiox-skip", "1"); setRaioxSkipped(true); }}
         />
       )}
-      {!showRaiox && !isLoading && !hasAnyLayer && (
+      {!showRaiox && !isLoading && !hasSpendingLayer && (
         <button
           className="w-full text-left"
           onClick={() => { lsSet("prosperidade-raiox-skip", "0"); setRaioxSkipped(false); }}
         >
           <Card className="p-3 flex items-center gap-2.5 hover:bg-muted/40 transition-colors">
-            <Compass className="w-4 h-4" style={{ color: "hsl(var(--prosperidade))" }} />
-            <p className="text-sm">Fazer o <strong>Raio-X de 60s</strong> e mapear o mês sem registrar nada</p>
+            <Compass className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--prosperidade))" }} />
+            <p className="text-sm">
+              {monthlyIncome > 0
+                ? (<>Falta o outro lado: <strong>Raio-X de 60s</strong> para mapear o que sai todo mês</>)
+                : (<>Fazer o <strong>Raio-X de 60s</strong> e mapear o mês sem registrar nada</>)}
+            </p>
           </Card>
         </button>
       )}
 
       {/* ── Mapa do mês: o gráfico com valor no dia 1 ──────────── */}
-      {hasAnyLayer && monthMap.incomeExpected > 0 && (
+      {hasSpendingLayer && monthMap.incomeExpected > 0 && (
         <Card className="p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-display font-semibold">Mapa do mês</h2>
@@ -789,7 +816,7 @@ export default function Prosperidade() {
           Sua vida financeira em gráficos
         </h2>
 
-        {!hasAnyLayer ? (
+        {!hasSpendingLayer ? (
           <p className="text-sm text-muted-foreground py-4 text-center">
             Faça o Raio-X de 60s acima (ou registre um gasto) e os gráficos ganham vida hoje mesmo.
           </p>

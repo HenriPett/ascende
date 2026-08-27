@@ -21,9 +21,12 @@ import { toast } from "sonner";
 import {
   Sunrise, ChevronRight, CircleCheck, Circle, Flame, Droplet, Dumbbell, Moon, Smile,
   BookOpen, Camera, X, UserRound, ListChecks, MessageCircle, Trophy, CalendarHeart,
-  HandHeart,
+  HandHeart, ClipboardList,
 } from "lucide-react";
-import { xpToastSuffix } from "@/components/core/CaptureBar";
+import { PLAN_KIND_META } from "@/lib/blueprint";
+import {
+  xpToastSuffix, invalidateKeys, FINANCE_KEYS, LIFE_DATA_KEYS,
+} from "@/components/core/CaptureBar";
 import { levelFromXp, levelTitle } from "@/lib/xp";
 import { DEFAULT_WATER_GOAL_ML, DEFAULT_WATER_BOTTLES } from "@/hooks/useProfile";
 import { useEffect, useRef, useState } from "react";
@@ -196,7 +199,7 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
     if (error) { toast.error("Não consegui registrar o gasto."); return; }
     toast.success(`Gasto de R$ ${value.toFixed(2).replace(".", ",")} · ${category} registrado. +2 XP${xpToastSuffix()}`);
     setAmount(""); setOpen(false);
-    qc.invalidateQueries();
+    invalidateKeys(qc, FINANCE_KEYS);
   };
 
   return (
@@ -277,7 +280,7 @@ function QuickActions() {
     setSavingKey(null);
     if (error) { toast.error("Não consegui registrar."); return; }
     toast.success(okMsg + xpToastSuffix());
-    qc.invalidateQueries();
+    invalidateKeys(qc, LIFE_DATA_KEYS);
   };
 
   const addWater = (ml: number, label: string) =>
@@ -390,6 +393,61 @@ function ProfileCompleteness() {
   );
 }
 
+/* ── Seus planos ativos (análise UX item 2): o Blueprint é o clímax de um
+   onboarding de 9 blocos — e sumia atrás de dois toques (Pilares > Meus
+   planos). Aqui ele volta para a tela onde a pessoa vive, como atalho, sem
+   duplicar a gestão: ver, abrir e acompanhar continua em Meus planos. ── */
+function ActivePlans() {
+  const { user } = useAuth();
+  const { data } = useQuery({
+    queryKey: ["active-plans-hoje", user?.id],
+    enabled: !!user,
+    staleTime: 1000 * 60 * 5,
+    queryFn: async () => {
+      const { data } = await supabase.from("plans")
+        .select("id,title,kind")
+        .eq("user_id", user!.id).eq("status", "ativo")
+        .order("created_at", { ascending: false }).limit(3);
+      return (data ?? []) as { id: string; title: string; kind: string }[];
+    },
+  });
+
+  if (!data?.length) return null;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between gap-2 mb-2.5">
+        <h2 className="font-display font-semibold flex items-center gap-1.5">
+          <ClipboardList className="w-4 h-4 text-gold-ink" /> Seus planos ativos
+        </h2>
+        <Link to="/app/planos" className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0">
+          Ver todos
+        </Link>
+      </div>
+      <div className="space-y-1.5">
+        {data.map((pl) => {
+          const meta = PLAN_KIND_META[pl.kind];
+          return (
+            <Link
+              key={pl.id} to="/app/planos"
+              className="flex items-center gap-2.5 rounded-md border p-2.5 hover:bg-muted/50 transition-colors"
+            >
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ background: meta ? `hsl(var(${meta.colorVar}))` : "hsl(var(--gold))" }}
+                aria-hidden
+              />
+              <span className="text-sm flex-1 min-w-0 truncate">{pl.title}</span>
+              <span className="text-[11px] text-muted-foreground shrink-0">{meta?.label ?? "Plano"}</span>
+              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            </Link>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 /* ── Primeiros passos (2.1 + análise UX P1.1): trilha da primeira semana.
    Ordem pensada para que, ao chegar na pergunta-assinatura do Conselheiro,
    o Raio-X já exista — e a resposta venha de primeira, sem anticlímax.
@@ -466,7 +524,7 @@ function FirstSteps() {
               primeira retrospectiva da semana — quanto mais dias registrados, melhor ela fica.
             </p>
           </div>
-          <button onClick={dismiss} className="text-muted-foreground hover:text-foreground" aria-label="Concluir primeiros passos">
+          <button onClick={dismiss} className="shrink-0 -m-2 grid h-11 w-11 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Concluir primeiros passos">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -484,7 +542,7 @@ function FirstSteps() {
         </p>
         <button
           onClick={dismiss}
-          className="text-muted-foreground hover:text-foreground" aria-label="Dispensar primeiros passos"
+          className="shrink-0 -m-2 grid h-11 w-11 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Dispensar primeiros passos"
         >
           <X className="w-4 h-4" />
         </button>
@@ -561,7 +619,7 @@ function RetroCountdown() {
         </div>
         <button
           onClick={() => { localStorage.setItem("ascend-retro-preview-done", "1"); setDismissed(true); }}
-          className="text-muted-foreground hover:text-foreground" aria-label="Dispensar aviso da retrospectiva"
+          className="shrink-0 -m-2 grid h-11 w-11 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Dispensar aviso da retrospectiva"
         >
           <X className="w-4 h-4" />
         </button>
@@ -1164,33 +1222,54 @@ export default function Hoje() {
 
       {/* Ordem da tela Hoje (plano §5.5): prioridade do dia (briefing/primeiros
           passos) → captura inteligente → compromissos → indicadores principais
-          → ações rápidas → batalhas → Conselheiro → informações secundárias. */}
-      <Briefing />
-      <FirstSteps />
-      <CaptureBar />
-      <SleepCheckin />
-      <RetroCountdown />
-      <HabitsToday />
-      <DayProgress />
-      <QuickActions />
-      <WhatsappHojeCard />
-      <BattleCheckinCard />
+          → ações rápidas → batalhas → Conselheiro → informações secundárias.
+          A ordem continua a mesma; o que mudou (análise UX item 2) é a
+          HIERARQUIA: nove cartões de peso idêntico não diziam o que pede ação
+          hoje e o que é só acompanhamento. Duas seções nomeadas resolvem isso
+          sem mexer na lógica de nenhum cartão. */}
+      <section className="space-y-4" aria-labelledby="hoje-agora">
+        <h2 id="hoje-agora" className="text-xs font-semibold uppercase tracking-wider flex items-center gap-2">
+          Agora
+          <span className="ascend-line flex-1" aria-hidden />
+        </h2>
+        <Briefing />
+        <FirstSteps />
+        <CaptureBar />
+        <SleepCheckin />
+        <HabitsToday />
+        <ActivePlans />
+      </section>
 
-      <Link
-        to="/app/conselheiro"
-        className="flex items-center justify-between rounded-lg border bg-card p-4 hover:bg-muted/50 transition-colors"
-      >
-        <div>
-          <p className="text-sm font-semibold">Falar com o Conselheiro</p>
-          <p className="text-xs text-muted-foreground">
-            Ele conhece seus dados de todos os pilares — pergunte qualquer coisa.
-          </p>
-        </div>
-        <ChevronRight className="w-5 h-5 text-muted-foreground" />
-      </Link>
+      <section className="space-y-3 pt-3" aria-labelledby="hoje-acompanhamento">
+        <h2
+          id="hoje-acompanhamento"
+          className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2"
+        >
+          Acompanhamento
+          <span className="h-px flex-1 bg-border" aria-hidden />
+        </h2>
+        <DayProgress />
+        <QuickActions />
+        <RetroCountdown />
+        <WhatsappHojeCard />
+        <BattleCheckinCard />
 
-      {/* Informação secundária: completude do perfil fica por último */}
-      <ProfileCompleteness />
+        <Link
+          to="/app/conselheiro"
+          className="flex items-center justify-between rounded-lg border bg-card p-4 hover:bg-muted/50 transition-colors"
+        >
+          <div>
+            <p className="text-sm font-semibold">Falar com o Conselheiro</p>
+            <p className="text-xs text-muted-foreground">
+              Ele conhece seus dados de todos os pilares — pergunte qualquer coisa.
+            </p>
+          </div>
+          <ChevronRight className="w-5 h-5 text-muted-foreground" />
+        </Link>
+
+        {/* Informação secundária: completude do perfil fica por último */}
+        <ProfileCompleteness />
+      </section>
     </div>
   );
 }

@@ -25,6 +25,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -405,6 +406,8 @@ export default function Onboarding() {
   const chipInput = (
     list: string[], setList: (v: string[]) => void,
     value: string, setValue: (v: string) => void, placeholder: string,
+    /** id do <Label> que descreve o campo (associação para leitor de tela) */
+    inputId?: string,
   ) => (
     <div className="space-y-1.5">
       {list.length > 0 && (
@@ -421,7 +424,7 @@ export default function Onboarding() {
         </div>
       )}
       <div className="flex gap-2">
-        <Input maxLength={60} placeholder={placeholder} className="min-w-0 flex-1"
+        <Input id={inputId} maxLength={60} placeholder={placeholder} className="min-w-0 flex-1"
           value={value} onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addChip(value, list, setList, () => setValue("")); } }} />
         <Button type="button" size="icon" variant="secondary" className="shrink-0" aria-label="Adicionar"
@@ -485,6 +488,7 @@ export default function Onboarding() {
           placeholder="Antes: como você quer ser chamado(a)?" aria-label="Seu nome ou apelido" />
       )}
       <Input value={goal} onChange={(e) => setGoal(e.target.value)} maxLength={200}
+        aria-label="O que subir de nível significa para você"
         placeholder='Ex.: "Ganhar massa muscular sem estourar o orçamento"' />
       <Button className="w-full" disabled={saving} onClick={() => finishGoal(false)}>
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (<>Continuar <ArrowRight className="w-4 h-4 ml-1" /></>)}
@@ -503,14 +507,14 @@ export default function Onboarding() {
       </div>
       <div className="grid grid-cols-2 gap-2.5">
         <div className="space-y-1">
-          <p className="text-xs font-medium">Ano de nascimento</p>
-          <Input inputMode="numeric" placeholder="1995" maxLength={4} value={birthYear}
+          <Label htmlFor="ob-birth-year" className="text-xs">Ano de nascimento</Label>
+          <Input id="ob-birth-year" inputMode="numeric" placeholder="1995" maxLength={4} value={birthYear}
             onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, ""))} />
         </div>
         <div className="space-y-1">
-          <p className="text-xs font-medium">Sexo</p>
+          <Label htmlFor="ob-sex" className="text-xs">Sexo</Label>
           <Select value={sex} onValueChange={setSex}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger id="ob-sex"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="nao_informar">Prefiro não dizer</SelectItem>
               <SelectItem value="feminino">Feminino</SelectItem>
@@ -519,13 +523,13 @@ export default function Onboarding() {
           </Select>
         </div>
         <div className="space-y-1">
-          <p className="text-xs font-medium">Altura (cm)</p>
-          <Input inputMode="numeric" placeholder="172" value={heightCm}
+          <Label htmlFor="ob-height" className="text-xs">Altura (cm)</Label>
+          <Input id="ob-height" inputMode="numeric" placeholder="172" value={heightCm}
             onChange={(e) => setHeightCm(e.target.value)} />
         </div>
         <div className="space-y-1">
-          <p className="text-xs font-medium">Peso atual (kg)</p>
-          <Input inputMode="decimal" placeholder="78" value={weightKg}
+          <Label htmlFor="ob-weight" className="text-xs">Peso atual (kg)</Label>
+          <Input id="ob-weight" inputMode="decimal" placeholder="78" value={weightKg}
             onChange={(e) => setWeightKg(e.target.value)} />
         </div>
       </div>
@@ -549,9 +553,9 @@ export default function Onboarding() {
         </p>
       </div>
       <div className="space-y-1">
-        <p className="text-xs font-medium">Nível de atividade</p>
+        <Label htmlFor="ob-activity" className="text-xs">Nível de atividade</Label>
         <Select value={activity} onValueChange={setActivity}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger id="ob-activity"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="nao_informar">Não sei dizer</SelectItem>
             <SelectItem value="sedentario">Sedentário</SelectItem>
@@ -562,14 +566,14 @@ export default function Onboarding() {
         </Select>
       </div>
       <div className="space-y-1">
-        <p className="text-xs font-medium">Treinos por semana, hoje (0 se parou)</p>
-        <Input inputMode="numeric" placeholder="Ex.: 3" value={workoutsWeek}
+        <Label htmlFor="ob-workouts" className="text-xs">Treinos por semana, hoje (0 se parou)</Label>
+        <Input id="ob-workouts" inputMode="numeric" placeholder="Ex.: 3" value={workoutsWeek}
           onChange={(e) => setWorkoutsWeek(e.target.value)} />
       </div>
       <div className="space-y-1">
-        <p className="text-xs font-medium">Condições de saúde ou lesões (opcional)</p>
+        <Label htmlFor="ob-conditions" className="text-xs">Condições de saúde ou lesões (opcional)</Label>
         <p className="text-[11px] text-muted-foreground">O plano respeita o seu corpo. Ex.: "hérnia de disco", "diabetes tipo 2".</p>
-        {chipInput(conditions, setConditions, conditionInput, setConditionInput, "Adicionar condição")}
+        {chipInput(conditions, setConditions, conditionInput, setConditionInput, "Adicionar condição", "ob-conditions")}
       </div>
       {navRow(finishActivity)}
       {skipLink("Pular (o que eu já preenchi fica salvo)", finishActivity)}
@@ -585,6 +589,13 @@ export default function Onboarding() {
         </p>
       </div>
       <SleepSchedule compact onSaved={(h) => { setSleepSaved(h); next(); }} />
+      {/* Este bloco avança sozinho ao salvar a rotina — mas voltar tem que
+          existir aqui como em todos os outros (era o único passo sem saída). */}
+      <div className="flex">
+        <Button variant="ghost" onClick={back}>
+          <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
+        </Button>
+      </div>
       {skipLink("Pular — não quero declarar horários", next)}
     </div>,
 
@@ -598,25 +609,25 @@ export default function Onboarding() {
         </p>
       </div>
       <div className="space-y-1">
-        <p className="text-xs font-medium">Restrições alimentares (opcional)</p>
-        {chipInput(restrictions, setRestrictions, restrictionInput, setRestrictionInput, 'Ex.: "vegetariano", "sem lactose"')}
+        <Label htmlFor="ob-restrictions" className="text-xs">Restrições alimentares (opcional)</Label>
+        {chipInput(restrictions, setRestrictions, restrictionInput, setRestrictionInput, 'Ex.: "vegetariano", "sem lactose"', "ob-restrictions")}
       </div>
       <div className="grid grid-cols-1 gap-2.5">
         <div className="space-y-1">
-          <p className="text-xs font-medium">Quanto você gasta com comida por mês, mais ou menos? (R$)</p>
+          <Label htmlFor="ob-food-spend" className="text-xs">Quanto você gasta com comida por mês, mais ou menos? (R$)</Label>
           <p className="text-[11px] text-muted-foreground">Mercado + comida fora. Chute honesto — é premissa, não registro.</p>
-          <Input inputMode="numeric" placeholder="Ex.: 800" value={foodSpend}
+          <Input id="ob-food-spend" inputMode="numeric" placeholder="Ex.: 800" value={foodSpend}
             onChange={(e) => setFoodSpend(e.target.value)} />
         </div>
         <div className="grid grid-cols-2 gap-2.5">
           <div className="space-y-1">
-            <p className="text-xs font-medium">Renda mensal (R$)</p>
-            <Input inputMode="numeric" placeholder="Ex.: 3200" value={income}
+            <Label htmlFor="ob-income" className="text-xs">Renda mensal (R$)</Label>
+            <Input id="ob-income" inputMode="numeric" placeholder="Ex.: 3200" value={income}
               onChange={(e) => setIncome(e.target.value)} />
           </div>
           <div className="space-y-1">
-            <p className="text-xs font-medium">Teto de gastos (R$)</p>
-            <Input inputMode="numeric" placeholder="Ex.: 2800" value={budget}
+            <Label htmlFor="ob-budget" className="text-xs">Teto de gastos (R$)</Label>
+            <Input id="ob-budget" inputMode="numeric" placeholder="Ex.: 2800" value={budget}
               onChange={(e) => setBudget(e.target.value)} />
           </div>
         </div>
@@ -643,6 +654,7 @@ export default function Onboarding() {
         </p>
       </div>
       <Input maxLength={80} placeholder='Ex.: "Apostas" (deixe vazio para pular)'
+        aria-label="Nome da batalha que você quer vencer (opcional)"
         value={battleName} onChange={(e) => setBattleName(e.target.value)} />
       {navRow(finishBattle)}
       {skipLink("Pular — batalhas podem ser criadas depois", next)}
@@ -858,10 +870,24 @@ export default function Onboarding() {
   return (
     <div className="min-h-dvh grid place-items-center bg-background px-4 py-8">
       <Card className="w-full max-w-md p-6">
-        <div className="flex gap-1 mb-4" aria-label={`Passo ${step + 1} de ${TOTAL_STEPS}`}>
-          {Array.from({ length: TOTAL_STEPS }, (_, i) => (
-            <div key={i} className={cn("h-1 flex-1 rounded-full", i <= step ? "bg-gold" : "bg-muted")} />
-          ))}
+        {/* Progresso legível, não só decorativo: 9 traços sem número não dizem
+            quanto falta — e a landing prometeu "2 minutos". */}
+        <div className="mb-4 space-y-1.5">
+          <p className="text-xs font-medium text-muted-foreground">
+            Passo {step + 1} de {TOTAL_STEPS}
+          </p>
+          <div
+            className="flex gap-1"
+            role="progressbar"
+            aria-valuemin={1}
+            aria-valuemax={TOTAL_STEPS}
+            aria-valuenow={step + 1}
+            aria-label={`Passo ${step + 1} de ${TOTAL_STEPS}`}
+          >
+            {Array.from({ length: TOTAL_STEPS }, (_, i) => (
+              <div key={i} className={cn("h-1 flex-1 rounded-full", i <= step ? "bg-gold" : "bg-muted")} />
+            ))}
+          </div>
         </div>
 
         {/* Seu retrato: o valor visível de cada resposta (Emenda 4, condição a) */}

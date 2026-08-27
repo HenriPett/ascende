@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,6 +27,45 @@ import StatementReview, { findStatementDuplicates, useStatementConfirm } from "@
 /* Exemplos coerentes com os TRACKERS ativos da pessoa (modularidade total):
    quem desligou o tracker de água não vê "Tomei 2 copos de água" como
    exemplo. A lista vem de captureExamplesForTrackers(). */
+
+/* ─── Invalidação dirigida ────────────────────────────────────────────────
+   Havia 26 chamadas de `qc.invalidateQueries()` sem chave espalhadas pelo
+   app. Sem chave, o React Query refaz TODAS as consultas em cache: a pessoa
+   confirma um registro e o app inteiro recarrega, no 4G, para atualizar dois
+   números. As listas abaixo dizem o que cada tipo de gravação realmente
+   invalida — perfil, conversa do Conselheiro, planos, briefing e link do
+   WhatsApp não mudam ao registrar um copo de água, e agora ficam quietos.
+
+   TODO: isto deveria morar em `src/lib/queryKeys.ts` como registro único,
+   junto com os pontos ainda não migrados (Prosperidade, Vitalidade, Mente,
+   Alimentacao, Batalhas, Chat, Onboarding, StatementReview, BattleCheckin). */
+
+/** O que muda a cada registro, seja ele qual for: XP, progresso do dia,
+ *  indicadores e os cartões de retorno/sequência da tela Hoje. */
+const DAILY_KEYS = [
+  "day-progress", "xp", "score-data", "pillar-activity", "active-streak",
+  "first-steps", "retro-preview", "return-gap", "return-standing",
+  "wa-hoje-has-events",
+] as const;
+
+/** Lançamento financeiro (transactions). */
+export const FINANCE_KEYS = [
+  ...DAILY_KEYS, "transactions-6m", "category-estimates", "recurring-transactions",
+] as const;
+
+/** Registro de sono (life_events kind=sleep|nap). */
+export const SLEEP_KEYS = [...DAILY_KEYS, "sleep-today", "vitalidade"] as const;
+
+/** Registro de vida genérico — a captura pode produzir qualquer tipo. */
+export const LIFE_DATA_KEYS = [
+  ...DAILY_KEYS, "habits-today", "water-today", "sleep-today", "meals",
+  "mind-events", "vitalidade", "weights", "transactions-6m",
+  "category-estimates", "recurring-transactions", "battles-today", "battles",
+] as const;
+
+export function invalidateKeys(qc: QueryClient, keys: readonly string[]) {
+  for (const key of keys) qc.invalidateQueries({ queryKey: [key] });
+}
 
 /** Explica o XP uma única vez, no primeiro registro da vida do usuário
  *  (análise UX P2.3): "+4 XP" sem contexto não significa nada no dia 1. */
@@ -167,7 +206,7 @@ export default function CaptureBar({
       setText("");
       setImage(null);
       setProposed(null);
-      qc.invalidateQueries();
+      invalidateKeys(qc, [...LIFE_DATA_KEYS, "entitlements"]);
       onConfirmed?.(selected.length);
     } catch {
       toast.error("Não consegui salvar. Tente de novo.");

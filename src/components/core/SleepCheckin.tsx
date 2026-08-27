@@ -8,6 +8,7 @@
 // o ajuste rápido de horas, sem juízo.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateKeys, SLEEP_KEYS } from "@/components/core/CaptureBar";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -80,7 +81,7 @@ export default function SleepCheckin() {
         : `Sono registrado: ${formatWindowHours(hours)}. +5 XP`
     );
     dismiss();
-    qc.invalidateQueries();
+    invalidateKeys(qc, SLEEP_KEYS);
   };
 
   const followedYes = () => log(scheduleHours!, true);
