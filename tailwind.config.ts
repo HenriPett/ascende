@@ -56,7 +56,14 @@ export default {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-up": "fade-up 0.35s ease-out both",
+        // `forwards`, não `both` (achado de QA ao vivo): `both` aplica o
+        // keyframe `from` (opacity:0) ANTES da animação começar a rodar. Numa
+        // aba em segundo plano, num PWA suspenso ou em qualquer contexto que
+        // atrase o início da animação, o conteúdo fica invisível para sempre
+        // — nunca chega a rodar. Com `forwards`, o elemento nasce com sua
+        // opacidade natural (1) e só a troca por uma transição quando a
+        // animação de fato inicia; sem ela, nada quebra visualmente.
+        "fade-up": "fade-up 0.35s ease-out forwards",
       },
     },
   },

@@ -42,13 +42,26 @@ export default function Paywall({
   const resetLabel = info.reset_at
     ? formatSP(info.reset_at, { day: "2-digit", month: "2-digit" })
     : null;
+  // O título dizia sempre "limite de hoje", mas o limite atingido pode ser
+  // diário, semanal ou mensal (o corpo da mensagem já vem certo do backend,
+  // achado de QA ao vivo: as duas informações se contradiziam na mesma tela).
+  // Sem um campo de período explícito no payload, a distância até o reset
+  // já entrega o período real com folga suficiente para não confundir dia
+  // com semana nem semana com mês.
+  const daysUntilReset = info.reset_at
+    ? (new Date(info.reset_at).getTime() - Date.now()) / 86_400_000
+    : null;
+  const periodLabel = daysUntilReset === null ? "de agora"
+    : daysUntilReset <= 1.5 ? "de hoje"
+    : daysUntilReset <= 9 ? "desta semana"
+    : "deste mês";
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-gold" /> Você chegou no limite de hoje — e ele existe de propósito
+            <Sparkles className="w-5 h-5 text-gold" /> Você chegou no limite {periodLabel} — e ele existe de propósito
           </DialogTitle>
           <DialogDescription>
             {info.error} {resetLabel && <>Renova em <strong>{resetLabel}</strong>.</>}

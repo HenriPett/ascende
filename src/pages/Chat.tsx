@@ -401,7 +401,7 @@ export default function Chat() {
   };
 
   return (
-    <div className="fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top,0px))] bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))] z-10 md:static md:z-auto md:h-[calc(100dvh-7.5rem)]">
+    <div className="fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top,0px))] bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))] z-10 lg:static lg:z-auto lg:h-[calc(100dvh-7.5rem)]">
       <div className="h-full w-full max-w-2xl mx-auto flex flex-col min-h-0 px-4 pt-3 md:px-0 md:pt-0">
       <div className="mb-2 shrink-0">
         <h1 className="font-display text-xl md:text-2xl font-semibold">Conselheiro</h1>

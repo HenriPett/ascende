@@ -970,8 +970,7 @@ function Briefing() {
       {isError && (
         <p className="text-sm opacity-90">
           O briefing não carregou agora — sem problema, o resto do app segue normal.
-          Ele volta ao recarregar a página. (Se for a primeira vez, confira se as funções
-          de IA foram publicadas — passo 4 do README.)
+          Ele volta ao recarregar a página.
         </p>
       )}
       {/* Sem cadeado como primeira mensagem: o card muda de assunto e entrega
@@ -1001,6 +1000,13 @@ function Briefing() {
             </p>
           )}
         </div>
+      )}
+      {/* Rede de segurança (achado de QA ao vivo): query resolveu, não é locked,
+          mas briefing veio vazio (ex.: ainda sem dado suficiente) — o card não
+          pode ficar sem corpo nenhum, só com o título. Mesmo conteúdo local do
+          modo locked, sem o convite ao Ascende+ (a pessoa já tem acesso). */}
+      {!isLoading && !isError && !locked && !data?.briefing && (
+        <p className="text-sm leading-relaxed opacity-90">{DAILY_FOCUS[new Date().getDay()]}</p>
       )}
     </Card>
   );
