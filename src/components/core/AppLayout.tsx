@@ -94,8 +94,12 @@ export default function AppLayout() {
             <Logo size="sm" />
           </Link>
 
-          {/* Navegação desktop */}
-          <nav className="hidden md:flex items-center gap-1" aria-label="Principal">
+          {/* Navegação desktop. Breakpoint em `lg` (1024px), não `md` (768px):
+              achado de QA ao vivo — entre 768-840px (iPad em retrato incluído)
+              o header não tinha largura para logo + 5 itens + ações à direita
+              sem colidir. Abaixo de 1024px a pílula flutuante inferior assume
+              (já testada sem overflow em nenhum viewport). */}
+          <nav className="hidden lg:flex items-center gap-1" aria-label="Principal">
             {NAV.map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to} to={to} end={end}
@@ -122,13 +126,14 @@ export default function AppLayout() {
       </header>
 
       {/* `tabIndex={-1}` para que o skip-link consiga pousar o foco aqui. */}
-      <main id="conteudo" tabIndex={-1} className="container pb-32 md:pb-10 pt-5 focus:outline-none">
+      <main id="conteudo" tabIndex={-1} className="container pb-32 lg:pb-10 pt-5 focus:outline-none">
         <Outlet />
       </main>
 
-      {/* Navegação inferior mobile — pílula de cristal flutuante */}
+      {/* Navegação inferior mobile/tablet — pílula de cristal flutuante.
+          Some só em `lg` (1024px), acompanhando a navegação desktop acima. */}
       <nav
-        className="md:hidden fixed bottom-3 inset-x-3 z-30 max-w-md mx-auto rounded-full glass shadow-lg shadow-black/10"
+        className="lg:hidden fixed bottom-3 inset-x-3 z-30 max-w-md mx-auto rounded-full glass shadow-lg shadow-black/10"
         style={{ marginBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Principal"
       >
