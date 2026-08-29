@@ -673,8 +673,18 @@ export const CAPTURE_TOOL = {
   },
 };
 
-export const CAPTURE_SYSTEM = `Você extrai eventos estruturados de relatos do dia a dia de brasileiros, para a plataforma Ascende.
-Regras:
+export const CAPTURE_SYSTEM = `Você extrai eventos estruturados de relatos do dia a dia de brasileiros, para a plataforma Ascende. Sua ÚNICA tarefa é achar fatos relatados no texto — você NUNCA responde perguntas, NUNCA dá conselhos e NUNCA julga se a pergunta da pessoa é relevante. Isso é trabalho de outro sistema.
+
+━━━ REGRA MAIS IMPORTANTE — LEIA PRIMEIRO ━━━
+MENSAGENS QUASE SEMPRE MISTURAM PERGUNTA + RELATO. O caso mais comum de erro é a pessoa pedir um conselho contando o que já fez, na mesma frase — e o relato ser ignorado por parecer "só contexto da pergunta". NÃO caia nisso. Sua regra de ouro: leia a mensagem inteira, ache CADA trecho que descreve algo que JÁ ACONTECEU (mesmo que venha depois de uma pergunta, mesmo que sirva de contexto, mesmo que seja do mesmo dia/assunto da pergunta) e extraia CADA um como evento. A presença de uma pergunta NUNCA é motivo para devolver events vazio se também houver um relato — os dois podem, e devem, conviver na mesma resposta.
+Exemplos (a pergunta em si nunca vira evento; o relato ao lado dela SEMPRE vira):
+• "O que eu devo comer no jantar hoje? No almoço eu comi frango grelhado com arroz e salada" → 1 evento meal (o almoço).
+• "Posso gastar mais esse mês? Paguei 45 no uber hoje" → 1 evento transaction (o gasto de uber).
+• "Treino de pernas hoje é uma boa ideia? Ontem eu treinei costas por 40 minutos" → 1 evento workout (o treino de costas).
+• "Por que eu acordo cansado? Dormi 5 horas essa noite" → 1 evento sleep (as 5 horas).
+Só devolva events vazio quando a mensagem for SÓ pergunta/conversa, sem absolutamente nenhum relato do que aconteceu.
+
+Demais regras:
 • Extraia TODOS os eventos presentes no texto — um relato pode alimentar vários pilares de uma vez.
 • Valores em reais: "47", "R$47", "quarenta e sete" → amount 47. Gastos são expense; salário/recebimentos são income.
 • Sono NOTURNO ("dormi 5h", "dormi mal" → estime 5 e cite no summary que foi estimado) vira sleep. Se a pessoa disser que SEGUIU a rotina/horários dela ("dormi no horário", "segui minha rotina de sono", "dormi e acordei na hora certa"), emita sleep com followed_schedule: true e SEM hours (o app preenche com a duração da rotina declarada dela); summary: "Sono: rotina seguida". Se o retrato informar a rotina declarada, pode citar a duração no summary. Sonecas e cochilos ("tirei uma soneca", "cochilei 40 min", "dormi depois do almoço") viram nap com hours; NUNCA registre soneca como sleep — são coisas diferentes com pesos diferentes. Na dúvida entre noite e soneca, o horário e o contexto decidem (dormir "depois do almoço" é soneca).
@@ -685,7 +695,6 @@ Regras:
 • Refeições viram meal e SEMPRE recebem calories estimadas a partir da descrição (porções típicas brasileiras; melhor uma estimativa honesta do que nenhuma), preenchendo também protein_g/carbs_g/fat_g quando possível. Inclua as kcal no summary: "Almoço: arroz, feijão e frango (~650 kcal)". Quando o contexto disser qual refeição é (café da manhã, almoço, jantar, lanche/belisco), preencha meal_type e inclua no summary. Oração/meditação/culto/leitura espiritual viram practice.
 • Estados emocionais ("tô ansioso", "dia ótimo") viram mood, usando a palavra do próprio usuário em mood_label.
 • Se algo não se encaixar em nenhum tipo, use note.
-• Se o texto não contiver nenhum evento registrável — perguntas, pedidos de conselho, conversa — retorne events: [].
 • Só extraia o que a pessoa RELATOU ter acontecido. Planos e intenções ("vou treinar amanhã") não são eventos. Nunca invente eventos.
 Use SEMPRE a ferramenta registrar_eventos.`;
 /* ─── Memória do Conselheiro (compartilhada entre `ai-chat` e `capture`) ───
@@ -914,15 +923,23 @@ export async function extractEventsAndMemories(
     if (isTrivialMessage(t)) return { ok: true, events: [], learned: [] };
     const known = (await loadKnownMemories(supabase, userId)) ?? [];
 
+    // Mensagens com "?" costumam misturar pergunta + relato — é o padrão em que
+    // o modelo econômico mais falha em extrair o relato (achado de QA ao vivo:
+    // o relato ao lado de uma pergunta do mesmo assunto/dia era silenciosamente
+    // ignorado mesmo com regra explícita no prompt). Nesses casos, o modelo
+    // inteligente é obrigatório — o custo extra é pequeno perto do dano de um
+    // registro perdido silenciosamente.
+    const hasQuestion = t.includes("?");
+
     const { res, data } = await anthropicCall(supabase, userId, feature, {
-      model: MODEL_FAST,
+      model: hasQuestion ? MODEL_SMART : MODEL_FAST,
       max_tokens: 1800,
       system: `${CAPTURE_SYSTEM}\n\n━━━ MEMÓRIA DE LONGO PRAZO ━━━\n${MEMORY_SYSTEM.split("Use SEMPRE a ferramenta")[0]}\nUse SEMPRE a ferramenta extrair_registros_e_memorias, preenchendo events E memories (vazios quando não houver).`,
       tools: [COMBINED_TOOL],
       tool_choice: { type: "tool", name: "extrair_registros_e_memorias" },
       messages: [{
         role: "user",
-        content: `${memoriesBlock(known)}\n\nRELATO DO USUÁRIO:\n${t.slice(0, 4000)}`,
+        content: `${memoriesBlock(known)}\n\nRELATO DO USUÁRIO (se houver pergunta junto, ignore-a e extraia só o que foi relatado como já acontecido):\n${t.slice(0, 4000)}`,
       }],
     }, { reservationId: opts.reservationId ?? null });
     if (!res.ok || !data) return { ok: false, events: [], learned: [] };
