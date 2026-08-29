@@ -376,8 +376,12 @@ export default function Prosperidade() {
     const k = monthKey(t.occurred_at);
     return k > mx ? k : mx;
   }, nowKey);
-  const viewMonthLabel = new Date(viewMonth + "-02T00:00:00")
+  // Só a primeira letra maiúscula (achado de QA ao vivo): a classe CSS
+  // `capitalize` maiusculiza CADA palavra, incluindo a preposição — "Agosto
+  // De 2026" em vez de "Agosto de 2026".
+  const viewMonthLabelRaw = new Date(viewMonth + "-02T00:00:00")
     .toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const viewMonthLabel = viewMonthLabelRaw.charAt(0).toUpperCase() + viewMonthLabelRaw.slice(1);
   const monthlyIncome = Number(profile?.monthly_income ?? 0);
   const composition = useMemo(
     () => composeVariableMonth(expensesByCategory(txs ?? [], nowKey), estimates ?? []),
@@ -727,7 +731,7 @@ export default function Prosperidade() {
           aria-label="Mês anterior">
           <ChevronLeft className="w-4 h-4" />
         </Button>
-        <button className="text-sm font-medium capitalize disabled:cursor-default"
+        <button className="text-sm font-medium disabled:cursor-default"
           disabled={viewMonth === nowKey}
           onClick={() => setViewMonth(nowKey)}
           title={viewMonth !== nowKey ? "Voltar ao mês atual" : undefined}>
@@ -1047,7 +1051,7 @@ export default function Prosperidade() {
 
       {/* Lista do mês */}
       <Card className="p-4">
-        <h2 className="font-display font-semibold mb-3 capitalize">Lançamentos · {viewMonthLabel}</h2>
+        <h2 className="font-display font-semibold mb-3">Lançamentos · {viewMonthLabel}</h2>
         {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
         {!isLoading && !monthTxs.length && (
           <p className="text-sm text-muted-foreground">
