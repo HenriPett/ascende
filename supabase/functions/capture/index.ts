@@ -28,6 +28,49 @@ const IMG_TYPES = ["image/jpeg", "image/png", "image/webp"];
 // deduplicação melhor). Acima do limite, devolvemos o convite, não a lista.
 const STATEMENT_REDIRECT_ITEMS = 25;
 
+/* ─── Rastro da captura no histórico do Conselheiro ───────────────────────
+   ESPELHO de whatsapp-webhook/index.ts (se mudar lá, mude aqui). Mesmo bug,
+   mesmo formato: registrar pela tela Hoje não deixava vestígio em
+   chat_messages, então o Conselheiro do app também ficava cego para o que a
+   pessoa acabara de registrar e, pressionado, podia inventar o detalhe que
+   faltava. A promessa do produto é que a conversa é UMA só (app e WhatsApp),
+   então o rastro precisa ser o mesmo nos dois canais.
+
+   Diferença honesta entre os canais: no WhatsApp o servidor confirma e sabe o
+   que foi para o diário; aqui a confirmação acontece no cliente (a pessoa
+   desmarca o que não quer), então a linha diz o que foi PROPOSTO e aponta o
+   retrato como fonte do que de fato entrou. Nunca escrevemos "registrei" para
+   algo que ainda pode ser desmarcado. */
+const spStamp = () => new Intl.DateTimeFormat("pt-BR", {
+  timeZone: TZ, day: "2-digit", month: "2-digit",
+  hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+}).format(new Date());
+
+const eventBullets = (events: AnyEvent[]) => events.slice(0, 12)
+  .map((e) => `• ${String(e?.summary ?? e?.kind ?? "registro").slice(0, 160)}`).join("\n");
+
+/** Grava o relato da pessoa e o que foi proposto no histórico compartilhado
+ *  com o Conselheiro. Best-effort: falhar aqui não pode derrubar a captura. */
+async function pushCaptureHistory(
+  // deno-lint-ignore no-explicit-any
+  supabase: any, userId: string, userText: string, events: AnyEvent[],
+): Promise<void> {
+  try {
+    const relato = String(userText ?? "").trim();
+    if (!relato || !events.length) return; // sem relato ou sem nada registrável, não há o que lembrar
+    const { error } = await supabase.from("chat_messages").insert([
+      { user_id: userId, role: "user", content: relato.slice(0, 4000) },
+      {
+        user_id: userId, role: "assistant",
+        content: `[registro no diário · ${spStamp()}] A partir do que você contou, propus na tela Hoje:\n${eventBullets(events)}\n(O que você confirmou aparece no retrato.)`.slice(0, 4000),
+      },
+    ]);
+    if (error) console.error("captura: histórico", error.message ?? error);
+  } catch (e) {
+    console.error("captura: histórico", e);
+  }
+}
+
 /* ─── Aderência ao plano ativo ────────────────────────────────────────────
    Quando o relato traz refeição ou treino e a pessoa TEM um plano ativo
    daquela área, um comentário curto fecha o ciclo: o plano deixa de ser um
@@ -266,6 +309,7 @@ Deno.serve(async (req) => {
         }
       }
       const events = Array.isArray(inp.events) ? inp.events : [];
+      await pushCaptureHistory(supabase, user.id, text, events);
       // Foto de prato vira meal e print de treino vira workout: o comentário
       // de aderência vale aqui exatamente como no caminho de texto.
       const commentary = await planAdherenceComment(supabase, user.id, events);
@@ -280,6 +324,7 @@ Deno.serve(async (req) => {
       await refund();
       return json({ error: "Não consegui interpretar agora. Tente de novo em instantes — a tentativa não contou no seu limite." }, 502);
     }
+    await pushCaptureHistory(supabase, user.id, text, events);
     const commentary = await planAdherenceComment(supabase, user.id, events);
     return json({ events, learned, commentary });
   } catch (e) {

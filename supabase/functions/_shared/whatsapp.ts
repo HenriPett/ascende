@@ -238,8 +238,21 @@ export async function saveEventsServer(
     if (ev.mood_score) payload.score = ev.mood_score;
     if (ev.kind === "gratitude" && ev.description) payload.text = ev.description;
     payload.summary = ev.summary ?? "";
+    // Registro retroativo ("ontem eu almocei..."): o ramo de transaction acima
+    // já respeitava a data do evento, mas life_events caía sempre no default
+    // now() do banco, então "ontem" virava hoje.
+    // Só sobrescrevemos quando a data vem no evento E é anterior a hoje: para
+    // o dia corrente o instante REAL do registro vale mais (é ele que situa a
+    // refeição no retrato, e é o que a aderência ao plano usa). Data futura é
+    // ignorada pelo mesmo motivo que no ramo de transaction.
+    // Meio-dia como âncora: sem hora informada, qualquer horário dentro do dia
+    // serve, e 12:00 nunca escorrega para o dia vizinho ao ser lido em SP
+    // (o Brasil não usa mais horário de verão desde 2019).
+    const evDay = String(ev.occurred_at ?? "").slice(0, 10);
+    const retroDay = /^\d{4}-\d{2}-\d{2}$/.test(evDay) && evDay < todayIso ? evDay : null;
     const { error } = await supabase.from("life_events").insert({
       user_id: userId, pillar: ev.pillar, kind: ev.kind, payload, source: "whatsapp",
+      ...(retroDay ? { occurred_at: `${retroDay}T12:00:00-03:00` } : {}),
     });
     if (error) { console.error("wa save event", error.message); continue; }
     saved++; xp += xpForKind(ev.kind);
