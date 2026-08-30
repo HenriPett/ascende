@@ -3,15 +3,25 @@ import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription,
+} from "@/components/ui/drawer";
 import { Markdown } from "@/components/core/Markdown";
+import PlanSections from "@/components/core/PlanSections";
+import { isSectionedKind } from "@/lib/planSections";
 import { toast } from "sonner";
-import { ClipboardList, MessageCircle, Archive, ArchiveRestore, Trash2, ChevronRight } from "lucide-react";
+import {
+  ClipboardList, MessageCircle, Archive, ArchiveRestore, Trash2, ChevronRight,
+  UtensilsCrossed, Dumbbell, Coins, Repeat,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 interface Plan {
   id: string;
@@ -29,11 +39,52 @@ const KIND_LABEL: Record<string, string> = {
 const KIND_VAR: Record<string, string> = {
   alimentar: "--alimentacao", treino: "--vitalidade", financeiro: "--prosperidade", rotina: "--mente",
 };
+const KIND_ICON: Record<string, LucideIcon> = {
+  alimentar: UtensilsCrossed, treino: Dumbbell, financeiro: Coins, rotina: Repeat,
+};
+
+/* Alimentar e treino ganham seção própria na lista: são os planos que a pessoa
+ * consulta e ajusta toda semana, e agora têm visualização por item. Os demais
+ * seguem juntos em "Outros planos" — separá-los em quatro grupos de uma linha
+ * cada só espalharia a tela. Arquivados nunca entram nos grupos por tipo: um
+ * plano guardado não é "o seu plano alimentar" (recomendação da Prisma). */
+const GROUPS: { id: string; label: string; hint: string; match: (kind: string) => boolean }[] = [
+  {
+    id: "alimentar",
+    label: "Plano alimentar",
+    hint: "cada refeição separada, e editável",
+    match: (k) => k === "alimentar",
+  },
+  {
+    id: "treino",
+    label: "Plano de treino",
+    hint: "cada dia separado, e editável",
+    match: (k) => k === "treino",
+  },
+  {
+    id: "outros",
+    label: "Outros planos",
+    hint: "financeiro, rotina e demais",
+    match: (k) => k !== "alimentar" && k !== "treino",
+  },
+];
+
+const kindColor = (kind: string) =>
+  KIND_VAR[kind] ? `hsl(var(${KIND_VAR[kind]}))` : "hsl(var(--gold))";
+const kindTint = (kind: string) =>
+  KIND_VAR[kind] ? `hsl(var(${KIND_VAR[kind]}) / 0.12)` : "hsl(var(--gold) / 0.12)";
+
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
 
 export default function Planos() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [open, setOpen] = useState<Plan | null>(null);
+  const isMobile = useIsMobile();
+  // Guardamos o ID, não o objeto: depois de editar uma seção a lista é
+  // refeita, e o plano aberto precisa mostrar o conteúdo NOVO. Com o objeto
+  // congelado no estado, a tela continuaria exibindo a versão anterior.
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const { data: plans, isLoading } = useQuery({
     queryKey: ["plans", user?.id],
@@ -45,11 +96,13 @@ export default function Planos() {
     },
   });
 
+  const open = (plans ?? []).find((p) => p.id === openId) ?? null;
+
   const setStatus = async (plan: Plan, status: "ativo" | "arquivado") => {
     const { error } = await supabase.from("plans").update({ status }).eq("id", plan.id);
     if (error) { toast.error("Não consegui atualizar."); return; }
     toast.success(status === "arquivado" ? "Plano arquivado." : "Plano reativado.");
-    setOpen(null);
+    setOpenId(null);
     qc.invalidateQueries({ queryKey: ["plans"] });
   };
 
@@ -57,26 +110,41 @@ export default function Planos() {
     const { error } = await supabase.from("plans").delete().eq("id", plan.id);
     if (error) { toast.error("Não consegui excluir."); return; }
     toast.success("Plano excluído.");
-    setOpen(null);
+    setOpenId(null);
     qc.invalidateQueries({ queryKey: ["plans"] });
   };
 
-  const active = (plans ?? []).filter((p) => p.status === "ativo");
-  const archived = (plans ?? []).filter((p) => p.status === "arquivado");
+  /** Grava o markdown remontado por PlanSections. O componente só sai do modo
+   *  de edição quando isto devolve `true`: falha de rede não pode apagar o
+   *  texto que a pessoa acabou de escrever. */
+  const saveContent = async (plan: Plan, nextContent: string): Promise<boolean> => {
+    const { error } = await supabase.from("plans").update({ content: nextContent }).eq("id", plan.id);
+    if (error) {
+      toast.error("Não consegui salvar a alteração. Seu texto continua aqui — tente de novo.");
+      return false;
+    }
+    toast.success("Alteração salva no plano.");
+    qc.invalidateQueries({ queryKey: ["plans"] });
+    return true;
+  };
+
+  const all = plans ?? [];
+  const active = all.filter((p) => p.status === "ativo");
+  const archived = all.filter((p) => p.status === "arquivado");
 
   const PlanRow = ({ p }: { p: Plan }) => {
-    const hsl = KIND_VAR[p.kind] ? `hsl(var(${KIND_VAR[p.kind]}))` : "hsl(var(--gold))";
+    const Icon = KIND_ICON[p.kind] ?? ClipboardList;
     return (
-      <button onClick={() => setOpen(p)} className="w-full text-left">
+      <button onClick={() => setOpenId(p.id)} className="w-full text-left">
         <Card className="flex items-center gap-3 p-3.5 hover:bg-muted/40 transition-colors">
           <div className="w-10 h-10 rounded-md grid place-items-center shrink-0"
-            style={{ background: `${hsl.slice(0, -1)} / 0.12)` }}>
-            <ClipboardList className="w-5 h-5" style={{ color: hsl }} />
+            style={{ background: kindTint(p.kind) }}>
+            <Icon className="w-5 h-5" style={{ color: kindColor(p.kind) }} />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate">{p.title}</p>
             <p className="text-xs text-muted-foreground">
-              {KIND_LABEL[p.kind] ?? "Plano"} · {new Date(p.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
+              {KIND_LABEL[p.kind] ?? "Plano"} · {formatDate(p.created_at)}
             </p>
           </div>
           {p.status === "arquivado" && <Badge variant="secondary" className="text-[10px] shrink-0">arquivado</Badge>}
@@ -86,8 +154,68 @@ export default function Planos() {
     );
   };
 
+  const GroupHeading = ({ label, hint, count }: { label: string; hint?: string; count: number }) => (
+    <div className="flex items-baseline gap-2 px-0.5">
+      <h2 className="font-display text-sm font-semibold">{label}</h2>
+      <span className="text-xs text-muted-foreground min-w-0 truncate">
+        {count > 1 && <>{count} planos{hint ? " · " : ""}</>}
+        {hint}
+      </span>
+    </div>
+  );
+
+  // Corpo do plano aberto: seccionado para alimentar/treino, documento
+  // inteiro para o resto (financeiro, rotina, outro) — sem regressão.
+  const detailBody = open && (
+    isSectionedKind(open.kind)
+      ? (
+        <PlanSections
+          key={open.id}
+          content={open.content}
+          kind={open.kind}
+          onSave={(next) => saveContent(open, next)}
+        />
+      )
+      : <Markdown content={open.content} doc />
+  );
+
+  const detailMeta = open && (
+    <div className="flex items-center gap-2 pt-0.5">
+      <span className="inline-flex items-center text-[11px] font-semibold rounded-full px-2.5 py-0.5"
+        style={{ background: kindTint(open.kind), color: kindColor(open.kind) }}>
+        {KIND_LABEL[open.kind] ?? "Plano"}
+      </span>
+      <span className="text-xs text-muted-foreground">criado em {formatDate(open.created_at)}</span>
+      {open.status === "arquivado" && (
+        <Badge variant="secondary" className="text-[10px]">arquivado</Badge>
+      )}
+    </div>
+  );
+
+  const detailActions = open && (
+    <div className="flex flex-wrap gap-2 justify-end pt-2 border-t shrink-0">
+      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => remove(open)}>
+        <Trash2 className="w-4 h-4 mr-1" /> Excluir
+      </Button>
+      {open.status === "ativo" ? (
+        <Button variant="outline" size="sm" onClick={() => setStatus(open, "arquivado")}>
+          <Archive className="w-4 h-4 mr-1" /> Arquivar
+        </Button>
+      ) : (
+        <Button variant="outline" size="sm" onClick={() => setStatus(open, "ativo")}>
+          <ArchiveRestore className="w-4 h-4 mr-1" /> Reativar
+        </Button>
+      )}
+      <Button asChild size="sm">
+        <Link to="/app/conselheiro">
+          <MessageCircle className="w-4 h-4 mr-1" /> Ajustar com o Conselheiro
+        </Link>
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl mx-auto space-y-5 animate-fade-up">
       <div>
         <h1 className="font-display text-2xl font-semibold">Meus planos</h1>
         <p className="text-sm text-muted-foreground">
@@ -97,7 +225,7 @@ export default function Planos() {
 
       {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
 
-      {!isLoading && !(plans ?? []).length && (
+      {!isLoading && !all.length && (
         <Card className="p-6 text-center space-y-3">
           <ClipboardList className="w-8 h-8 mx-auto text-muted-foreground" />
           <div>
@@ -115,67 +243,56 @@ export default function Planos() {
         </Card>
       )}
 
-      {active.length > 0 && (
-        <div className="space-y-2">
-          {active.map((p) => <PlanRow key={p.id} p={p} />)}
-        </div>
-      )}
+      {/* Ativos, agrupados por tipo */}
+      {GROUPS.map((g) => {
+        const rows = active.filter((p) => g.match(p.kind));
+        if (!rows.length) return null;
+        return (
+          <section key={g.id} className="space-y-2">
+            <GroupHeading label={g.label} hint={g.hint} count={rows.length} />
+            {rows.map((p) => <PlanRow key={p.id} p={p} />)}
+          </section>
+        );
+      })}
 
       {archived.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground pt-2">Arquivados</p>
+        <section className="space-y-2">
+          <GroupHeading label="Arquivados" count={archived.length} />
           {archived.map((p) => <PlanRow key={p.id} p={p} />)}
-        </div>
+        </section>
       )}
 
-      {/* Detalhe do plano */}
-      <Dialog open={!!open} onOpenChange={(v) => !v && setOpen(null)}>
-        <DialogContent className="max-w-lg max-h-[85dvh] flex flex-col">
-          <DialogHeader className="shrink-0">
-            <DialogTitle className="pr-6 break-words font-display">{open?.title}</DialogTitle>
-            <DialogDescription asChild>
-              <div className="flex items-center gap-2 pt-0.5">
-                {open && (
-                  <span className="inline-flex items-center text-[11px] font-semibold rounded-full px-2.5 py-0.5"
-                    style={{
-                      background: `${(KIND_VAR[open.kind] ? `hsl(var(${KIND_VAR[open.kind]})` : "hsl(var(--gold)")} / 0.14)`,
-                      color: KIND_VAR[open.kind] ? `hsl(var(${KIND_VAR[open.kind]}))` : "hsl(var(--gold))",
-                    }}>
-                    {KIND_LABEL[open.kind] ?? "Plano"}
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  {open && `criado em ${new Date(open.created_at).toLocaleDateString("pt-BR")}`}
-                </span>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto text-sm pr-1">
-            {open && <Markdown content={open.content} doc />}
-          </div>
-          {open && (
-            <div className="flex flex-wrap gap-2 justify-end pt-2 border-t shrink-0">
-              <Button variant="ghost" size="sm" className="text-destructive" onClick={() => remove(open)}>
-                <Trash2 className="w-4 h-4 mr-1" /> Excluir
-              </Button>
-              {open.status === "ativo" ? (
-                <Button variant="outline" size="sm" onClick={() => setStatus(open, "arquivado")}>
-                  <Archive className="w-4 h-4 mr-1" /> Arquivar
-                </Button>
-              ) : (
-                <Button variant="outline" size="sm" onClick={() => setStatus(open, "ativo")}>
-                  <ArchiveRestore className="w-4 h-4 mr-1" /> Reativar
-                </Button>
-              )}
-              <Button asChild size="sm">
-                <Link to="/app/conselheiro">
-                  <MessageCircle className="w-4 h-4 mr-1" /> Ajustar com o Conselheiro
-                </Link>
-              </Button>
+      {/* Detalhe do plano.
+          No celular vira gaveta quase inteira: um plano é documento, e editar
+          um textarea com o teclado aberto dentro de um diálogo de 85dvh fica
+          apertado demais (recomendação da Prisma). */}
+      {isMobile ? (
+        <Drawer open={!!open} onOpenChange={(v) => !v && setOpenId(null)}>
+          <DrawerContent className="h-[92dvh] flex flex-col">
+            <DrawerHeader className="text-left shrink-0 pb-2">
+              <DrawerTitle className="pr-6 break-words font-display">{open?.title}</DrawerTitle>
+              <DrawerDescription asChild><div>{detailMeta}</div></DrawerDescription>
+            </DrawerHeader>
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 text-sm">
+              {detailBody}
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            <div className="shrink-0 px-4 pb-3 safe-bottom">{detailActions}</div>
+          </DrawerContent>
+        </Drawer>
+      ) : (
+        <Dialog open={!!open} onOpenChange={(v) => !v && setOpenId(null)}>
+          <DialogContent className="max-w-lg max-h-[85dvh] flex flex-col">
+            <DialogHeader className="shrink-0">
+              <DialogTitle className="pr-6 break-words font-display">{open?.title}</DialogTitle>
+              <DialogDescription asChild><div>{detailMeta}</div></DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 min-h-0 overflow-y-auto text-sm pr-1">
+              {detailBody}
+            </div>
+            {detailActions}
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

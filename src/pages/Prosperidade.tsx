@@ -35,14 +35,13 @@ import {
   CATEGORIES, VARIABLE_CATEGORIES, FIXED_SUGGESTIONS,
   type Tx, type CategoryEstimate, type RecurringTx,
   composeVariableMonth, buildMonthMap, estimatedMonthlyNet,
-  buildCalibration, expensesByCategory,
+  buildCalibration, expensesByCategory, cycleKey, cycleRangeLabel, daysSinceCycleStart,
 } from "@/lib/prosperidade";
 import {
   ResponsiveContainer, ComposedChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine,
 } from "recharts";
 
-const monthKey = (iso: string) => iso.slice(0, 7);
 const monthLabel = (key: string) =>
   new Date(key + "-02T00:00:00").toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
 
@@ -280,6 +279,13 @@ export default function Prosperidade() {
   const { profile, refresh: refreshProfile } = useProfile();
   const qc = useQueryClient();
 
+  // Ciclo financeiro customizável (TODO do fundador): cycleDay ausente/1 é
+  // IDÊNTICO ao mês civil de sempre — só quem configura um dia em Ajustes é
+  // afetado. `monthKey` local substitui o antigo `iso.slice(0, 7)` cru em
+  // TODOS os pontos deste arquivo que bucketizam por mês.
+  const cycleDay = profile?.financial_cycle_day ?? 1;
+  const monthKey = (iso: string) => cycleKey(iso, cycleDay);
+
   const [kind, setKind] = useState<"expense" | "income">("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Mercado");
@@ -300,7 +306,17 @@ export default function Prosperidade() {
   // Navegação entre meses (cards de resumo + lista de lançamentos).
   // Para trás: até a janela de 6 meses dos gráficos; para frente: até onde
   // houver lançamentos (parcelas futuras importadas da fatura, por exemplo).
-  const [viewMonth, setViewMonth] = useState(() => monthKey(todayISO()));
+  // Inicializa em mês civil (profile ainda não carregou); se a pessoa tiver
+  // um ciclo customizado, o efeito abaixo corrige para o ciclo real assim
+  // que o perfil chega — só na primeira vez, sem atrapalhar navegação depois.
+  const [viewMonth, setViewMonth] = useState(() => todayISO().slice(0, 7));
+  const [cycleSynced, setCycleSynced] = useState(false);
+  useEffect(() => {
+    if (cycleSynced || !profile) return;
+    setCycleSynced(true);
+    if (cycleDay !== 1) setViewMonth(monthKey(todayISO()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, cycleSynced]);
 
   // Materialização lazy dos recorrentes: roda no máximo 1x por usuário/mês
   // (a função respeita exclusões: lançamento apagado não "renasce").
@@ -318,9 +334,12 @@ export default function Prosperidade() {
     queryKey: ["transactions-6m", user?.id],
     enabled: !!user,
     queryFn: async () => {
+      // 6 meses de janela para os gráficos + 1 de folga: com ciclo financeiro
+      // customizado (achado do TODO), o início do ciclo mais antigo pode cair
+      // até 27 dias antes do mês civil correspondente.
       const { y, m } = spParts();
-      const startM = m - 5 <= 0 ? m + 7 : m - 5;
-      const startY = m - 5 <= 0 ? y - 1 : y;
+      const startM = m - 6 <= 0 ? m + 6 : m - 6;
+      const startY = m - 6 <= 0 ? y - 1 : y;
       const startIso = `${startY}-${String(startM).padStart(2, "0")}-01`;
       const { data } = await supabase.from("transactions").select("*")
         .eq("user_id", user!.id).gte("occurred_at", startIso)
@@ -376,16 +395,13 @@ export default function Prosperidade() {
     const k = monthKey(t.occurred_at);
     return k > mx ? k : mx;
   }, nowKey);
-  // Só a primeira letra maiúscula (achado de QA ao vivo): a classe CSS
-  // `capitalize` maiusculiza CADA palavra, incluindo a preposição — "Agosto
-  // De 2026" em vez de "Agosto de 2026".
-  const viewMonthLabelRaw = new Date(viewMonth + "-02T00:00:00")
-    .toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  const viewMonthLabel = viewMonthLabelRaw.charAt(0).toUpperCase() + viewMonthLabelRaw.slice(1);
+  // Rótulo do período: nome do mês civil (ciclo padrão) ou a faixa exata do
+  // ciclo customizado ("10 ago – 09 set") — já sai com a maiúscula certa.
+  const viewMonthLabel = cycleRangeLabel(viewMonth, cycleDay);
   const monthlyIncome = Number(profile?.monthly_income ?? 0);
   const composition = useMemo(
-    () => composeVariableMonth(expensesByCategory(txs ?? [], nowKey), estimates ?? []),
-    [txs, estimates, nowKey],
+    () => composeVariableMonth(expensesByCategory(txs ?? [], nowKey, cycleDay), estimates ?? []),
+    [txs, estimates, nowKey, cycleDay],
   );
   const monthMap = useMemo(
     () => buildMonthMap(monthlyIncome, curIncome, recurrings ?? [], composition),
@@ -401,11 +417,10 @@ export default function Prosperidade() {
   const showRaiox = !isLoading && !hasSpendingLayer && !raioxSkipped;
 
   // ── Dados dos gráficos ───────────────────────────────────────
+  // Ancorado no ciclo corrente (nowKey), não no mês civil cru: com ciclo
+  // customizado, os últimos 6 "meses" são os últimos 6 CICLOS.
   const monthKeys: string[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
-    monthKeys.push(d.toISOString().slice(0, 7));
-  }
+  for (let i = 5; i >= 0; i--) monthKeys.push(shiftMonthKey(nowKey, -i));
   const evolution = monthKeys.map((k) => {
     const ms = (txs ?? []).filter((t) => monthKey(t.occurred_at) === k);
     const inc = ms.filter((t) => t.kind === "income").reduce((s, t) => s + Number(t.amount), 0);
@@ -417,7 +432,7 @@ export default function Prosperidade() {
   // Comparativo por categoria: com 2+ meses reais, este mês × anterior;
   // antes disso, real × previsto (a estimativa é o orçamento da categoria).
   const prevKey = monthKeys[monthKeys.length - 2];
-  const catTotals = (key: string) => expensesByCategory(txs ?? [], key);
+  const catTotals = (key: string) => expensesByCategory(txs ?? [], key, cycleDay);
   const curCats = catTotals(nowKey);
   const prevCats = catTotals(prevKey);
   const hasTwoRealMonths = monthsWithData.filter((m) => m.key !== nowKey).length >= 1 &&
@@ -457,15 +472,17 @@ export default function Prosperidade() {
     }
   }
 
-  // Calibração do fechamento: primeiros 7 dias do mês, comparando o mês
-  // anterior (estimado × real). Pergunta, não bronca.
-  const dayOfMonth = spParts().day;
+  // Calibração do fechamento: primeiros 7 dias do CICLO (não necessariamente
+  // do mês civil), comparando o ciclo anterior (estimado × real). Pergunta,
+  // não bronca.
+  const { y: spY, m: spM, day: spDay } = spParts();
+  const dayOfCycle = daysSinceCycleStart(new Date(spY, spM - 1, spDay), cycleDay);
   const calibKey = `prosperidade-calib-${nowKey}`;
   const calibration = useMemo(
     () => buildCalibration(prevCats, estimates ?? []),
     [prevCats, estimates],
   );
-  const showCalibration = dayOfMonth <= 7 && calibration.length > 0 &&
+  const showCalibration = dayOfCycle <= 7 && calibration.length > 0 &&
     !calibDismissed && lsGet(calibKey) !== "1" && hasTwoRealMonths;
 
   const applyCalibration = async (categoryName: string, newAmount: number) => {

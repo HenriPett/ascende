@@ -45,6 +45,7 @@ export default function Ajustes() {
   const [goal, setGoal] = useState("");
   const [income, setIncome] = useState("");
   const [budget, setBudget] = useState("");
+  const [cycleDay, setCycleDay] = useState("");
   const [foodSpend, setFoodSpend] = useState("");
   const [spirit, setSpirit] = useState("");
   const [hasReligion, setHasReligion] = useState(true);
@@ -63,6 +64,7 @@ export default function Ajustes() {
     setGoal(profile.goal ?? "");
     setIncome(profile.monthly_income != null ? String(profile.monthly_income) : "");
     setBudget(profile.monthly_budget != null ? String(profile.monthly_budget) : "");
+    setCycleDay(profile.financial_cycle_day != null ? String(profile.financial_cycle_day) : "");
     setFoodSpend(profile.est_food_spend != null ? String(profile.est_food_spend) : "");
     setSpirit(profile.spirituality_label ?? "");
     setHasReligion(profile.has_religion !== false);
@@ -88,6 +90,7 @@ export default function Ajustes() {
     goal: profile?.goal ?? "",
     income: profile?.monthly_income != null ? String(profile.monthly_income) : "",
     budget: profile?.monthly_budget != null ? String(profile.monthly_budget) : "",
+    cycleDay: profile?.financial_cycle_day != null ? String(profile.financial_cycle_day) : "",
     foodSpend: profile?.est_food_spend != null ? String(profile.est_food_spend) : "",
     spirit: profile?.spirituality_label ?? "",
     hasReligion: profile?.has_religion !== false,
@@ -104,6 +107,7 @@ export default function Ajustes() {
     goal !== savedSnapshot.goal ||
     income !== savedSnapshot.income ||
     budget !== savedSnapshot.budget ||
+    cycleDay !== savedSnapshot.cycleDay ||
     foodSpend !== savedSnapshot.foodSpend ||
     spirit !== savedSnapshot.spirit ||
     hasReligion !== savedSnapshot.hasReligion ||
@@ -123,6 +127,7 @@ export default function Ajustes() {
       goal: goal.trim() || null,
       monthly_income: income ? Number(income) : null,
       monthly_budget: budget ? Number(budget) : null,
+      financial_cycle_day: cycleDay && Number(cycleDay) >= 1 && Number(cycleDay) <= 28 ? Number(cycleDay) : null,
       est_food_spend: foodSpend ? Number(foodSpend) : null,
       spirituality_label: hasReligion ? (spirit.trim() || null) : null,
       has_religion: hasReligion,
@@ -353,6 +358,16 @@ export default function Ajustes() {
             <Label htmlFor="budget">Teto de gastos (R$)</Label>
             <Input id="budget" type="number" min="0" value={budget} onChange={(e) => setBudget(e.target.value)} />
           </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="cycle-day">Dia de virada do ciclo financeiro</Label>
+          <Input id="cycle-day" type="number" min="1" max="28" placeholder="1 (padrão: mês civil)"
+            value={cycleDay} onChange={(e) => setCycleDay(e.target.value.replace(/\D/g, "").slice(0, 2))} />
+          <p className="text-[11px] text-muted-foreground">
+            Se o seu "mês" financeiro não começa no dia 1 (ex.: fatura ou salário fecham
+            todo dia 10), diga o dia aqui. Gastos e gráficos passam a virar de ciclo nesse
+            dia em vez do calendário civil. Deixe em branco para manter o mês civil.
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="food-spend">Gasto mensal com comida (R$)</Label>

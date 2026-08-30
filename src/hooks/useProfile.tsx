@@ -33,6 +33,8 @@ export interface Profile {
   spirituality_label: string | null;
   monthly_income: number | null;
   monthly_budget: number | null;
+  /** Dia do mês em que o ciclo financeiro vira (1-28). Null/1 = mês civil. */
+  financial_cycle_day: number | null;
   goal: string | null;
   onboarded: boolean;
   water_goal_ml: number | null;

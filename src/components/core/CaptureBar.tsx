@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Sparkles, Loader2, Check, X, Mic, MicOff, Camera, Image as ImageIcon } from "lucide-react";
+import { Sparkles, Loader2, Check, X, Mic, MicOff, Camera, ClipboardCheck, Image as ImageIcon } from "lucide-react";
 import { pillarById } from "@/lib/pillars";
 import { useProfile } from "@/hooks/useProfile";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
@@ -95,6 +95,10 @@ export default function CaptureBar({
   const [proposed, setProposed] = useState<ProposedEvent[] | null>(null);
   const [limitInfo, setLimitInfo] = useState<PlanLimitError | null>(null);
   const [learned, setLearned] = useState<LearnedMemory[] | null>(null);
+  /* Comentário de aderência ao plano ativo (refeição/treino), vindo do
+     capture. Só existe quando a pessoa TEM plano da área e o relato
+     conversa com ele; vive junto da proposta e sai com ela. */
+  const [commentary, setCommentary] = useState<string | null>(null);
   const [checked, setChecked] = useState<boolean[]>([]);
   // Print de fatura/comprovante direto na captura (Fatura em toda IA):
   const [image, setImage] = useState<{ name: string; data: string } | null>(null);
@@ -132,6 +136,7 @@ export default function CaptureBar({
     markSeen("hoje-captura"); // usou a função: a dica não é mais necessária
     setLoading(true);
     setLearned(null);
+    setCommentary(null);
     setStatementItems(null);
     try {
       const { data, error } = await supabase.functions.invoke("capture", {
@@ -173,6 +178,7 @@ export default function CaptureBar({
         return;
       }
       setProposed(events);
+      setCommentary((data?.commentary as string | undefined)?.trim() || null);
       // Modularidade total: evento de tracker desligado chega DESMARCADO
       // (a pessoa mencionou, então propor respeita a frase dela; gravar
       // por padrão, não).
@@ -206,6 +212,7 @@ export default function CaptureBar({
       setText("");
       setImage(null);
       setProposed(null);
+      setCommentary(null);
       invalidateKeys(qc, [...LIFE_DATA_KEYS, "entitlements"]);
       onConfirmed?.(selected.length);
     } catch {
@@ -318,8 +325,16 @@ export default function CaptureBar({
               </label>
             );
           })}
+          {/* Aderência ao plano ativo: o plano deixa de ser documento parado e
+              comenta o dia. Lida ANTES de confirmar, de propósito. */}
+          {commentary && (
+            <p className="flex items-start gap-2 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-[13px] leading-snug text-muted-foreground">
+              <ClipboardCheck className="w-3.5 h-3.5 mt-0.5 shrink-0 text-gold" aria-hidden />
+              <span className="min-w-0 break-words">{commentary}</span>
+            </p>
+          )}
           <div className="flex gap-2 justify-end pt-1">
-            <Button variant="ghost" onClick={() => setProposed(null)} disabled={saving}>
+            <Button variant="ghost" onClick={() => { setProposed(null); setCommentary(null); }} disabled={saving}>
               <X className="w-4 h-4 mr-1" /> Cancelar
             </Button>
             <Button onClick={confirm} disabled={saving}>
