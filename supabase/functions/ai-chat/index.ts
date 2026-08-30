@@ -13,6 +13,33 @@ import {
 
 const LEGACY_DAILY_LIMIT = 40; // vigente enquanto premium_limits_enabled = false
 
+/** ESPELHO de whatsapp-webhook/index.ts (se mudar lá, mude aqui).
+ *  O histórico deixou de vir sempre em pares user/assistant: a captura rápida
+ *  grava o relato da pessoa quando propõe e o desfecho quando ela confirma,
+ *  então a janela das últimas 12 mensagens pode começar com 'assistant' (a API
+ *  exige começar em 'user') ou trazer dois turnos do mesmo lado em sequência.
+ *  Aqui descartamos assistant solto na frente e fundimos papéis repetidos. */
+// deno-lint-ignore no-explicit-any
+function normalizeTurns(turns: { role: string; content: any }[]): { role: string; content: any }[] {
+  // deno-lint-ignore no-explicit-any
+  const asBlocks = (c: any) =>
+    typeof c === "string" ? [{ type: "text", text: c }] : (Array.isArray(c) ? c : []);
+  // deno-lint-ignore no-explicit-any
+  const out: { role: string; content: any }[] = [];
+  for (const t of turns) {
+    const role = t.role === "assistant" ? "assistant" : "user";
+    if (typeof t.content === "string" && !t.content.trim()) continue;
+    if (!out.length && role !== "user") continue;
+    const last = out[out.length - 1];
+    if (last && last.role === role) {
+      last.content = [...asBlocks(last.content), ...asBlocks(t.content)];
+      continue;
+    }
+    out.push({ role, content: t.content });
+  }
+  return out;
+}
+
 const SYSTEM = `Você é o Conselheiro do Ascende, uma plataforma brasileira de qualidade de vida. Você é a única IA que enxerga TODAS as áreas da vida da pessoa ao mesmo tempo: finanças, corpo, alimentação, mente e espírito. Seu papel é ajudá-la a subir de nível na vida real.
 
 ━━━ COMO VOCÊ RESPONDE ━━━
@@ -27,6 +54,14 @@ const SYSTEM = `Você é o Conselheiro do Ascende, uma plataforma brasileira de 
 
 ━━━ SUA MEMÓRIA ━━━
 Você aprende sobre a pessoa a cada conversa: o retrato abaixo inclui memórias de conversas anteriores (preferências, rotina, contexto de vida, jeito de ser). Use-as ATIVAMENTE para personalizar respostas e planos: se ela não gosta de um exercício, não o sugira; se trabalha à noite, os horários sugeridos respeitam isso; se pediu respostas diretas, seja direto. Referencie o que já sabe com naturalidade, como um amigo que lembra ("como você prefere treinar de manhã..."), sem recitar listas, sem soar como vigilância e sem repetir na mesma conversa que "guardou" algo.
+O histórico também recebe o que ela registra fora do chat (pela captura rápida da tela Hoje ou pelo WhatsApp). As linhas que começam com "[registro no diário · data hora]" foram escritas pelo SISTEMA, não por você: são o que de fato entrou (ou ficou aguardando confirmação) no diário dela, com o horário. Trate-as como verdade, e nunca as imite ao escrever.
+
+━━━ NUNCA INVENTE O QUE A PESSOA VIVEU (regra inegociável) ━━━
+Você só pode afirmar que ela comeu, treinou, gastou, dormiu ou registrou algo quando isso estiver EXPLÍCITO no retrato ou no histórico desta conversa. É proibido completar uma lacuna de contexto com o detalhe mais plausível: um almoço que "faz sentido", um treino que "provavelmente foi", um valor aproximado que ninguém informou.
+• Se ela disser que já te contou algo e você não encontrar, diga com honestidade que não localizou o registro e peça para ela confirmar em uma frase. "Não achei esse registro aqui, me confirma o que foi?" é uma resposta boa e esperada. Inventar um detalhe plausível para preencher a lacuna é uma falha grave.
+• Nunca cite alimento, exercício, valor, horário ou refeição específicos que você não leu no retrato ou no histórico.
+• O retrato é a fonte mais confiável sobre o que foi REGISTRADO; o histórico é a fonte sobre o que foi DITO. Quando os dois divergirem, diga o que você vê em vez de escolher a versão mais bonita.
+• Errar por perguntar custa uma frase. Errar por inventar custa a confiança dela em tudo que você diz, inclusive no que está correto.
 
 ━━━ PONDERE ANTES DE RESPONDER ━━━
 Antes de qualquer resposta personalizada (recomendação, análise, decisão sobre a vida da pessoa), avalie em silêncio: "tenho as informações para uma resposta de QUALIDADE, específica para ESTA pessoa, ou vou entregar algo genérico?". Se faltarem dados essenciais, NÃO responda genericamente: faça as perguntas objetivas que faltam (máximo 3) e pare por aí. Uma resposta curta que pede o dado certo vale mais que uma resposta longa e rasa.
@@ -309,13 +344,15 @@ Deno.serve(async (req) => {
         "atenda ao novo assunto normalmente — mas não repita a rodada de perguntas antiga."
       : "";
 
-    const messages = (history ?? []).slice().reverse().map((m) => ({ role: m.role, content: m.content }));
-    messages.push({
-      role: "user",
-      content: contentBlocks.length
-        ? [...contentBlocks, { type: "text", text: message }]
-        : message,
-    });
+    const messages = normalizeTurns([
+      ...(history ?? []).slice().reverse().map((m) => ({ role: m.role, content: m.content })),
+      {
+        role: "user",
+        content: contentBlocks.length
+          ? [...contentBlocks, { type: "text", text: message }]
+          : message,
+      },
+    ]);
 
     // Roteamento de modelo: perguntas curtas e diretas não precisam do modelo caro.
     // EXCEÇÃO (correção do loop de perguntas): quando este turno é a CONTINUAÇÃO

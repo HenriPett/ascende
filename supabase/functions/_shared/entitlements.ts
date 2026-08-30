@@ -21,12 +21,16 @@ function spOffsetMinutes(d: Date): number {
 export function spParts(d = new Date()) {
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", weekday: "short",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   });
   const parts = Object.fromEntries(fmt.formatToParts(d).map((p) => [p.type, p.value]));
   return {
     y: Number(parts.year), m: Number(parts.month), day: Number(parts.day),
     weekday: String(parts.weekday), // Sun..Sat
     dateIso: `${parts.year}-${parts.month}-${parts.day}`,
+    /** Hora local de São Paulo, "HH:MM" — usada para carimbar registros no
+     *  retrato da IA (uma refeição sem horário não conversa com o plano). */
+    timeHm: `${parts.hour}:${parts.minute}`,
   };
 }
 
