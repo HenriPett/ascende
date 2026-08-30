@@ -192,12 +192,60 @@ export function buildCalibration(
   return rows.sort((a, b) => Math.abs(b.real - b.estimated) - Math.abs(a.real - a.estimated));
 }
 
-/** Soma despesas por categoria dentro de um mês (chave 'YYYY-MM'). */
-export function expensesByCategory(txs: Tx[], monthKey: string): Record<string, number> {
+/** Soma despesas por categoria dentro de um mês/ciclo (chave 'YYYY-MM'). */
+export function expensesByCategory(txs: Tx[], monthKey: string, cycleDay?: number | null): Record<string, number> {
   const map: Record<string, number> = {};
   for (const t of txs) {
-    if (t.kind !== "expense" || t.occurred_at.slice(0, 7) !== monthKey) continue;
+    if (t.kind !== "expense" || cycleKey(t.occurred_at, cycleDay) !== monthKey) continue;
     map[t.category] = (map[t.category] ?? 0) + Number(t.amount);
   }
   return map;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Ciclo financeiro customizável (TODO do fundador): por padrão o "mês"
+   é o mês civil (dia 1 ao último dia). Quem tem salário/fatura fechando
+   em outro dia pode declarar um `financial_cycle_day` (1-28) — o ciclo
+   vira nesse dia, e tudo que hoje é bucketizado por mês civil (mapa do
+   mês, gráficos, lista de lançamentos) passa a respeitar o ciclo dele.
+   cycleDay ausente/1 é IDÊNTICO ao comportamento anterior — ninguém que
+   não configurar nada é afetado.
+────────────────────────────────────────────────────────────────── */
+
+const clampCycleDay = (cycleDay?: number | null): number =>
+  cycleDay && cycleDay >= 2 && cycleDay <= 28 ? Math.round(cycleDay) : 1;
+
+/** Chave do ciclo ('YYYY-MM') a que uma data (YYYY-MM-DD) pertence: o mês em
+ *  que o ciclo COMEÇOU. Com cycleDay=1 é idêntico a `iso.slice(0, 7)`. */
+export function cycleKey(iso: string, cycleDay?: number | null): string {
+  const day = clampCycleDay(cycleDay);
+  if (day === 1) return iso.slice(0, 7);
+  const [y, m, dd] = iso.slice(0, 10).split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, dd));
+  d.setUTCDate(d.getUTCDate() - (day - 1));
+  return d.toISOString().slice(0, 7);
+}
+
+/** Rótulo do período: nome do mês civil (cycleDay=1) ou faixa "10 ago – 09 set". */
+export function cycleRangeLabel(key: string, cycleDay?: number | null): string {
+  const day = clampCycleDay(cycleDay);
+  const [y, m] = key.split("-").map(Number);
+  if (day === 1) {
+    const raw = new Date(y, m - 1, 2).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+  const start = new Date(y, m - 1, day);
+  const end = new Date(y, m, day - 1);
+  const fmt = (d: Date) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
+  return `${fmt(start)} – ${fmt(end)}`;
+}
+
+/** Quantos dias já se passaram desde o início do ciclo corrente (1 = primeiro
+ *  dia do ciclo). Com cycleDay=1, é sempre igual ao dia do mês civil. */
+export function daysSinceCycleStart(today: Date, cycleDay?: number | null): number {
+  const day = clampCycleDay(cycleDay);
+  if (day === 1) return today.getDate();
+  let start = new Date(today.getFullYear(), today.getMonth(), day);
+  if (start.getTime() > today.getTime()) start = new Date(today.getFullYear(), today.getMonth() - 1, day);
+  return Math.floor((today.getTime() - start.getTime()) / 86_400_000) + 1;
 }

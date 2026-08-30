@@ -1184,3 +1184,11 @@ revoke all on function public.wa_pair_clear(text) from anon, authenticated;
 -- Continua SEM security definer de propósito: roda como o usuário, então o
 -- RLS de xp_log garante que ninguém lê o total de outra conta.
 grant execute on function public.xp_total(uuid) to authenticated;
+
+-- ─── 31. CICLO FINANCEIRO CUSTOMIZÁVEL (TODO do fundador) ───────
+-- Dia do mês em que o "mês financeiro" vira (ex.: 10 = ciclo de 10/mês a
+-- 09/mês seguinte). NULL ou 1 = mês civil de sempre (comportamento atual,
+-- ninguém é afetado por padrão). Validado no cliente (1-28); sem CHECK aqui
+-- para não travar backfill futuro por engano.
+alter table public.profiles
+  add column if not exists financial_cycle_day int;
