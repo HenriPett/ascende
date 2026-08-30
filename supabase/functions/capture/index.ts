@@ -12,12 +12,14 @@
 // descartada — nada fica armazenado (página /recusas).
 import {
   serviceClient, requireUser, assertRateLimit, corsFor, isTrivialMessage,
-  extractEventsAndMemories,
+  extractEventsAndMemories, SAFETY_RULES,
   MODEL_FAST, CAPTURE_TOOL, CAPTURE_SYSTEM,
   STATEMENT_TOOL, STATEMENT_SYSTEM, normalizeStatementItems,
 } from "../_shared/lib.ts";
 import { anthropicCall, reserveUsage, releaseUsage } from "../_shared/usage.ts";
-import { getEntitlements, spDayStartUtc, nextSpDayStartUtc, limitResponse, spParts } from "../_shared/entitlements.ts";
+import { getEntitlements, spDayStartUtc, nextSpDayStartUtc, limitResponse, spParts, TZ } from "../_shared/entitlements.ts";
+// deno-lint-ignore no-explicit-any
+type AnyEvent = Record<string, any>;
 
 const MAX_IMG_B64 = 7_000_000;   // ~5 MB de imagem
 const IMG_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -25,6 +27,131 @@ const IMG_TYPES = ["image/jpeg", "image/png", "image/webp"];
 // o caminho certo é a importação (que tem contrato de cota próprio e
 // deduplicação melhor). Acima do limite, devolvemos o convite, não a lista.
 const STATEMENT_REDIRECT_ITEMS = 25;
+
+/* ─── Aderência ao plano ativo ────────────────────────────────────────────
+   Quando o relato traz refeição ou treino e a pessoa TEM um plano ativo
+   daquela área, um comentário curto fecha o ciclo: o plano deixa de ser um
+   documento parado em "Meus planos" e passa a conversar com o dia.
+
+   Três decisões que valem registro:
+   • NÃO consome cota nova (nenhum reserveUsage): é valor agregado sobre uma
+     captura que a pessoa já pagou, não uma feature cobrável à parte. A
+     chamada continua aparecendo em ai_usage sob 'capture-aderencia' para o
+     custo permanecer auditável.
+   • É BEST-EFFORT: qualquer falha vira null e a captura segue intacta. O
+     comentário é um bônus; perder o registro do dia por causa dele seria
+     trocar o essencial pelo acessório.
+   • O horário em São Paulo entra no prompt porque é ele que dá sentido à
+     comparação: "almocei pão com salame" às 12h30 conversa com o almoço do
+     plano, a mesma frase às 23h conversa com outra coisa. */
+const ADHERENCE_MAX_PLAN_CHARS = 3000;
+const ADHERENCE_MAX_EVENTS = 6;
+/** kind do evento → kind do plano que fala sobre ele. */
+const PLAN_KIND_FOR_EVENT: Record<string, string> = { meal: "alimentar", workout: "treino" };
+
+const ADHERENCE_TOOL = {
+  name: "comentar_aderencia",
+  description:
+    "Devolve o comentário curto sobre a aderência do que a pessoa acabou de relatar ao plano ativo dela. " +
+    "Devolva string vazia quando não houver nada honesto e útil a dizer.",
+  input_schema: {
+    type: "object",
+    properties: {
+      comentario: {
+        type: "string",
+        description:
+          "1 a 2 frases curtas em português do Brasil, no máximo 240 caracteres. " +
+          "String VAZIA quando o plano não falar sobre o que foi relatado, quando o horário não permitir " +
+          "concluir nada, ou quando o comentário seria genérico.",
+      },
+    },
+    required: ["comentario"],
+  },
+};
+
+const ADHERENCE_SYSTEM = `Você é o Conselheiro do Ascende, plataforma brasileira de qualidade de vida. A pessoa acabou de relatar algo do dia dela na captura rápida, e ela tem um plano ATIVO salvo. Sua única tarefa: comentar, em 1 ou 2 frases, como o que ela relatou conversa com esse plano.
+
+COMO COMENTAR:
+• Bateu com o planejado: reconheça de forma concreta e específica, citando o que bateu ("é exatamente o almoço do seu plano" / "terceiro treino da semana, no ritmo que você definiu"). Nada de elogio vazio ou bajulação.
+• Divergiu: diga o que você observou, SEM NENHUMA CULPA, e ofereça UM ajuste pequeno e possível — ou apenas constate com leveza, se não houver ajuste óbvio. Divergir do plano é o caso normal da vida real, não um erro a ser corrigido.
+• Use o HORÁRIO para situar o comentário (a refeição do plano para aquele horário, o dia da semana previsto para treino). Se o horário não permitir concluir nada, prefira a string vazia.
+
+LIMITES INEGOCIÁVEIS DESTE COMENTÁRIO:
+• NUNCA envergonhe, culpe, repreenda ou use tom de fiscalização. Nada de "você deveria", "era para você ter", "de novo você". O plano serve a pessoa; a pessoa não serve o plano.
+• NUNCA trate comida como inimigo, nem use vocabulário de punição, compensação ou restrição ("compense amanhã", "queime isso", "saiu da linha", "furou a dieta").
+• NUNCA invente o que está no plano: comente apenas o que o trecho abaixo realmente diz. Se o plano não falar sobre o que foi relatado, devolva string vazia.
+• Não repita de volta o que a pessoa disse, não dê aula de nutrição nem de treino, não faça perguntas.
+• ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –): use vírgula, dois-pontos, parênteses ou outra frase. Nada de "Vamos lá!", "Parabéns!" solto ou fechos genéricos.
+• Máximo 240 caracteres. Melhor a string vazia do que um comentário genérico.
+${SAFETY_RULES}
+Responda SEMPRE usando a ferramenta comentar_aderencia.`;
+
+/** Comentário de aderência ao plano ativo. Best-effort: null em qualquer falha. */
+async function planAdherenceComment(
+  // deno-lint-ignore no-explicit-any
+  supabase: any, userId: string, events: AnyEvent[],
+): Promise<string | null> {
+  try {
+    const wanted = [...new Set(
+      events.map((ev) => PLAN_KIND_FOR_EVENT[String(ev?.kind ?? "")]).filter(Boolean),
+    )];
+    if (!wanted.length) return null;
+
+    const { data: plans, error } = await supabase.from("plans")
+      .select("kind,title,content,created_at")
+      .eq("user_id", userId).eq("status", "ativo")
+      .in("kind", wanted)
+      .order("created_at", { ascending: false });
+    if (error) { console.error("aderência: falha ao ler planos", error.message ?? error); return null; }
+
+    // O plano ATIVO mais recente de cada área (a lista já vem ordenada).
+    const byKind = new Map<string, { kind: string; title: string; content: string }>();
+    for (const p of plans ?? []) if (!byKind.has(p.kind)) byKind.set(p.kind, p);
+    if (!byKind.size) return null;
+
+    // Só os eventos que têm plano correspondente entram no prompt.
+    const relevant = events
+      .filter((ev) => byKind.has(PLAN_KIND_FOR_EVENT[String(ev?.kind ?? "")] ?? ""))
+      .slice(0, ADHERENCE_MAX_EVENTS);
+    if (!relevant.length) return null;
+
+    const nowSp = new Intl.DateTimeFormat("pt-BR", {
+      timeZone: TZ, weekday: "long", day: "2-digit", month: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).format(new Date());
+
+    const planBlocks = [...byKind.values()].map((p) =>
+      `━━━ PLANO ATIVO (${p.kind}): "${String(p.title).slice(0, 120)}" ━━━\n` +
+      `${String(p.content).slice(0, ADHERENCE_MAX_PLAN_CHARS)}`
+    ).join("\n\n");
+
+    const eventLines = relevant
+      .map((ev) => `• [${ev.kind}] ${String(ev.summary ?? ev.description ?? "").slice(0, 200)}`)
+      .join("\n");
+
+    const { res, data } = await anthropicCall(supabase, userId, "capture-aderencia", {
+      model: MODEL_FAST,
+      max_tokens: 300,
+      system: ADHERENCE_SYSTEM,
+      tools: [ADHERENCE_TOOL],
+      tool_choice: { type: "tool", name: "comentar_aderencia" },
+      messages: [{
+        role: "user",
+        content: `AGORA (fuso de São Paulo): ${nowSp}.\n\n${planBlocks}\n\n━━━ O QUE A PESSOA ACABOU DE RELATAR ━━━\n${eventLines}\n\nComente a aderência em 1 ou 2 frases, ou devolva string vazia.`,
+      }],
+    });
+    if (!res.ok || !data) return null;
+
+    // deno-lint-ignore no-explicit-any
+    const tu = ((data as any).content ?? []).find((b: any) => b.type === "tool_use");
+    const comment = String(tu?.input?.comentario ?? "").trim();
+    return comment ? comment.slice(0, 240) : null;
+  } catch (e) {
+    // Bônus nunca derruba a captura.
+    console.error("aderência: erro inesperado", e);
+    return null;
+  }
+}
 
 /* Tool combinado da captura com imagem: numa única chamada o modelo decide
    se a imagem é financeira (items) ou vira eventos de vida (events). */
@@ -77,7 +204,7 @@ Deno.serve(async (req) => {
     }
 
     // Mensagens sem conteúdo registrável não consomem cota nem chamada de IA
-    if (!hasImage && isTrivialMessage(text)) return json({ events: [], learned: [] });
+    if (!hasImage && isTrivialMessage(text)) return json({ events: [], learned: [], commentary: null });
 
     // Limite do plano (validado no servidor; frontend só exibe).
     // A cota é RESERVADA atomicamente ANTES da chamada (duas requisições
@@ -123,7 +250,7 @@ Deno.serve(async (req) => {
         const rawItems = Array.isArray(inp.items) ? inp.items : [];
         if (rawItems.length > STATEMENT_REDIRECT_ITEMS) {
           return json({
-            events: [], learned: [], statement_items: [],
+            events: [], learned: [], commentary: null, statement_items: [],
             statement_note:
               "Essa imagem parece uma fatura completa, com muitos lançamentos. O melhor caminho é a " +
               "importação de fatura (em Prosperidade): ela expande parcelas e evita duplicatas com mais precisão.",
@@ -132,14 +259,17 @@ Deno.serve(async (req) => {
         const items = normalizeStatementItems(rawItems);
         if (items.length) {
           return json({
-            events: [], learned: [],
+            events: [], learned: [], commentary: null,
             statement_items: items,
             statement_note: inp.statement_note ? String(inp.statement_note).slice(0, 240) : null,
           });
         }
       }
       const events = Array.isArray(inp.events) ? inp.events : [];
-      return json({ events, learned: [] });
+      // Foto de prato vira meal e print de treino vira workout: o comentário
+      // de aderência vale aqui exatamente como no caminho de texto.
+      const commentary = await planAdherenceComment(supabase, user.id, events);
+      return json({ events, learned: [], commentary });
     }
 
     // ── Caminho original (texto): eventos + memórias em UMA chamada ──
@@ -150,7 +280,8 @@ Deno.serve(async (req) => {
       await refund();
       return json({ error: "Não consegui interpretar agora. Tente de novo em instantes — a tentativa não contou no seu limite." }, 502);
     }
-    return json({ events, learned });
+    const commentary = await planAdherenceComment(supabase, user.id, events);
+    return json({ events, learned, commentary });
   } catch (e) {
     // Erro inesperado: devolve a reserva antes de sair.
     await refund().catch((err) => console.error("refund", err));
