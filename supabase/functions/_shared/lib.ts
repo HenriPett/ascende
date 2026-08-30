@@ -370,6 +370,22 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       : "";
     lines.push(`TREINOS nos últimos 30 dias: ${kinds["workout"].length}.` +
       (dist ? ` Grupos trabalhados: ${dist}.` : "") + durInfo);
+
+    // Treinos de HOJE, carimbados (mesma correção das refeições): sem isso o
+    // modelo sabe que existem N treinos no mês, mas não que um deles acabou de
+    // acontecer — e responde "você ainda não treinou hoje" para quem treinou.
+    const todayWorkouts = kinds["workout"]
+      .filter((e) => spParts(new Date(e.occurred_at)).dateIso === todaySpIso)
+      .map((e) => {
+        const pl = (e.payload as any) ?? {};
+        const p = spParts(new Date(e.occurred_at));
+        const musc = Array.isArray(pl.muscles) && pl.muscles.length ? ` (${pl.muscles.join(", ")})` : "";
+        const dur = Number(pl.duration_min) > 0 ? ` — ${Math.round(Number(pl.duration_min))} min` : "";
+        return `[hoje ${p.timeHm}] ${pl.description ?? "treino"}${musc}${dur}`;
+      });
+    if (todayWorkouts.length) {
+      lines.push(`TREINOS DE HOJE (já registrados por esta pessoa — trate como fato, não pergunte de novo): ${todayWorkouts.join("; ")}.`);
+    }
   }
 
   // Peso e composição corporal
@@ -409,11 +425,35 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       (trechos ? ` Trechos recentes: ${trechos}.` : ""));
   }
   if (scopes.alimentacao && kinds["meal"]?.length) {
-    const last = kinds["meal"].slice(0, 6).map((e) => {
+    // Cada refeição vai CARIMBADA com dia, hora (SP) e tipo. Antes a lista era
+    // só a descrição — o modelo recebia "pão com manteiga; pastéis; miojo" sem
+    // uma única data e não tinha como saber que o primeiro item era o almoço de
+    // HOJE e não uma refeição de três semanas atrás. Caso real (30/08): a pessoa
+    // registrou o almoço e, 7 segundos depois, perguntou se ele cabia no plano;
+    // o Conselheiro respondeu "não me contou o almoço ainda" e, pressionado,
+    // inventou um café da manhã que nunca existiu. O dado estava no banco: o
+    // que faltava era o carimbo de tempo.
+    const MEAL_TYPE_LABEL: Record<string, string> = {
+      cafe_da_manha: "café da manhã", almoco: "almoço", jantar: "jantar", lanche: "lanche",
+    };
+    const describeMeal = (e: typeof kinds["meal"][number]) => {
       const pl = (e.payload as any) ?? {};
+      if (!pl.description) return null;
       const kcal = Number(pl.calories);
-      return pl.description ? `${pl.description}${kcal > 0 ? ` (~${Math.round(kcal)} kcal)` : ""}` : null;
-    }).filter(Boolean).join("; ");
+      const p = spParts(new Date(e.occurred_at));
+      const dia = p.dateIso === todaySpIso ? "hoje" : p.dateIso;
+      const tipo = MEAL_TYPE_LABEL[String(pl.meal_type ?? "")] ?? "refeição";
+      return `[${dia} ${p.timeHm}] ${tipo}: ${pl.description}${kcal > 0 ? ` (~${Math.round(kcal)} kcal)` : ""}`;
+    };
+    const last = kinds["meal"].slice(0, 6).map(describeMeal).filter(Boolean).join("; ");
+    // Bloco próprio para HOJE: é o recorte que quase toda pergunta do dia a dia
+    // usa ("o que eu comi hoje?", "meu almoço está dentro do plano?").
+    const todayMeals = kinds["meal"]
+      .filter((e) => spParts(new Date(e.occurred_at)).dateIso === todaySpIso)
+      .map(describeMeal).filter(Boolean);
+    if (todayMeals.length) {
+      lines.push(`REFEIÇÕES DE HOJE (já registradas por esta pessoa — trate como fato, não pergunte de novo): ${todayMeals.join("; ")}.`);
+    }
     const kcalVals = kinds["meal"].map((e) => Number((e.payload as any)?.calories)).filter((n) => n > 0);
     const kcalInfo = kcalVals.length
       ? ` Calorias estimadas registradas em ${kcalVals.length} refeições (média ~${Math.round(kcalVals.reduce((a, b) => a + b, 0) / kcalVals.length)} kcal/refeição — estimativas por foto, aproximadas).`

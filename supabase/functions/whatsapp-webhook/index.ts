@@ -28,7 +28,7 @@ import {
 import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage } from "../_shared/usage.ts";
 import {
   getEntitlements, spDayStartUtc, spWeekStartUtc, spMonthStartUtc,
-  nextSpMonthStartUtc, spParts,
+  nextSpMonthStartUtc, spParts, TZ,
 } from "../_shared/entitlements.ts";
 import {
   waSendText, waSendButtons, verifyWaSignature, saveEventsServer, xpForKind, appUrl,
@@ -72,14 +72,105 @@ const IMAGE_CAPTURE_TOOL = {
   },
 };
 
-/** Grava a proposta pendente e envia o cartão de confirmação (fluxo padrão). */
+/* ─── Rastro da captura no histórico do Conselheiro ───────────────────────
+   BUG DE PRODUÇÃO (30/08/2026): a captura não gravava NADA em chat_messages;
+   só counselorTurn gravava. A pessoa registrou o almoço pelo botão, perguntou
+   7 segundos depois "meu almoço está dentro do plano?" e o Conselheiro, cujas
+   últimas 12 mensagens não tinham vestígio nenhum do relato, respondeu que ela
+   não havia contado nada. Pressionada ("acabei de falar q foi o pão"), a IA
+   INVENTOU um café da manhã com margarina e ovo mexido que nunca existiu: nem
+   no banco, nem no plano, nem em memória alguma. Lacuna de contexto vira
+   confabulação, e confabulação sobre a vida da pessoa destrói a confiança que
+   é o produto inteiro.
+
+   Agora todo relato deixa rastro, em dois tempos:
+   • o texto da pessoa entra quando a proposta é enviada (ela DISSE, mesmo que
+     ainda não tenha confirmado);
+   • o desfecho real (registrado / descartado / expirado) entra quando
+     acontece, para o histórico nunca afirmar registro que não houve.
+
+   ESPELHO: capture/index.ts (app) usa o MESMO formato — a promessa do topo
+   deste arquivo é que a conversa é uma só nos dois canais. Se mudar aqui,
+   mude lá. (Lugar natural seria _shared/lib.ts; fica para quando a edição em
+   curso naquele arquivo terminar.) */
+
+const spStamp = () => new Intl.DateTimeFormat("pt-BR", {
+  timeZone: TZ, day: "2-digit", month: "2-digit",
+  hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+}).format(new Date());
+
+// deno-lint-ignore no-explicit-any
+const eventBullets = (events: any[]) => events.slice(0, 12)
+  // deno-lint-ignore no-explicit-any
+  .map((e: any) => `• ${String(e?.summary ?? e?.kind ?? "registro").slice(0, 160)}`).join("\n");
+
+/** Linha de histórico do DESFECHO de uma captura. O prefixo entre colchetes
+ *  marca a linha como registro do sistema (não prosa da IA), para o modelo
+ *  distinguir "isto aconteceu de fato" de "isto eu disse". */
+// deno-lint-ignore no-explicit-any
+function captureOutcomeLine(outcome: "registrado" | "descartado" | "expirado", events: any[] = []): string {
+  const when = spStamp();
+  if (outcome === "registrado") {
+    return `[registro no diário · ${when}] Registrei para você:\n${eventBullets(events)}`;
+  }
+  if (outcome === "descartado") {
+    return `[registro no diário · ${when}] Você descartou a proposta: NADA foi registrado.`;
+  }
+  return `[registro no diário · ${when}] A proposta expirou sem confirmação: NADA foi registrado.`;
+}
+
+/** Grava uma linha no histórico compartilhado com o app. Best-effort: falhar
+ *  aqui não pode derrubar o fluxo da pessoa. */
+async function pushHistory(
+  // deno-lint-ignore no-explicit-any
+  supabase: any, userId: string, role: "user" | "assistant", content: string,
+): Promise<void> {
+  const body = String(content ?? "").trim();
+  if (!body) return; // chat_messages tem CHECK de conteúdo não vazio
+  const { error } = await supabase.from("chat_messages")
+    .insert({ user_id: userId, role, content: body.slice(0, 4000) });
+  if (error) console.error("wa histórico", error.message ?? error);
+}
+
+/** O histórico deixou de vir sempre em pares (o relato entra na proposta, o
+ *  desfecho só na confirmação), então pode começar com 'assistant' ou ter dois
+ *  turnos do mesmo lado em sequência. A API exige começar em 'user': aqui
+ *  descartamos assistant solto na frente e fundimos papéis repetidos. */
+// deno-lint-ignore no-explicit-any
+function normalizeTurns(turns: { role: string; content: any }[]): { role: string; content: any }[] {
+  // deno-lint-ignore no-explicit-any
+  const asBlocks = (c: any) =>
+    typeof c === "string" ? [{ type: "text", text: c }] : (Array.isArray(c) ? c : []);
+  // deno-lint-ignore no-explicit-any
+  const out: { role: string; content: any }[] = [];
+  for (const t of turns) {
+    const role = t.role === "assistant" ? "assistant" : "user";
+    if (typeof t.content === "string" && !t.content.trim()) continue;
+    if (!out.length && role !== "user") continue;
+    const last = out[out.length - 1];
+    if (last && last.role === role) {
+      last.content = [...asBlocks(last.content), ...asBlocks(t.content)];
+      continue;
+    }
+    out.push({ role, content: t.content });
+  }
+  return out;
+}
+
+/** Grava a proposta pendente e envia o cartão de confirmação (fluxo padrão).
+ *  `userText` é o que a pessoa disse (texto ou transcrição do áudio): entra no
+ *  histórico AGORA, para o relato existir mesmo antes da confirmação. */
 async function proposeEvents(
   // deno-lint-ignore no-explicit-any
-  supabase: any, userId: string, from: string, events: any[], url: string, preface?: string,
+  supabase: any, userId: string, from: string, events: any[], url: string,
+  userText: string, preface?: string,
 ): Promise<void> {
   await supabase.from("whatsapp_pending").upsert({
     user_id: userId, events, created_at: new Date().toISOString(),
   });
+  // Só o relato da pessoa: o desfecho entra no wa_confirm/wa_discard, porque
+  // é lá que se sabe o que de fato foi para o diário.
+  await pushHistory(supabase, userId, "user", userText);
   const lines = events.slice(0, WA_STATEMENT_MAX_ITEMS)
     // deno-lint-ignore no-explicit-any
     .map((e: any) => `• ${e.summary ?? e.kind} (+${xpForKind(String(e.kind))} XP)`).join("\n");
@@ -111,6 +202,14 @@ Perguntas pontuais e conselhos do dia a dia você responde INTEIROS aqui, sem em
 
 ━━━ SUA MEMÓRIA ━━━
 O retrato abaixo inclui dados reais da plataforma e memórias de conversas anteriores (no app e aqui). Use-as com naturalidade, como um amigo que lembra, sem recitar listas e sem soar como vigilância.
+As linhas do histórico que começam com "[registro no diário · data hora]" foram escritas pelo SISTEMA, não por você: são o que de fato entrou (ou não entrou) no diário dela, com o horário. Trate-as como verdade e nunca as imite ao escrever.
+
+━━━ NUNCA INVENTE O QUE A PESSOA VIVEU (regra inegociável) ━━━
+Você só pode afirmar que ela comeu, treinou, gastou, dormiu ou registrou algo quando isso estiver EXPLÍCITO no retrato abaixo ou no histórico desta conversa. Nada de completar a lacuna com o detalhe mais provável.
+• Se ela disser que já te contou algo e você não encontrar: diga com honestidade que não localizou o registro e peça para ela confirmar em uma frase. "Não achei esse registro aqui, me confirma o que foi?" é uma resposta boa. Inventar um almoço plausível é uma falha grave.
+• Nunca cite alimento, exercício, valor, horário ou refeição específicos que você não leu no retrato ou no histórico. Na dúvida entre um detalhe e nenhum detalhe, fique sem o detalhe.
+• Se o registro aparecer no retrato mas o histórico não tiver a conversa (ou o contrário), confie no que existe e siga: o dado do retrato é sempre o mais confiável sobre o que foi registrado.
+• Errar por perguntar custa uma frase. Errar por inventar custa a confiança dela em tudo que você diz, inclusive no que está certo.
 
 ━━━ REGRA DE OURO ━━━
 Cada mensagem da pessoa consome o limite do plano dela. Se faltar um dado essencial, faça UMA pergunta objetiva (nunca mais de uma rodada); senão, entregue a resposta completa neste turno.
@@ -183,13 +282,11 @@ async function counselorTurn(
     supabase.from("chat_messages").select("role,content")
       .eq("user_id", userId).order("created_at", { ascending: false }).limit(12),
   ]);
-  const messages = (history ?? []).slice().reverse()
+  const messages = normalizeTurns([
     // deno-lint-ignore no-explicit-any
-    .map((m: any) => ({ role: m.role, content: m.content }));
-  messages.push({
-    role: "user",
-    content: extraBlocks.length ? [...extraBlocks, { type: "text", text }] : text,
-  });
+    ...(history ?? []).slice().reverse().map((m: any) => ({ role: m.role, content: m.content })),
+    { role: "user", content: extraBlocks.length ? [...extraBlocks, { type: "text", text }] : text },
+  ]);
 
   // Mesmo roteamento de modelo do ai-chat: pergunta curta não paga modelo caro.
   const needsSmart =
@@ -298,12 +395,16 @@ Deno.serve(async (req) => {
       await supabase.from("whatsapp_pending").delete().eq("user_id", link.user_id);
 
       if (btn === "wa_discard") {
+        // Sem esta linha o histórico ficaria com o relato da pessoa e nenhum
+        // desfecho, e o Conselheiro trataria como registrado algo descartado.
+        await pushHistory(supabase, link.user_id, "assistant", captureOutcomeLine("descartado"));
         await waSendText(from, "Descartei, nada foi gravado. Quando quiser, é só mandar outra frase. 👍");
         return new Response("ok", { status: 200 });
       }
       if (btn === "wa_confirm") {
         const expired = Date.now() - new Date(String(pending.created_at)).getTime() > PENDING_TTL_MIN * 60_000;
         if (expired) {
+          await pushHistory(supabase, link.user_id, "assistant", captureOutcomeLine("expirado"));
           await waSendText(from, "Essa proposta já tinha expirado (1h). Me manda a frase de novo que eu refaço na hora.");
           return new Response("ok", { status: 200 });
         }
@@ -311,6 +412,11 @@ Deno.serve(async (req) => {
           .select("sleep_goal_h").eq("user_id", link.user_id).maybeSingle();
         const events = Array.isArray(pending.events) ? pending.events : [];
         const { saved, xp } = await saveEventsServer(supabase, link.user_id, events, prof?.sleep_goal_h ?? null);
+        // É esta linha que responde "meu almoço está dentro do plano?" no turno
+        // seguinte: sem ela o Conselheiro não sabe que o registro aconteceu,
+        // nem o que foi registrado. Só entra quando algo REALMENTE foi salvo.
+        await pushHistory(supabase, link.user_id, "assistant",
+          saved > 0 ? captureOutcomeLine("registrado", events) : captureOutcomeLine("descartado"));
         await waSendText(from,
           saved > 0
             ? `Registrado ✓ ${saved} ${saved === 1 ? "item" : "itens"} · +${xp} XP na sua subida.\n\nVeja seu dia completo no painel: ${url}/app`
@@ -399,6 +505,7 @@ Deno.serve(async (req) => {
             summary: `${it.kind === "income" ? "Entrada" : "Gasto"} R$ ${Number(it.amount).toFixed(2).replace(".", ",")} · ${it.description}`,
           }));
           await proposeEvents(supabase, link.user_id, from, events, url,
+            caption || "(enviou uma imagem de lançamentos financeiros)",
             `Li a imagem 📄${inp.statement_note ? ` (${String(inp.statement_note).slice(0, 160)})` : ""}`);
           return new Response("ok", { status: 200 });
         }
@@ -409,7 +516,8 @@ Deno.serve(async (req) => {
         await waSendText(from, `Não encontrei nada registrável nessa imagem. Funciona bem com: foto do prato, print de Pix/compra, tela de app de treino. Análise de composição corporal é no app: ${url}/app/vitalidade`);
         return new Response("ok", { status: 200 });
       }
-      await proposeEvents(supabase, link.user_id, from, events, url, "Li a foto 📸");
+      await proposeEvents(supabase, link.user_id, from, events, url,
+        caption || "(enviou uma foto para registrar)", "Li a foto 📸");
       return new Response("ok", { status: 200 });
     }
 
@@ -586,7 +694,7 @@ Deno.serve(async (req) => {
         return new Response("ok", { status: 200 });
       }
       if (events.length) {
-        await proposeEvents(supabase, link.user_id, from, events, url, transcriptPreface);
+        await proposeEvents(supabase, link.user_id, from, events, url, text, transcriptPreface);
         return new Response("ok", { status: 200 });
       }
       // Nada registrável: a tentativa NÃO consome o limite de captura —
