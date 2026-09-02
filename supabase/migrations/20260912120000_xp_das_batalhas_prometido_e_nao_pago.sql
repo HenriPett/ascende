@@ -24,13 +24,26 @@
 -- +5 da honestidade era justamente a peça anti-"que-se-dane" do desenho: é o
 -- pagamento por registrar a recaída em vez de sumir.
 --
--- ─── POR QUE O RÓTULO DA RECAÍDA NÃO DIZ "RECAÍDA" ───
--- Pagar XP por recaída pode ser lido como "o app me paga para recair". O que
--- é premiado não é a queda, é o ATO DE REGISTRAR — por isso o feed de XP
--- (src/pages/Score.tsx) lê "Honestidade no check-in". E a hierarquia dos
--- números já diz a coisa certa sozinha: 5 < 10 < 12. Resistir vale mais que
--- um dia limpo; um dia limpo vale mais que uma recaída assumida; e sumir,
--- que é a única alternativa real à recaída assumida, vale zero.
+-- ─── POR QUE SÃO DUAS LINHAS DE XP, E NÃO UMA ───
+-- Pagar XP por recaída pode ser lido como "o app me paga para recair". A
+-- primeira defesa é a hierarquia, e ela já resolve o incentivo: 5 < 10 < 12.
+-- Nenhuma estratégia de máximo de XP passa por recair — marcar recaída rende
+-- MENOS que marcar dia limpo, e sumir (a única alternativa real à recaída
+-- assumida) rende zero.
+--
+-- Mas um único pagamento de 5 que só acontece no `relapsed` é, na
+-- contabilidade, pagamento POR recaída — e chamá-lo de "Honestidade no
+-- check-in" seria um eufemismo por cima do SQL. O teste é o do design doc: se
+-- a pessoa lesse esta linha, veria `relapsed → 5` e o nome não bateria.
+--
+-- Por isso o valor é decomposto, com a MESMA matemática:
+--   todo check-in, qualquer status → +5  "Honestidade no check-in"
+--   status clean                   → +5  "Dia limpo na batalha"
+--   status resisted                → +7  "Resistiu à vontade"
+-- Totais idênticos (5 / 10 / 12), e agora os 5 são literalmente o pagamento
+-- do ATO DE REGISTRAR, uniformes para todo mundo; o excedente é do desfecho.
+-- O feed mostra duas linhas num dia limpo e uma num dia de recaída, e nenhuma
+-- delas precisa de eufemismo para ser verdadeira.
 --
 -- ─── POR QUE A CORREÇÃO NUNCA DIMINUI O XP ───
 -- O check-in é corrigível ("Corrigir", BattleCheckin.tsx:65) e o upsert cai
@@ -61,39 +74,61 @@ alter table public.xp_log
   add column if not exists battle_checkin_id uuid
   references public.battle_checkins(id) on delete cascade;
 
-create unique index if not exists xp_log_battle_checkin_unique
-  on public.xp_log (battle_checkin_id)
+-- O "slot" é o que permite as DUAS linhas por check-in continuarem
+-- identificáveis quando a pessoa corrige o status. Sem ele, a correção de
+-- "dia limpo" para "resisti" criaria uma linha nova de desfecho e deixaria a
+-- antiga para trás — o XP inflaria a cada toque em "Corrigir".
+alter table public.xp_log
+  add column if not exists battle_xp_slot text;
+do $$ begin
+  alter table public.xp_log add constraint xp_log_battle_xp_slot_check
+    check (battle_xp_slot is null or battle_xp_slot in ('honestidade', 'desfecho'));
+exception when duplicate_object then null; end $$;
+
+create unique index if not exists xp_log_battle_checkin_slot_unique
+  on public.xp_log (battle_checkin_id, battle_xp_slot)
   where battle_checkin_id is not null;
 
 create or replace function public.award_xp_for_battle_checkin()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
-  pts int;
-  label text;
+  bonus int;
+  bonus_label text;
 begin
-  pts := case new.status
-    when 'clean' then 10
-    when 'resisted' then 12
-    when 'relapsed' then 5
-    else 0 end;
+  -- LINHA 1 — o pagamento do ATO DE REGISTRAR. Uniforme para todo status,
+  -- inclusive a recaída: é isto que faz o rótulo "Honestidade no check-in"
+  -- ser literalmente verdadeiro em vez de um nome gentil sobre outra coisa.
+  -- `do nothing`: uma correção não repaga a honestidade já paga.
+  insert into public.xp_log (user_id, points, reason, battle_checkin_id, battle_xp_slot)
+  values (new.user_id, 5, 'Honestidade no check-in', new.id, 'honestidade')
+  on conflict (battle_checkin_id, battle_xp_slot) do nothing;
 
-  -- Status desconhecido (o CHECK da tabela já impede, mas o gatilho não
-  -- inventa pontos por um valor que não conhece).
-  if pts = 0 then return new; end if;
+  -- LINHA 2 — o desfecho. A recaída não tem bônus (é o 5 sozinho), e é daí
+  -- que sai a hierarquia 5 < 10 < 12.
+  bonus := case new.status when 'clean' then 5 when 'resisted' then 7 else 0 end;
 
-  label := case new.status
-    when 'clean' then 'Dia limpo na batalha'
-    when 'resisted' then 'Resistiu à vontade'
-    -- NUNCA "Recaída": o que o XP paga é o registro, não a queda.
-    when 'relapsed' then 'Honestidade no check-in'
-    end;
+  if bonus > 0 then
+    bonus_label := case new.status
+      when 'clean' then 'Dia limpo na batalha'
+      when 'resisted' then 'Resistiu à vontade' end;
 
-  insert into public.xp_log (user_id, points, reason, battle_checkin_id)
-  values (new.user_id, pts, label, new.id)
-  on conflict (battle_checkin_id) do update
-    -- Só sobe. Ver a nota sobre a precondição do Mokari, acima.
-    set points = greatest(public.xp_log.points, excluded.points),
-        reason = excluded.reason;
+    insert into public.xp_log (user_id, points, reason, battle_checkin_id, battle_xp_slot)
+    values (new.user_id, bonus, bonus_label, new.id, 'desfecho')
+    on conflict (battle_checkin_id, battle_xp_slot) do update
+      -- Só SOBE. Ver a nota sobre a precondição do Mokari, acima: baixar os
+      -- pontos de uma linha existente derrubaria o total corrido e poderia
+      -- fazer o Mokari regredir de estágio — e puniria quem corrigiu.
+      set points = greatest(xp_log.points, excluded.points),
+          reason = excluded.reason;
+  else
+    -- Correção PARA recaída (ex.: "resisti" virou "recaí"). Os pontos ficam,
+    -- pela mesma regra de monotonicidade — mas o rótulo não pode continuar
+    -- dizendo "Resistiu à vontade" sobre um dia que a pessoa remarcou. O feed
+    -- passa a contar o que de fato aconteceu: os pontos foram MANTIDOS.
+    update public.xp_log
+       set reason = 'Pontos mantidos de um check-in corrigido'
+     where battle_checkin_id = new.id and battle_xp_slot = 'desfecho';
+  end if;
 
   return new;
 end; $$;
@@ -106,15 +141,18 @@ create trigger trg_award_xp_battle after insert or update of status on public.ba
 -- Quem já fez check-in antes desta migração fez a ação e não recebeu nada.
 -- Pagar retroativamente é o certo: o produto prometeu, a pessoa cumpriu, e o
 -- XP nunca desce (a linha só entra onde ainda não existe).
-insert into public.xp_log (user_id, points, reason, battle_checkin_id)
+insert into public.xp_log (user_id, points, reason, battle_checkin_id, battle_xp_slot)
+select c.user_id, 5, 'Honestidade no check-in', c.id, 'honestidade'
+from public.battle_checkins c
+on conflict (battle_checkin_id, battle_xp_slot) do nothing;
+
+insert into public.xp_log (user_id, points, reason, battle_checkin_id, battle_xp_slot)
 select
   c.user_id,
-  case c.status when 'clean' then 10 when 'resisted' then 12 when 'relapsed' then 5 end,
-  case c.status
-    when 'clean' then 'Dia limpo na batalha'
-    when 'resisted' then 'Resistiu à vontade'
-    when 'relapsed' then 'Honestidade no check-in' end,
-  c.id
+  case c.status when 'clean' then 5 when 'resisted' then 7 end,
+  case c.status when 'clean' then 'Dia limpo na batalha' when 'resisted' then 'Resistiu à vontade' end,
+  c.id,
+  'desfecho'
 from public.battle_checkins c
-where c.status in ('clean', 'resisted', 'relapsed')
-on conflict (battle_checkin_id) do nothing;
+where c.status in ('clean', 'resisted')
+on conflict (battle_checkin_id, battle_xp_slot) do nothing;

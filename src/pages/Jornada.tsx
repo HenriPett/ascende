@@ -209,6 +209,31 @@ export default function Jornada() {
         </p>
       </div>
 
+      {/* A BÚSSOLA, DE GRAÇA.
+          `profile.goal` é a frase que a pessoa escreveu sobre a própria vida
+          no primeiro bloco do onboarding — a razão pela qual ela está aqui. Ela
+          aparecia em dois lugares no app inteiro, e um deles é o BriefingLocked
+          (Hoje.tsx), ou seja, ATRÁS DO PAYWALL. A bússola dela era conteúdo
+          pago: informação DELA usada como isca.
+
+          Isso não é dark pattern por intenção, é por descuido — e o conserto é
+          uma dívida, não uma melhoria. Aqui ela também ganha função: é a única
+          linha da tela que dá sentido ao XP. Sem ela, "254/350 para o nível 9"
+          é um número sobre nada, e um sistema de pontos extrínseco sem âncora
+          na meta da própria pessoa corrói a motivação em vez de sustentá-la. */}
+      {profile?.goal && (
+        <Card className="p-4">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Sua bússola</p>
+          <p className="text-sm mt-0.5">"{profile.goal}"</p>
+          <Link
+            to={appPath("ajustes")}
+            className="text-xs text-muted-foreground underline underline-offset-2 mt-1.5 inline-block hover:text-foreground"
+          >
+            Mudar meu objetivo
+          </Link>
+        </Card>
+      )}
+
       {/* O Mokari no TOPO — e só aqui.
           Não vai para a Hoje: a Hoje é o dia e acabou de ser cortada para 5
           zonas na Fase 4; enchê-la de novo na semana seguinte desfaria a fase

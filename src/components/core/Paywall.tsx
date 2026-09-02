@@ -33,7 +33,11 @@ const FEATURE_LABEL: Record<string, string> = {
 // PROVA. Quem reescrever isto de volta para "recurso: N por período" está
 // desfazendo uma decisão do PRINCIPIOS, não melhorando a redação.
 const PLUS_BENEFITS = [
-  "Perguntar quando a dúvida aparece, não quando a semana virar — 15 conversas por dia",
+  // A UNIDADE do número é intocável: `chat_daily` conta MENSAGENS, e cada
+  // mensagem reserva uma unidade (get-subscription). Uma conversa tem várias.
+  // Trocar "mensagem" por "conversa" no momento da venda inflaria o que a
+  // pessoa acha que está comprando, e o desmentido chegaria no primeiro dia.
+  "Perguntar quando a dúvida aparece, não quando a semana virar — 15 mensagens por dia",
   "Contar o dia quantas vezes quiser: 30 capturas por dia, sem escolher o que vale a pena",
   "Uma leitura da sua vida toda manhã, avisada no seu WhatsApp",
   "A foto do prato e a fatura em PDF viram registro: 30 refeições e 10 documentos por mês",

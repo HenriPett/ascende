@@ -310,6 +310,24 @@ export default function Alimentacao() {
     refreshProfile();
   };
 
+  /* Mesma anatomia do handler de calorias, logo acima: valida a faixa, diz o
+     que sabe fazer em vez de chamar o número da pessoa de inválido, e deixa a
+     tela do dia refletir na hora. A faixa 20–400 g é a mesma que o Conselheiro
+     já aceita ao propor a meta (ai-chat/index.ts:727) — duas portas para o
+     mesmo campo não podem ter réguas diferentes. */
+  const saveProteinGoalRaw = async (raw: string) => {
+    if (!user) return;
+    const g = Math.round(Number(String(raw).replace(",", ".").replace(/[^\d.]/g, "")));
+    if (!g || g < 20 || g > 400) {
+      toast.error("Trabalho com metas de proteína entre 20 e 400 g por dia. Quanto você quer?");
+      return;
+    }
+    const { error } = await supabase.from("profiles").update({ protein_goal_g: g }).eq("user_id", user.id);
+    if (error) { toast.error("Não consegui salvar a meta. Tente de novo."); return; }
+    toast.success("Meta de proteína salva. Acompanhe na tela Hoje.");
+    refreshProfile();
+  };
+
   const saveWeightGoal = async () => {
     if (!user) return;
     const kg = Number(weightGoalInput.replace(",", "."));
@@ -390,6 +408,7 @@ export default function Alimentacao() {
     .filter((m) => dateISOInSP(m.occurred_at) === todayIso)
     .reduce((sum, m) => sum + (Number(m.payload?.calories) || 0), 0));
   const kcalGoal = Number(profile?.calorie_goal_kcal) || 0;
+  const protGoal = Number(profile?.protein_goal_g) || 0;
 
   // Agrupa refeições por dia
   const byDay: Record<string, MealEvent[]> = {};
@@ -480,6 +499,41 @@ export default function Alimentacao() {
               Dica: peça um plano alimentar ao Conselheiro — ao salvar, a meta do plano é aplicada aqui automaticamente.
             </p>
           )}
+        </Card>
+        )}
+
+        {/* META DE PROTEÍNA — a única meta órfã do app.
+            Ela é lida na tela Hoje para desenhar a barra de proteína
+            (Hoje.tsx:692) e para decidir se o painel do dia aparece
+            (Hoje.tsx:1218), mas os únicos lugares que a ESCREVIAM eram
+            automáticos: o Blueprint do onboarding e o Conselheiro ao ativar um
+            plano. Todas as irmãs têm campo (calorias aqui em cima, água
+            adiante, sono e treinos na Vitalidade, teto de gasto na
+            Prosperidade); proteína não tinha nenhum.
+
+            O efeito não é estético: se o plano propôs 140 g e a realidade da
+            pessoa é 90 g, ela via todo dia uma barra que não fecha e a única
+            saída disponível era gastar uma mensagem do Conselheiro pedindo que
+            ele reescrevesse o plano inteiro. Meta inalcançável e imutável é o
+            desenho que ensina a ignorar o painel. */}
+        {trackers.has("protein") && (
+        <Card className="p-4 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium">Proteína por dia</p>
+            <span className="text-sm text-muted-foreground">
+              {protGoal > 0 ? <><strong className="text-foreground">{protGoal}</strong> g/dia</> : "sem meta definida"}
+            </span>
+          </div>
+          <GoalInput
+            inputMode="numeric"
+            placeholder="Definir meta diária (g)"
+            currentLabel={protGoal > 0 ? `Meta: ${protGoal} g/dia` : null}
+            onSubmit={(raw) => saveProteinGoalRaw(raw)}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Você acompanha isto na tela Hoje. Para parar de acompanhar, desligue o
+            indicador Proteína em Ajustes — o histórico continua seu.
+          </p>
         </Card>
         )}
 

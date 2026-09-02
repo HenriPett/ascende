@@ -34,6 +34,7 @@ import {
 import { DEFAULT_WATER_GOAL_ML, DEFAULT_WATER_BOTTLES } from "@/hooks/useProfile";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { greet, todayISO } from "@/lib/format";
+import { focusLine } from "@/lib/dailyFocus";
 import { dateISOInSP, daysAgoISOInSP } from "@/lib/dates";
 import { pillarById, activePillarSet } from "@/lib/pillars";
 import { activeTrackerSet } from "@/lib/trackers";
@@ -56,7 +57,7 @@ function useActiveStreak() {
       return new Set((data ?? []).map((e) => dateISOInSP(String(e.occurred_at))));
     },
   });
-  if (!data) return 0;
+  if (!data) return { streak: 0, daysRegistered: 0 };
 
   const dayIso = (offset: number) => daysAgoISOInSP(offset);
   // Hoje ainda em andamento: não quebra se vazio; começa de hoje se ativo, senão de ontem
@@ -74,7 +75,10 @@ function useActiveStreak() {
     windowCount++;
     offset++;
   }
-  return streak;
+  /* `daysRegistered` sai junto porque a linha de retorno precisa de um número
+     PRESERVADO para abrir — nunca de um número de falta. Ele vem do mesmo
+     conjunto que a sequência já carregou: nenhuma leitura a mais. */
+  return { streak, daysRegistered: data.size };
 }
 
 /* ── Ritual de retorno (plano de feedbacks, Sugestão 3) ──────────────────
@@ -947,18 +951,32 @@ function DayProgress() {
   );
 }
 
-/** Sugestão local do dia (custo zero, determinística por dia da semana):
- *  quando o briefing com IA não está disponível, o card muda de assunto em
- *  vez de mostrar cadeado (análise UX P0.1). */
-const DAILY_FOCUS = [
-  "Domingo é dia da sua retrospectiva — ela nasce do que você registrou na semana.",
-  "Uma frase na captura abaixo registra o dia inteiro: gasto, treino, sono, humor.",
-  "Foto do prato → calorias na hora. O registro mais rápido do app.",
-  "Água e humor em 1 toque, logo abaixo. Dez segundos e o dia está vivo.",
-  "Conte um gasto de hoje — o retrato do seu mês fica mais nítido a cada real.",
-  "Marque um compromisso de hoje como feito: é isso que constrói a sequência.",
-  "Semana fechando: cada registro de hoje aparece na retrospectiva de domingo.",
-];
+/* DAILY_FOCUS e a regra da linha do cabeçalho vivem em lib/dailyFocus.ts:
+   a frase passou a depender do ESTADO do dia (o que já foi registrado, o que
+   ainda perece), e essa decisão é testável — então ela sai do componente. */
+
+/** Quantos registros entraram HOJE. Chave própria de propósito: a query do
+ *  DayProgress traz as linhas inteiras, e repetir a chave dela com uma forma
+ *  diferente envenenaria o cache do outro consumidor (ver useZoneQueries). */
+function useEventsTodayCount(): number {
+  const { user } = useAuth();
+  const { data } = useQuery({
+    queryKey: ["events-today-count", user?.id, todayISO()],
+    enabled: !!user,
+    staleTime: 1000 * 30,
+    queryFn: async () => {
+      const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+      const { count } = await supabase.from("life_events")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id).gte("occurred_at", dayStart.toISOString());
+      return count ?? 0;
+    },
+  });
+  // Enquanto não sabemos, tratamos como "ainda não registrou": o convite do
+  // dia é o texto certo para quem começa, e é o menos errado dos dois quando
+  // a leitura falha — nunca dizemos "dia registrado" sem ter visto registro.
+  return data ?? 0;
+}
 
 /* O briefing virou DUAS zonas, e isso é de propósito (Fase 4).
  *
@@ -1288,9 +1306,16 @@ const HOJE_ZONES = [
 
 /** Chama TODOS os hooks, sempre na mesma ordem (regra dos hooks), e filtra
  *  depois. O corte em MAX_ZONES acontece sobre o que sobrou. */
-function useVisibleZones() {
+function useVisibleZones(returning: boolean) {
   const visible = HOJE_ZONES.map((zone) => zone.useVisible());
-  return HOJE_ZONES.filter((_, i) => visible[i]).slice(0, MAX_ZONES);
+  return HOJE_ZONES
+    /* Na volta depois de alguns dias, a zona `progress` sai daquele render.
+       Barra em zero é informação legítima num dia comum e vira PLACAR DE
+       AUSÊNCIA para quem acabou de voltar — a única tela em que os mesmos
+       pixels mudam de significado. A vaga não se perde: vai para a próxima
+       da fila, que é como o teto de 5 já funciona. */
+    .filter((z, i) => visible[i] && !(returning && z.id === "progress"))
+    .slice(0, MAX_ZONES);
 }
 
 function useGoalBonuses() {
@@ -1313,14 +1338,41 @@ export default function Hoje() {
   const { profile } = useProfile();
   const { user } = useAuth();
   const firstName = (profile?.name ?? "").split(" ")[0];
-  const streak = useActiveStreak();
+  const { streak, daysRegistered } = useActiveStreak();
   useGoalBonuses();
 
   // Ritual de retorno (Sugestão 3): silêncio detectado como serviço, não
   // culpa. Enquanto ativo, a tela troca o painel pelo ritual — a pessoa
   // pode dispensar (por hoje) e ver o painel normal quando quiser.
   const { returning, gapDays } = useReturnGap();
-  const zones = useVisibleZones();
+
+  /* A LINHA DE FOCO, pelo estado real do dia (lib/dailyFocus.ts). */
+  const eventsToday = useEventsTodayCount();
+  const sleepPending = useSleepZoneVisible();
+  const { data: habitsToday } = useHabitsTodayQuery();
+  const pendingHabits = habitsToday
+    ? habitsToday.habits.filter((h) => !habitsToday.logs.some((l) => l.habit_id === h.id)).length
+    : 0;
+  const focoDoDia = focusLine({
+    eventsToday, pendingHabits, sleepPending, weekday: new Date().getDay(),
+  });
+
+  /* A JANELA DE 3 A 6 DIAS. Abaixo do sétimo dia o ritual não liga, e até
+     agora não havia nada: a pessoa voltava para o painel normal, com o selo
+     de sequência sumido sem explicação e as barras do dia em zero. O app não
+     a culpava, mas também não a recebia — e vínculo é exatamente isto,
+     alguém notar que você voltou.
+
+     A frase abre pelo que foi PRESERVADO e não diz quantos dias ela ficou
+     fora. Isso não é delicadeza: "conta o que aconteceu" é a gramática da
+     cobrança afetuosa (é o que se diz a quem deve explicação), e funciona no
+     ritual de 7 dias só porque lá vem colada em "e está tudo bem, a vida
+     acontece". Numa linha só não cabe amortecedor. */
+  const returnNudge = !returning && gapDays >= 3 && daysRegistered > 0
+    ? `Você voltou. Seus ${daysRegistered} ${daysRegistered === 1 ? "dia registrado continua" : "dias registrados continuam"} aqui, com seu recorde e seus planos.`
+    : null;
+
+  const zones = useVisibleZones(returnNudge !== null);
 
   /* O REGISTRAR da barra foca ESTA caixa em vez de abrir uma segunda igual
      dois centímetros ao lado. Ao desmontar, o registro é limpo e a barra
@@ -1366,7 +1418,19 @@ export default function Hoje() {
           <h1 className="font-display text-2xl font-semibold">
             {greet()}{firstName ? `, ${firstName}` : ""}.
           </h1>
-          <p className="text-sm text-muted-foreground">{DAILY_FOCUS[new Date().getDay()]}</p>
+          {/* A linha de foco conhece o estado do dia: depois do primeiro
+              registro ela para de pedir o que já foi feito e passa a apontar
+              para o que ainda perece. A regra está em lib/dailyFocus.ts. */}
+          <p className="text-sm text-muted-foreground">{focoDoDia}</p>
+          {/* Voltou depois de 3 a 6 dias: uma linha, sem card e sem moldura,
+              que abre pelo que foi PRESERVADO e nunca diz quantos dias ela
+              ficou fora. Abaixo de 3 dias não há silêncio nenhum — há a folga
+              que a própria casa concede de graça, e nomeá-la seria inventar
+              uma ausência. Acima de 6 entra o ritual inteiro, que substitui a
+              tela e já existe. */}
+          {returnNudge && (
+            <p className="text-[11px] text-gold-ink mt-0.5">{returnNudge}</p>
+          )}
           {streak === 2 && (
             <p className="text-[11px] text-gold-ink mt-0.5">
               Sua primeira sequência começou — e um dia de descanso por semana não a quebra.

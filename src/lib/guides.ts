@@ -35,9 +35,20 @@ export const GUIDES = {
     title: "Chute honesto vale mais que planilha certa",
     text: "Não precisa de número exato para começar: escreva quanto você acha que ganha e quanto acha que gasta, e o Ascende já monta seu retrato. Depois, cada gasto que você contar vai corrigindo sozinho. O que estava só na sua cabeça vira uma conta que você consegue olhar.",
   },
+  /* ATENÇÃO AO ESCOPO DESTA GARANTIA — ela é verdadeira para UM caminho e
+     falsa para o outro, e a primeira versão desta dica misturava os dois.
+     • CSV e export do App Saúde: lidos no aparelho (fileToText,
+       appleHealthZip). Nada sobe, nada passa por IA. Verdade, e vale dizer.
+     • Fatura/extrato em PDF: import-statement/index.ts:96-99 manda o arquivo
+       em base64 para a API da Anthropic. SOBE e PASSA por IA.
+     Dizer "sem passar por IA" ao lado de "o extrato do banco" seria uma frase
+     tranquilizadora e falsa, dita justamente a quem tem medo de privacidade —
+     ou seja, a quem mais confia nela e menos tem como conferir. A fatura tem
+     a sua própria frase verdadeira, no diálogo dela
+     (ImportStatement.tsx:151: "processado e descartado"). */
   importar: {
     title: "O arquivo não sai do seu aparelho",
-    text: "Se você já usa outro app de sono, treino, peso ou o extrato do banco, dá para trazer tudo de uma vez — cada registro entra com a data original. O arquivo é lido aqui dentro do seu celular, sem passar por IA e sem subir para servidor nenhum. E você confere item por item antes de qualquer coisa ser salva.",
+    text: "Se você já usa outro app de sono, treino ou peso, dá para trazer tudo de uma vez — cada registro entra com a data original. O CSV e o export do app Saúde são lidos aqui dentro do seu celular, sem passar por IA e sem subir para servidor nenhum. E você confere item por item antes de qualquer coisa ser salva.",
   },
 } as const;
 

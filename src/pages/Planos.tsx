@@ -257,10 +257,16 @@ export default function Planos() {
                 fraca — agora usa o mesmo padrão, e a pergunta que ela carrega
                 é a Porta do POSICIONAMENTO (corpo + dinheiro no orçamento). */}
             <p className="font-semibold">Seu primeiro plano nasce de uma pergunta</p>
+            {/* Modo condicional de propósito. A primeira redação afirmava que
+                "o Conselheiro já sabe quanto você ganha, o que você gasta com
+                comida e como anda seu corpo" — falso para quem pulou os blocos
+                de renda e de corpo no onboarding, e falso na voz dele,
+                afirmando um conhecimento que ele não tem. É o mesmo defeito
+                que semOrigemTexto (memories.ts:203) já existe para combater. */}
             <p className="text-sm text-muted-foreground mt-1">
-              O Conselheiro já sabe quanto você ganha, o que você gasta com comida e como anda
-              seu corpo. Peça um plano alimentar dentro do seu orçamento, um treino que caiba na
-              sua rotina ou um teto de gasto — ele monta, e você guarda aqui.
+              Com o que você já contou, o Conselheiro monta: um plano alimentar dentro do seu
+              orçamento, um treino que caiba na sua rotina ou um teto de gasto. O que faltar,
+              ele pergunta — e você guarda o plano aqui.
             </p>
           </div>
           <Button asChild variant="secondary">
