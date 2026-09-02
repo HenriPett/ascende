@@ -12,7 +12,6 @@
 // • o domínio do app em "Authorized JavaScript origins" no Google Cloud Console.
 // Sem o VITE_GOOGLE_CLIENT_ID, o app cai no fluxo de redirect (fallback).
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
   interface Window { google?: any }
 }

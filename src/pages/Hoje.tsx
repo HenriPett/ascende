@@ -24,10 +24,8 @@ import {
   HandHeart, ClipboardList,
 } from "lucide-react";
 import { PLAN_KIND_META } from "@/lib/blueprint";
-import {
-  xpToastSuffix, invalidateKeys, FINANCE_KEYS, LIFE_DATA_KEYS,
-} from "@/components/core/CaptureBar";
-import { levelFromXp, levelTitle } from "@/lib/xp";
+import { invalidateKeys, FINANCE_KEYS, LIFE_DATA_KEYS } from "@/lib/queryKeys";
+import { levelFromXp, levelTitle, xpToastSuffix } from "@/lib/xp";
 import { DEFAULT_WATER_GOAL_ML, DEFAULT_WATER_BOTTLES } from "@/hooks/useProfile";
 import { useEffect, useRef, useState } from "react";
 import { greet, todayISO } from "@/lib/format";

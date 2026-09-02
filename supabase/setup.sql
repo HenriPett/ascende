@@ -959,8 +959,15 @@ create or replace function public.award_xp_for_event()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare pts int;
 begin
-  -- Recorrência e importação registram a vida sem esforço da pessoa hoje:
-  -- não valem XP por item (o marco da importação tem XP próprio, abaixo).
+  -- Registro IMPORTADO de qualquer tipo não vale XP por item: a pessoa não
+  -- viveu 555 noites agora, ela trouxe um arquivo. Antes esta isenção só
+  -- existia para transações e o histórico de sono/treino/peso inflava o nível
+  -- (achado P0 do plano refinado; ver migração 20260902120000).
+  if coalesce(new.source, 'manual') = 'import' then
+    return new;
+  end if;
+
+  -- Recorrência e importação financeira: mesma regra, pela via do payload.
   if new.kind = 'transaction'
      and coalesce(new.payload->>'tx_source', 'manual') in ('recurring','import') then
     return new;

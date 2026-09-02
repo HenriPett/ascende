@@ -8,7 +8,7 @@
 // o ajuste rápido de horas, sem juízo.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { invalidateKeys, SLEEP_KEYS } from "@/components/core/CaptureBar";
+import { invalidateKeys, SLEEP_KEYS } from "@/lib/queryKeys";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";

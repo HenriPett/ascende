@@ -21,7 +21,9 @@ import { FileUp, Loader2 } from "lucide-react";
 import { fileToBase64 } from "@/lib/files";
 import { readFnError, isPlanLimit, type PlanLimitError } from "@/lib/fnError";
 import type { ProposedStatementTx } from "@/lib/prosperidade";
-import StatementReview, { findStatementDuplicates, useStatementConfirm } from "@/components/core/StatementReview";
+import StatementReview from "@/components/core/StatementReview";
+import { findStatementDuplicates } from "@/lib/statementImport";
+import { useStatementConfirm } from "@/hooks/useStatementConfirm";
 
 const MAX_FILE_BYTES = 6_500_000;
 const ACCEPT = "application/pdf,image/jpeg,image/png,image/webp";

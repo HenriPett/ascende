@@ -16,7 +16,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { pillarById } from "@/lib/pillars";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
-import LearnedInsights, { type LearnedMemory } from "@/components/core/LearnedInsights";
+import LearnedInsights from "@/components/core/LearnedInsights";
+import type { LearnedMemory } from "@/lib/memories";
 import FirstTimeTip from "@/components/core/FirstTimeTip";
 import { useGuides } from "@/hooks/useGuides";
 import { xpForKind } from "@/lib/xp";
@@ -27,7 +28,9 @@ import Paywall from "@/components/core/Paywall";
 import { readFnError, isPlanLimit, type PlanLimitError } from "@/lib/fnError";
 import { imageToBase64, fileToBase64, fileToText } from "@/lib/files";
 import type { ProposedStatementTx } from "@/lib/prosperidade";
-import StatementReview, { findStatementDuplicates, useStatementConfirm } from "@/components/core/StatementReview";
+import StatementReview from "@/components/core/StatementReview";
+import { findStatementDuplicates } from "@/lib/statementImport";
+import { useStatementConfirm } from "@/hooks/useStatementConfirm";
 import { proposedEventChecked } from "@/lib/trackers";
 
 interface ProfileSuggestion {
