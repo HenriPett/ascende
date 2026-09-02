@@ -1,5 +1,6 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { syncAnalytics } from "@/lib/analytics";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -56,11 +57,20 @@ function RequireOnboarded({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/* Telemetria só nas páginas públicas: como a SPA troca de rota sem recarregar,
+   a decisão precisa ser reavaliada a cada navegação (ver src/lib/analytics.ts). */
+function AnalyticsGate() {
+  const { pathname } = useLocation();
+  useEffect(() => { syncAnalytics(pathname); }, [pathname]);
+  return null;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <BrowserRouter>
+          <AnalyticsGate />
           <Suspense fallback={<Splash />}>
           <Routes>
             <Route path="/" element={<Landing />} />

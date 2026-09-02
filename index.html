@@ -56,7 +56,10 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- Analytics no fim do body: não bloqueia o primeiro paint do herói -->
-    <script src="/clarity.js" defer></script>
+    <!-- A telemetria NÃO é carregada aqui de propósito: isso a colocaria em
+         toda a aplicação, inclusive nas telas de finanças, saúde, diário e
+         conversas. Quem decide carregar é src/lib/analytics.ts, e só nas
+         páginas públicas. -->
+
   </body>
 </html>
