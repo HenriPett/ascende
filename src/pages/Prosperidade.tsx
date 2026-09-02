@@ -12,6 +12,7 @@ import { spParts } from "@/lib/dates";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import GoalInput from "@/components/core/GoalInput";
+import FirstTimeTip from "@/components/core/FirstTimeTip";
 import ImportStatement from "@/components/core/ImportStatement";
 import QueryError from "@/components/core/QueryError";
 import Paywall from "@/components/core/Paywall";
@@ -648,6 +649,11 @@ export default function Prosperidade() {
         </div>
       </div>
 
+      {/* Esta é a tela mais intimidante do app para quem tem o orçamento
+          apertado: entra e vê um Raio-X pedindo renda. A dica existe para
+          dizer a única frase que destrava — não precisa de número exato. */}
+      <FirstTimeTip id="prosperidade" />
+
       {/* Falha de leitura tem cara própria e vem ANTES de tudo: sem ela, o
           mês em branco parecia real e a tela agia em cima disso. */}
       {loadFailed && (
@@ -1121,9 +1127,13 @@ export default function Prosperidade() {
         {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
         {!isLoading && !monthTxs.length && (
           <p className="text-sm text-muted-foreground">
+            {/* Um mês passado vazio deixava a pessoa com duas perguntas sem
+                resposta ("quebrou?" e "dá para trazer de algum lugar?"). A
+                segunda o app já sabe responder: a importação de fatura entra
+                com a data original de cada compra. */}
             {viewMonth === nowKey
               ? "Nenhum lançamento ainda. Registre o primeiro acima — ou conte na tela Hoje."
-              : "Nenhum lançamento neste mês."}
+              : "Este mês está sem lançamentos. Se você quiser preencher o passado, a importação de fatura entra com a data original de cada compra."}
           </p>
         )}
         <div className="divide-y">

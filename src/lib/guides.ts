@@ -26,6 +26,19 @@ export const GUIDES = {
     title: "Um lugar para as suas lutas",
     text: "Batalha é aquilo que você quer vencer: redes sociais, cigarro, apostas... Você faz um check-in por dia dizendo como foi. Recaída não zera sua história — o que conta é o acumulado. E você escolhe se o Conselheiro pode ver cada batalha.",
   },
+  /* As duas dicas abaixo cobrem as telas onde a Candidata A do POSICIONAMENTO
+     mais desiste, e cada uma existe para dizer UMA frase que destrava:
+     "não precisa de número exato" e "o arquivo não sobe para servidor nenhum".
+     Ambas são medo, não falta de instrução — e medo não se resolve com um
+     tutorial a mais, se resolve tirando a ameaça do caminho. */
+  prosperidade: {
+    title: "Chute honesto vale mais que planilha certa",
+    text: "Não precisa de número exato para começar: escreva quanto você acha que ganha e quanto acha que gasta, e o Ascende já monta seu retrato. Depois, cada gasto que você contar vai corrigindo sozinho. O que estava só na sua cabeça vira uma conta que você consegue olhar.",
+  },
+  importar: {
+    title: "O arquivo não sai do seu aparelho",
+    text: "Se você já usa outro app de sono, treino, peso ou o extrato do banco, dá para trazer tudo de uma vez — cada registro entra com a data original. O arquivo é lido aqui dentro do seu celular, sem passar por IA e sem subir para servidor nenhum. E você confere item por item antes de qualquer coisa ser salva.",
+  },
 } as const;
 
 export type GuideId = keyof typeof GUIDES;

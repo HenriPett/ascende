@@ -357,26 +357,58 @@ export default function Batalhas() {
                 <p className="font-display text-2xl font-semibold">{stats.record}</p>
                 <p className="text-[11px] text-muted-foreground leading-tight">recorde<br />pessoal</p>
               </div>
+              {/* Este quadro mostrava `currentStreak`, que voltava a zero em
+                  qualquer dia sem check-in — inclusive sem recaída nenhuma.
+                  Agora mostra os dias desde a última recaída, que é o que
+                  /recusas promete e o que nenhuma ausência derruba.
+                  Ver a nota longa em lib/battles.ts. */}
               <div className="rounded-lg border p-3">
-                <p className="font-display text-2xl font-semibold">{stats.currentStreak}</p>
-                <p className="text-[11px] text-muted-foreground leading-tight">sequência<br />atual</p>
+                <p className="font-display text-2xl font-semibold">{stats.daysSinceRelapse ?? 0}</p>
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  {stats.cleanSince === "relapse"
+                    ? (<>dias desde<br />a última recaída</>)
+                    : (<>dias desde<br />o começo</>)}
+                </p>
               </div>
             </div>
+
+            {/* Honestidade sem punição: a contagem acima não depende de
+                check-in, então a tela tem que DIZER quando não sabe. Sem esta
+                linha, o número inflaria em silêncio — e num tema como apostas
+                ou álcool o autoengano é dano real, não gentileza. */}
+            {stats.checkinGapDays >= 2 && (
+              <p className="text-[11px] text-muted-foreground">
+                {stats.checkinGapDays} dias sem check-in. O número acima conta desde a última
+                recaída, não desde o último registro.
+              </p>
+            )}
 
             {stats.nextMilestone && (
               <div>
                 <div className="flex justify-between text-xs text-muted-foreground mb-1">
                   <span>Próximo marco: {stats.nextMilestone} dias</span>
-                  <span>{stats.currentStreak}/{stats.nextMilestone}</span>
+                  <span>{stats.daysSinceRelapse ?? 0}/{stats.nextMilestone}</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-muted">
                   <div className="h-1.5 rounded-full bg-gold transition-all"
-                    style={{ width: `${Math.min((stats.currentStreak / stats.nextMilestone) * 100, 100)}%` }} />
+                    style={{ width: `${Math.min(((stats.daysSinceRelapse ?? 0) / stats.nextMilestone) * 100, 100)}%` }} />
                 </div>
               </div>
             )}
-            {!stats.nextMilestone && stats.currentStreak >= MILESTONES[MILESTONES.length - 1] && (
+            {!stats.nextMilestone && (stats.daysSinceRelapse ?? 0) >= MILESTONES[MILESTONES.length - 1] && (
               <p className="text-xs text-gold-ink">✦ Você passou dos 90 dias. Isso já é outra vida.</p>
+            )}
+
+            {/* "Resisti à vontade" era calculado em battles.ts e não aparecia
+                em tela nenhuma, enquanto o total de recaídas era exibido como
+                contador vitalício. O produto contava as derrotas em público e
+                jogava fora a vitória mais difícil do pilar. */}
+            {stats.resisted > 0 && (
+              <p className="text-xs text-gold-ink">
+                {stats.resisted === 1
+                  ? "1 vez a vontade bateu e você não cedeu."
+                  : `${stats.resisted} vezes a vontade bateu e você não cedeu.`}
+              </p>
             )}
 
             {stats.relapses > 0 && (

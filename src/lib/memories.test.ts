@@ -187,17 +187,32 @@ describe("MEMORY_STATUS_LABEL", () => {
  * que admitir a falha.
  */
 describe("semOrigemTexto", () => {
+  /* O relógio entra por parâmetro (mesma disciplina do resto do módulo): a
+     explicação depende de o registro de origem JÁ existir, e um teste que
+     dependesse da data real passaria ou falharia conforme o dia em que roda. */
+  const DEPOIS_DA_MIGRACAO = new Date("2026-09-20T00:00:00Z");
+  const ANTES_DA_MIGRACAO = new Date("2026-09-01T00:00:00Z");
+
   it("memória antiga: a explicação da data é verdadeira e pode ser dita", () => {
-    expect(semOrigemTexto("2026-08-01T10:00:00Z")).toContain("anterior ao momento");
+    expect(semOrigemTexto("2026-08-01T10:00:00Z", DEPOIS_DA_MIGRACAO)).toContain("anterior ao momento");
   });
 
   it("memória recente: admite que não guardou, sem inventar o motivo", () => {
-    const texto = semOrigemTexto("2026-09-10T10:00:00Z");
+    const texto = semOrigemTexto("2026-09-10T10:00:00Z", DEPOIS_DA_MIGRACAO);
     expect(texto).not.toContain("anterior ao momento");
     expect(texto).toContain("Não guardei de onde tirei esta");
   });
 
   it("data ilegível cai no texto que não afirma nada", () => {
-    expect(semOrigemTexto("ontem de manhã")).not.toContain("anterior ao momento");
+    expect(semOrigemTexto("ontem de manhã", DEPOIS_DA_MIGRACAO)).not.toContain("anterior ao momento");
+  });
+
+  /* A regressão que motivou o parâmetro: enquanto a migração de origem ainda
+     não rodou, NENHUMA memória pode ser explicada como "anterior" a ela — e
+     antes desta trava toda memória caía nesse texto, inclusive a criada há
+     segundos, porque a data da migração está adiantada no calendário. */
+  it("antes de a migração existir, nenhuma memória é chamada de anterior a ela", () => {
+    expect(semOrigemTexto("2026-08-01T10:00:00Z", ANTES_DA_MIGRACAO)).not.toContain("anterior ao momento");
+    expect(semOrigemTexto("2026-09-01T09:59:00Z", ANTES_DA_MIGRACAO)).toContain("Não guardei de onde tirei esta");
   });
 });

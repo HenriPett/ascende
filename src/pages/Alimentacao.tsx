@@ -302,7 +302,7 @@ export default function Alimentacao() {
   const saveCalorieGoalRaw = async (raw: string) => {
     if (!user) return;
     const kcal = Math.round(Number(raw.replace(/\D/g, "")));
-    if (!kcal || kcal < 800 || kcal > 8000) { toast.error("Meta calórica inválida. Informe um valor entre 800 e 8000 kcal."); return; }
+    if (!kcal || kcal < 800 || kcal > 8000) { toast.error("Para montar seu plano com segurança, eu trabalho entre 800 e 8000 kcal por dia. Qual número, dentro disso, é o seu?"); return; }
     const { error } = await supabase.from("profiles").update({ calorie_goal_kcal: kcal }).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar a meta. Tente de novo."); return; }
     toast.success("Meta calórica diária salva. Acompanhe na tela Hoje.");
@@ -313,7 +313,7 @@ export default function Alimentacao() {
   const saveWeightGoal = async () => {
     if (!user) return;
     const kg = Number(weightGoalInput.replace(",", "."));
-    if (!kg || kg < 20 || kg > 400) { toast.error("Meta de peso inválida. Informe um valor em kg, como 75."); return; }
+    if (!kg || kg < 20 || kg > 400) { toast.error("Só consigo guardar metas de peso entre 20 e 400 kg. Escreva assim: 75 ou 78,5."); return; }
     const { error } = await supabase.from("profiles").update({ weight_goal_kg: kg }).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar a meta. Tente de novo."); return; }
     toast.success("Meta de peso salva.");

@@ -23,12 +23,21 @@ const FEATURE_LABEL: Record<string, string> = {
 
 // Só benefícios que EXISTEM hoje (plano §2.2): nada de relatório mensal ou
 // análises avançadas até estarem implementados de verdade.
+//
+// A ORDEM DA FRASE É A DECISÃO. PRINCIPIOS.md, micro-incoerência 2, é
+// explícito: "o framing carrega o valor. Vocabulário de operadora de celular
+// é regressão." A versão anterior tinha a COTA como sujeito de cada linha
+// ("Conselheiro: 15 mensagens por dia") — cinco linhas de ração, lidas
+// exatamente no segundo em que a pessoa não quer fazer a conta do próprio
+// uso. O número continua aqui, e continua exato: mudou de sujeito para
+// PROVA. Quem reescrever isto de volta para "recurso: N por período" está
+// desfazendo uma decisão do PRINCIPIOS, não melhorando a redação.
 const PLUS_BENEFITS = [
-  "Conselheiro: 15 mensagens por dia (até 300 no mês)",
-  "Captura inteligente: 30 por dia",
-  "Briefing diário todas as manhãs (com aviso no WhatsApp)",
-  "30 análises de refeição e 10 análises de PDF por mês",
-  "Até 5 planos ativos e 150 memórias do Conselheiro",
+  "Perguntar quando a dúvida aparece, não quando a semana virar — 15 conversas por dia",
+  "Contar o dia quantas vezes quiser: 30 capturas por dia, sem escolher o que vale a pena",
+  "Uma leitura da sua vida toda manhã, avisada no seu WhatsApp",
+  "A foto do prato e a fatura em PDF viram registro: 30 refeições e 10 documentos por mês",
+  "Cinco planos vivos ao mesmo tempo — e um Conselheiro que lembra de 150 coisas suas",
 ];
 
 export default function Paywall({
@@ -106,8 +115,13 @@ export default function Paywall({
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>Agora não</Button>
+            {/* "Conhecer" nomeia uma atividade (ler mais), não um resultado —
+                e ao lado de um "Agora não" bem escrito, a saída ficava mais
+                clara que a entrada. O rótulo agora diz o resultado E responde
+                a última dúvida de quem tem orçamento apertado: tocar aqui
+                não cobra nada, leva para uma tela de comparação. */}
             <Button onClick={() => { onClose(); navigate("/app/assinatura"); }}>
-              Conhecer o Ascende+
+              Ver o que muda — sem pagar nada agora
             </Button>
           </div>
         </div>

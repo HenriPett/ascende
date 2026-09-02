@@ -173,12 +173,12 @@ export default function Vitalidade() {
   };
   const saveSleepGoalRaw = (raw: string) => {
     const h = Number(raw.replace(",", "."));
-    if (!h || h < 4 || h > 12) { toast.error("Meta de sono inválida. Informe um número de horas entre 4 e 12."); return; }
+    if (!h || h < 4 || h > 12) { toast.error("Trabalho com metas de sono entre 4 e 12 horas por noite. Quantas horas você quer dormir?"); return; }
     saveVitalGoal({ sleep_goal_h: h }, "Meta de sono", () => setSleepGoalInput(""));
   };
   const saveWorkoutsGoalRaw = (raw: string) => {
     const n = Math.round(Number(raw));
-    if (!n || n < 1 || n > 14) { toast.error("Meta de treinos inválida. Informe um número entre 1 e 14."); return; }
+    if (!n || n < 1 || n > 14) { toast.error("Trabalho com até 14 treinos por semana. Quantos cabem na sua rotina?"); return; }
     saveVitalGoal({ weekly_workouts_goal: n }, "Meta de treinos", () => setWorkoutsGoalInput(""));
   };
   const [medicationInput, setMedicationInput] = useState("");
@@ -532,8 +532,9 @@ export default function Vitalidade() {
 
         {!isError && !(data?.habits ?? []).length && (
           <p className="text-sm text-muted-foreground">
-            Comece com UM hábito pequeno — pequeno demais para falhar. Você pode criar hábitos
-            de qualquer pilar aqui.
+            Comece com um só, e pequeno o bastante para você cumprir num dia ruim:
+            "beber água ao acordar", "10 flexões", "anotar o gasto do dia". O truque
+            não é escolher o hábito certo — é escolher um que não dê para falhar.
           </p>
         )}
 
@@ -556,7 +557,10 @@ export default function Vitalidade() {
         </div>
 
         <form onSubmit={addHabit} className="flex gap-2">
-          <Input maxLength={80} placeholder="Novo hábito"
+          {/* Exemplo no lugar do rótulo: "Novo hábito" repete o título do
+              cartão e deixa o campo mudo; um exemplo concreto é o que faz a
+              pessoa preencher sem pensar. */}
+          <Input maxLength={80} placeholder='Ex.: "beber água ao acordar"'
             className="min-w-0 flex-1" value={newHabit} onChange={(e) => setNewHabit(e.target.value)} />
           <Select value={newPillar} onValueChange={setNewPillar}>
             <SelectTrigger className="w-[112px] shrink-0"><SelectValue /></SelectTrigger>
@@ -564,7 +568,7 @@ export default function Vitalidade() {
               {PILLARS.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button type="submit" size="icon" className="shrink-0" aria-label="Criar hábito"><Plus className="w-4 h-4" /></Button>
+          <Button type="submit" size="icon" className="shrink-0" aria-label="Criar este hábito"><Plus className="w-4 h-4" /></Button>
         </form>
       </Card>
 

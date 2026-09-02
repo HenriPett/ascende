@@ -20,6 +20,7 @@ import {
 import { PILLARS, pillarById, type PillarId } from "@/lib/pillars";
 import { TRACKERS } from "@/lib/trackers";
 import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
+import FirstTimeTip from "@/components/core/FirstTimeTip";
 import HealthImport from "@/components/core/HealthImport";
 import SourcesAndImports from "@/components/core/SourcesAndImports";
 import MemoryControl from "@/components/core/MemoryControl";
@@ -728,6 +729,10 @@ export default function Ajustes() {
             Traga o histórico que já existe nos seus outros aplicativos: sono, treinos e peso.
           </p>
         </div>
+        {/* O medo desta seção não é de instrução, é de exposição: quem não
+            sabe o que é um .zip não chega a ler o texto de dentro. A dica
+            adianta a única frase que destrava — o arquivo não sobe. */}
+        <FirstTimeTip id="importar" />
         <HealthImport />
       </Card>
 
@@ -770,9 +775,16 @@ export default function Ajustes() {
             <ShieldAlert className="w-4 h-4" /> Excluir minha conta
           </p>
           <p className="text-xs text-muted-foreground">
+            {/* O texto mandava cancelar a assinatura à mão ANTES de excluir —
+                uma tarefa que o servidor já faz sozinho (delete-account
+                cancela no Stripe e só então apaga, abortando com mensagem
+                clara se o cancelamento falhar). Pior: insinuava que excluir a
+                conta podia deixar uma cobrança viva. Isso é sludge no caminho
+                da SAÍDA: fricção que não serve a pessoa e produz retenção por
+                confusão, mesmo sem ninguém ter querido isso. */}
             Apaga definitivamente sua conta e TODOS os dados (registros, conversas, memórias,
-            planos, XP). Não tem volta. Se tiver assinatura ativa, cancele antes na página
-            Assinatura. Dica: exporte seus dados acima antes de excluir.
+            planos, XP). Não tem volta. Se você assina o Ascende+, cancelamos a assinatura
+            automaticamente antes de apagar tudo. Dica: exporte seus dados acima antes de excluir.
           </p>
           {/* O token --destructive (4 72% 52/58%) com a tinta clara dá 4,34:1
               no claro e 3,56:1 no escuro — abaixo do mínimo AA de 4,5:1 para
