@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { NavLink, Outlet, Link } from "react-router-dom";
+import { useCallback, useMemo, useState, useEffect } from "react";
+import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import {
   Sun, Moon, Monitor, MessageCircle, Mountain, Plus, Settings, CreditCard,
   LogOut, ChevronRight, UserRound,
@@ -221,6 +221,25 @@ function CaptureSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
 export default function AppLayout() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const { pathname } = useLocation();
+
+  /* As folhas fecham na troca de rota.
+   *
+   * O AppLayout NÃO desmonta quando a rota muda, e nada ligava este estado ao
+   * histórico — então a folha atravessava a navegação. Bug encontrado em QA ao
+   * vivo, reproduzível 100%: abrir a Jornada, tocar REGISTRAR, e voltar no
+   * botão do navegador aterrissava na Hoje com a folha aberta POR CIMA da
+   * caixa de captura que já vive naquela tela. Duas caixas idênticas, na mesma
+   * tela — exatamente o que a Fase 4 escreveu que não podia acontecer (ver
+   * useCaptureFocus.tsx). E, de quebra, o REGISTRAR parava de focar a caixa de
+   * baixo, mudando de comportamento sem a pessoa ter pedido.
+   *
+   * Vale para a folha da conta pelo mesmo motivo: navegar por um link de
+   * dentro dela deixava o painel aberto sobre a tela nova. */
+  useEffect(() => {
+    setCaptureOpen(false);
+    setAccountOpen(false);
+  }, [pathname]);
 
   // Ponte do REGISTRAR: a tela que embute a captura registra aqui como focá-la.
   const [focus, setFocus] = useState<(() => void) | null>(null);

@@ -36,6 +36,10 @@ function day(offset: number, over: Partial<DailyMetrics> = {}): DailyMetrics {
     food_spend: 0,
     total_spend: 0,
     has_finance: true,
+    // Fixture com cobertura por extrato por padrão: o teste que quer provar a
+    // ausência dela sobrescreve. Sem isso, todo teste de refeicao_gasto_comida
+    // passaria a medir "sem dado" em vez do que quer medir.
+    finance_from_statement: true,
     ...over,
   };
 }
@@ -305,7 +309,7 @@ describe("null é NÃO MEDIDO, nunca zero", () => {
     // Todos os dias entram (o sono do dia seguinte existe), inclusive os sem
     // treino — "não treinou" é informação medida, e é o grupo baixo.
     expect(r.sample_size).toBe(30);
-    expect(r.labels.left).toContain("treinos");
+    expect(r.labels.left).toContain("treino");
   });
 });
 
@@ -424,21 +428,17 @@ describe("corte pela mediana", () => {
     expect(r.split_rule).toBe("acima_da_mediana");
   });
 
-  it("lado esquerdo binário com o valor ALTO na mediana ainda é comparável", () => {
-    // refeições em {0, 3}, com mais dias registrados que não registrados:
-    // mediana = 3. Com `> mediana` o grupo alto ficaria VAZIO e a comparação
-    // "registrou x não registrou" morreria como falta de variação. O corte
-    // inclusivo salva o caso, e diz na saída que foi ele.
+  it("contagem corta por PRESENÇA, não por mediana", () => {
     const rows: DailyMetrics[] = [];
     for (let i = 0; i < 31; i++) {
-      const registrou = i % 2 === 0; // 16 dias com 3, 15 dias com 0
+      const registrou = i % 2 === 0; // 16 dias com 3 refeições, 15 com nenhuma
       rows.push(day(i, { meals_logged: registrou ? 3 : 0, food_spend: registrou ? 30 : 90 }));
     }
     const r = refeicao_gasto_comida(rows);
     expect(r.status).toBe("tendencia");
     if (r.status !== "tendencia") return;
-    expect(r.split_value).toBe(3);
-    expect(r.split_rule).toBe("a_partir_da_mediana");
+    expect(r.split_rule).toBe("houve_ou_nao");
+    expect(r.split_value).toBe(0);
     expect(r.high_group_days).toBe(16); // os dias que registraram
     expect(r.low_group_days).toBe(15);
   });
@@ -469,7 +469,7 @@ describe("refeicao_gasto_comida", () => {
     expect(r.status).toBe("tendencia");
     if (r.status !== "tendencia") return;
     expect(r.direction).toBe("menor");
-    expect(r.labels.left).toBe("refeições registradas no dia");
+    expect(r.labels.left).toBe("houve refeição registrada no dia");
     // Proibido pelo contrato: seria vender uma medida que não fizemos.
     expect(JSON.stringify(r).toLowerCase()).not.toContain("planejamento");
   });
@@ -597,7 +597,7 @@ describe("has_finance", () => {
       rows.push(day(i, {
         meals_logged: i % 2 ? 0 : 3,
         food_spend: coberto ? (i % 2 ? 80 : 25) : 0,
-        has_finance: coberto,
+        has_finance: coberto, finance_from_statement: coberto,
       }));
     }
     const r = refeicao_gasto_comida(rows);
@@ -631,11 +631,116 @@ describe("contrato de dados", () => {
   it("DailyMetrics do cálculo satisfaz o tipo lido do banco", () => {
     // Se o Cargo renomear ou trocar o tipo de qualquer campo, isto para de
     // compilar — e `tsc --noEmit` no CI pega antes de chegar em produção.
+    // NOS DOIS SENTIDOS, de propósito. A checagem antiga só atribuía o tipo
+    // do cálculo ao tipo do banco — e tipagem estrutural aceita campo A MAIS
+    // numa variável, então um campo novo em só um dos lados passava batido.
+    // Foi assim que `finance_from_statement` quase entrou em um arquivo só.
     const doCalculo = day(0);
     const paraOBanco: DailyMetricsDoCargo = doCalculo;
+    const deVolta: DailyMetrics = paraOBanco;
     expect(paraOBanco.day).toBe(doCalculo.day);
-    // has_finance é a coluna aditiva aprovada nesta rodada: quando ela entrar
-    // na view e no tipo do Cargo, a checagem passa a valer nos dois sentidos.
+    expect(deVolta.day).toBe(doCalculo.day);
     expect(typeof doCalculo.has_finance).toBe("boolean");
+    expect(typeof doCalculo.finance_from_statement).toBe("boolean");
+  });
+});
+
+
+/* ═══ O RÓTULO PRECISA DESCREVER O GRUPO QUE ELE NOMEIA ═══════════════════
+ *
+ * Bug real, encontrado em auditoria depois da fase pronta: com corte pela
+ * mediana, quem treinava DUAS vezes em alguns dias tinha mediana 1. O corte
+ * virava "acima de 1", e todos os dias com UM treino caíam no grupo baixo —
+ * que a tela chama de "Em dias sem treino". A mediana estava certa para o
+ * grupo; o grupo é que não era o que o rótulo dizia.
+ *
+ * É o pior tipo de erro deste produto: não parece errado. A pessoa lê um
+ * número plausível sobre a própria vida e aprende algo falso.
+ */
+describe("corte por presença: o rótulo não pode mentir sobre o grupo", () => {
+  it("dia com UM treino nunca cai no grupo 'sem treino'", () => {
+    // 10 dias com 2 treinos, 12 com 1, 9 sem nenhum. Mediana = 1.
+    const rows: DailyMetrics[] = [];
+    for (let i = 0; i < 32; i++) {
+      const count = i < 10 ? 2 : i < 22 ? 1 : 0;
+      rows.push(day(i, { workout_count: count, sleep_hours: count > 0 ? 8 : 6 }));
+    }
+    const r = treino_sono(rows);
+    expect(r.status).toBe("tendencia");
+    if (r.status !== "tendencia") return;
+    expect(r.split_rule).toBe("houve_ou_nao");
+    // 22 dias treinaram (10 com dois + 12 com um). O grupo baixo é só quem
+    // não treinou. Com o corte pela mediana, o baixo tinha 21 dias — dos
+    // quais 12 COM treino.
+    // 31 pares (o dia 31 não tem D+1): 22 dias com treino, 9 sem.
+    expect(r.high_group_days).toBe(22);
+    expect(r.low_group_days).toBe(9);
+  });
+
+  it("quem treina TODO dia recebe 'ainda não dá para dizer', não um rótulo errado", () => {
+    const rows: DailyMetrics[] = [];
+    for (let i = 0; i < 32; i++) rows.push(day(i, { workout_count: 1 + (i % 3), sleep_hours: 7 }));
+    const r = treino_sono(rows);
+    // Sem nenhum dia sem treino, não há com o que comparar. Dizer isso é
+    // honesto; inventar um grupo "sem treino" cheio de dias com treino não é.
+    expect(r.status).toBe("dados_insuficientes");
+    if (r.status !== "dados_insuficientes") return;
+    expect(r.reason).toBe("sem_variacao");
+  });
+});
+
+
+/* ═══ COBERTURA POR EXTRATO: os dois lados precisam ser independentes ═════
+ *
+ * Achado de auditoria. `has_finance` é verdadeiro também quando existe um
+ * lançamento MANUAL no dia — e aí, em refeicao_gasto_comida, os dois lados
+ * viram o mesmo fato: ela abriu o app. Nos dias em que não abriu, nenhum dos
+ * dois existe. A análise "descobre" que registrar refeição anda com gastar
+ * menos, quando mediu apenas quem abriu o app.
+ */
+describe("refeicao_gasto_comida exige extrato, não lançamento manual", () => {
+  it("dia coberto só por lançamento manual não entra na conta", () => {
+    const rows: DailyMetrics[] = [];
+    for (let i = 0; i < 30; i++) {
+      rows.push(day(i, {
+        has_finance: true, finance_from_statement: false,
+        meals_logged: i % 2 === 0 ? 2 : 0,
+        food_spend: i % 2 === 0 ? 20 : 90,
+      }));
+    }
+    const r = refeicao_gasto_comida(rows);
+    // Sem extrato, nenhum par se forma — e "faltam dias" é a resposta honesta.
+    expect(r.status).toBe("dados_insuficientes");
+    if (r.status !== "dados_insuficientes") return;
+    expect(r.sample_size).toBe(0);
+  });
+
+  it("com extrato confirmado, os mesmos dias produzem a tendência", () => {
+    const rows: DailyMetrics[] = [];
+    for (let i = 0; i < 30; i++) {
+      rows.push(day(i, {
+        has_finance: true, finance_from_statement: true,
+        meals_logged: i % 2 === 0 ? 2 : 0,
+        food_spend: i % 2 === 0 ? 20 : 90,
+      }));
+    }
+    const r = refeicao_gasto_comida(rows);
+    expect(r.status).toBe("tendencia");
+  });
+
+  it("sono_gasto_seguinte CONTINUA aceitando lançamento manual", () => {
+    // O lado esquerdo é o sono, que vem em boa parte de importação e não
+    // depende de ela ter aberto o app. Exigir extrato aqui tiraria da análise
+    // quem nunca importou fatura, por um risco que não se aplica a ela.
+    const rows: DailyMetrics[] = [];
+    for (let i = 0; i < 30; i++) {
+      rows.push(day(i, {
+        has_finance: true, finance_from_statement: false,
+        sleep_hours: i % 2 === 0 ? 8.2 : 5.1,
+        total_spend: i % 2 === 0 ? 110 : 45,
+      }));
+    }
+    const r = sono_gasto_seguinte(rows);
+    expect(r.status).not.toBe("dados_insuficientes");
   });
 });

@@ -111,16 +111,16 @@ const COPY: Record<InsightKind, KindCopy> = {
   refeicao_gasto_comida: {
     pillars: ["--alimentacao", "--prosperidade"],
     headline: {
-      menor: "Nos dias em que você registrou mais refeições, seu gasto com comida foi menor.",
-      maior: "Nos dias em que você registrou mais refeições, seu gasto com comida foi maior.",
+      menor: "Nos dias em que você registrou o que comeu, seu gasto com comida foi menor.",
+      maior: "Nos dias em que você registrou o que comeu, seu gasto com comida foi maior.",
     },
-    noTrend: "Registrando mais ou menos refeições, seu gasto com comida ficou parecido.",
+    noTrend: "Registrando ou não as refeições, seu gasto com comida ficou parecido.",
     waitingHeadline:
       "Ainda não dá para dizer se registrar as refeições e o seu gasto com comida andam juntos.",
     waitingOverlap: (faltam) =>
       `Faltam ${faltam} dias com refeição e gasto com comida no mesmo dia.`,
-    highLabel: "Dias com mais refeições registradas",
-    lowLabel: "Dias com menos",
+    highLabel: "Dias em que você registrou",
+    lowLabel: "Dias sem nenhum registro",
     format: money,
     missing: { label: "Registrar uma refeição", to: "/app/alimentacao" },
   },

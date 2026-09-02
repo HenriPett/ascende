@@ -199,3 +199,32 @@ export function memorySourceLine(
   const dia = String(sp.getUTCDate()).padStart(2, "0");
   return `${label} · ${dia}/${MESES_CURTOS[sp.getUTCMonth()]}`;
 }
+
+/**
+ * O texto de "não tenho a origem disto".
+ *
+ * A versão anterior afirmava, sempre, que a memória era ANTERIOR ao momento em
+ * que passamos a guardar origem (a migração da Fase 2). Para memórias antigas
+ * isso é verdade. Para uma memória criada há segundos — o que acontece quando
+ * a conversa produz memória mas nenhum evento, e portanto não há mensagem
+ * registrada para apontar — era mentira, na tela cujo propósito inteiro é a
+ * pessoa poder CONFERIR o que dizemos sobre ela.
+ *
+ * Afirmar uma explicação que não verificamos é pior que admitir a falha: a
+ * pessoa não tem como saber que a frase é falsa, e passa a confiar menos em
+ * tudo que está do lado dela.
+ */
+export function semOrigemTexto(createdAt: string): string {
+  const nascida = new Date(createdAt).getTime();
+  // Data ilegível cai no texto genérico: na dúvida, não afirme a explicação.
+  const anterior = Number.isFinite(nascida) && nascida < ORIGEM_DESDE.getTime();
+  return anterior
+    ? "Esta memória não tem origem registrada — ela é anterior ao momento em que passei "
+      + "a guardar de onde cada coisa veio. Se não fizer sentido, é só recusar."
+    : "Não guardei de onde tirei esta. Acontece quando aprendo algo numa conversa "
+      + "que não gerou nenhum registro. Se não fizer sentido, é só recusar.";
+}
+
+/** Quando `memory_sources` passou a existir (migração da Fase 2). Memória
+ *  criada antes disto legitimamente não tem origem guardada. */
+const ORIGEM_DESDE = new Date("2026-09-03T00:00:00Z");

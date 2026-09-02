@@ -49,7 +49,7 @@ jobs:
       # confirmada pela pessoa. Verificado por mutação — removendo a guarda
       # em persistMemories, dois testes deste arquivo falham.
       - name: Testes das edge functions
-        run: deno test --allow-env --allow-net supabase/functions/
+        run: deno test --allow-env --allow-net --allow-read supabase/functions/
 
       - name: Build
         run: npm run build

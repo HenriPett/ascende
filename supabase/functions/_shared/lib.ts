@@ -141,7 +141,6 @@ const byUserFirst = (rows: MemoryRow[]) => [
    ainda não o tiver, cai no antigo. Sai quando a migração estiver em produção. */
 const MEMORY_COLS_VIEW = "id,content,category,status,created_by,confidence,valid_until,trust_rank";
 const MEMORY_COLS_TABLE = "id,content,category,status,created_by,confidence,valid_until";
-const MEMORY_COLS_LEGACY = "id,content,category";
 
 async function selectMemories(
   supabase: SupabaseClient, userId: string, limit: number,
@@ -159,11 +158,23 @@ async function selectMemories(
     .limit(limit);
   if (!view.error) return (view.data ?? []) as MemoryRow[];
 
-  /* A migração da Fase 2 é entregue à parte. Enquanto a view não existir,
-     degradamos em dois passos — e memória sumindo do retrato seria uma
-     regressão pior que a ausência do filtro, então nunca falhamos para vazio
-     enquanto houver como ler. Este bloco sai quando a migração estiver em
-     produção. */
+  /* Rede de segurança de UM passo, e só um. A view pode falhar por algo
+     transitório, e memória sumindo do retrato é uma regressão real — então
+     lemos a tabela aplicando a MESMA regra, duas vezes: no SQL e no filtro
+     abaixo (a validade, que sem a view volta a ser decidida aqui).
+
+     O QUE FOI REMOVIDO DAQUI, E POR QUE NUNCA DEVE VOLTAR: havia um terceiro
+     nível que lia `id,content,category` — sem status, sem validade, sem filtro
+     nenhum. Ele existia para a janela em que a migração da Fase 2 ainda não
+     estava em produção. Agora ela está, e o que sobrou era uma porta pela qual
+     uma memória REJEITADA voltava para o retrato do Conselheiro, em silêncio,
+     com um console.error como único aviso.
+
+     Uma pessoa que abre "Isso não é sobre mim" está dizendo algo sobre a
+     própria vida. Ver aquilo de volta na conversa é pior que o Conselheiro não
+     ter memória nenhuma: quebra a única promessa que a Fase 2 fez. Se as duas
+     leituras falharem, o certo é o retrato sair SEM memória — o Conselheiro
+     fica mais pobre naquele turno, e nada indevido é dito. */
   console.error("memories: view vigentes indisponível, degradando", view.error.message ?? view.error);
   const table = await supabase.from("ai_memories")
     .select(MEMORY_COLS_TABLE)
@@ -171,19 +182,11 @@ async function selectMemories(
     .not("status", "in", '("rejeitada","expirada")')
     .order("created_at", { ascending: false }).limit(limit);
   if (!table.error) {
-    // Sem a view, a validade volta a ser decidida aqui.
     return ((table.data ?? []) as MemoryRow[]).filter((m) => isMemoryReadable(m));
   }
 
-  const legacy = await supabase.from("ai_memories")
-    .select(MEMORY_COLS_LEGACY)
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false }).limit(limit);
-  if (legacy.error) {
-    console.error("memories: falha ao ler ai_memories", legacy.error.message ?? legacy.error);
-    return [];
-  }
-  return (legacy.data ?? []) as MemoryRow[];
+  console.error("memories: falha ao ler ai_memories", table.error.message ?? table.error);
+  return [];
 }
 
 const BRL = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -1048,21 +1051,31 @@ async function persistMemories(
   }
 
   if (learned.length) {
-    const { count } = await supabase.from("ai_memories")
+    /* O teto conta só o que a IA REALMENTE usa — a view já aplica a regra de
+       leitura. Contar a tabela inteira fazia rejeitar uma memória CUSTAR uma
+       vaga: quem dissesse "isso não é sobre mim" dez vezes ficaria com dez
+       vagas a menos e veria memórias vivas serem despejadas para dar lugar a
+       lixo que ninguém mais lê. Recusar precisa liberar espaço, não consumir. */
+    const { count } = await supabase.from("ai_memories_vigentes")
       .select("id", { count: "exact", head: true }).eq("user_id", userId);
     const excess = (count ?? 0) - memoryCap;
     if (excess > 0) {
       /* Despejo por teto NUNCA leva memória confirmada pela pessoa: ela
-         revisou aquilo à mão, não pode perder por antiguidade. Se o banco
-         ainda não tem as colunas, cai na regra antiga (só a mais velha). */
-      let oldest = await supabase.from("ai_memories")
+         revisou aquilo à mão, não pode perder por antiguidade.
+
+         NÃO ACRESCENTE UM FALLBACK AQUI. Havia um: quando esta consulta dava
+         erro, a versão anterior apagava simplesmente a mais antiga — sem
+         proteger nada, inclusive o que a pessoa tinha confirmado. Era a mesma
+         promessa da Fase 2 quebrada pelo caminho de exceção, e apagar dado
+         alheio por engano é pior que não apagar nada: se a consulta falhar,
+         ficamos acima do teto até a próxima mensagem, e ninguém perde nada. */
+      const oldest = await supabase.from("ai_memories")
         .select("id").eq("user_id", userId)
         .neq("status", "confirmada").neq("created_by", "usuario")
         .order("created_at", { ascending: true }).limit(excess);
       if (oldest.error) {
-        oldest = await supabase.from("ai_memories")
-          .select("id").eq("user_id", userId)
-          .order("created_at", { ascending: true }).limit(excess);
+        console.error("memories: despejo abortado (nada apagado)", oldest.error.message ?? oldest.error);
+        return learned;
       }
       const ids = (oldest.data ?? []).map((o) => o.id);
       if (ids.length) await supabase.from("ai_memories").delete().in("id", ids);

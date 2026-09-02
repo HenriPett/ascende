@@ -182,14 +182,17 @@ export function daysBetween(from: string, to: string): number {
  *
  * `thresholds` é crescente; devolve o índice do maior patamar atingido.
  */
+/** Patamar de um valor numa escala crescente de limiares. */
+function levelOf(value: number, thresholds: readonly number[]): number {
+  let level = 0;
+  while (level < thresholds.length && value >= thresholds[level]) level++;
+  return level;
+}
+
 export function highWaterMark(
   contributions: readonly number[], thresholds: readonly number[],
 ): number {
-  const levelFor = (running: number) => {
-    let level = 0;
-    while (level < thresholds.length && running >= thresholds[level]) level++;
-    return level;
-  };
+  const levelFor = (running: number) => levelOf(running, thresholds);
   // O patamar do total INICIAL (zero) também conta: um limiar 0 já está
   // atingido antes da primeira contribuição. Sem esta linha, história vazia e
   // história com uma contribuição de 0 davam patamares diferentes — diferença
@@ -216,6 +219,25 @@ function chronological<T extends { at: string; key: string }>(items: T[]): T[] {
  * Estágio (4 camadas de corpo) pelo XP acumulado — marca-d'água alta.
  * O XP de peso e composição corporal é descartado (regra 3).
  */
+/**
+ * Estágio a partir do XP TOTAL. É esta a versão que a produção usa.
+ *
+ * PRECONDIÇÃO, e o motivo de as duas versões coexistirem: o app nunca escreve
+ * XP negativo (todos os inserts de xp_log são literais positivos ou o CASE de
+ * award_xp_for_event, também positivo). Com contribuições não-negativas o
+ * total corrido é monótono, então a marca-d'água É a soma — e uma soma vem do
+ * banco exata, sem depender de trazer linha nenhuma.
+ *
+ * A versão por array (mokariStage) continua existindo e continua percorrendo a
+ * série, porque ela é a defesa contra o dia em que aparecer um estorno: ali a
+ * marca-d'água e a soma passam a divergir, e a que protege a pessoa é a
+ * marca-d'água. Ver o teste "XP negativo ou corretivo não puxa o estágio".
+ */
+export function mokariStageFromXpTotal(total: number): MokariStage {
+  const bruto = Number.isFinite(total) ? total : 0;
+  return Math.min(4, Math.max(1, levelOf(bruto, STAGE_XP))) as MokariStage;
+}
+
 export function mokariStage(xp: readonly XpEntry[]): MokariStage {
   const contando = chronological(
     xp.filter((e) => !IGNORED_XP_REASONS.includes(String(e.reason)))
@@ -231,17 +253,36 @@ export function mokariStage(xp: readonly XpEntry[]): MokariStage {
  * história — marca-d'água alta, por pilar. Nunca é janela: janela regride.
  * Eventos de peso/corpo são descartados (regra 3).
  */
-export function mokariAffinity(events: readonly MokariEvent[]): Record<PillarId, PillarAffinity> {
+export function mokariAffinityFromCounts(
+  counts: Readonly<Partial<Record<PillarId, number>>>,
+): Record<PillarId, PillarAffinity> {
   const out = {} as Record<PillarId, PillarAffinity>;
   for (const pillar of PILLARS) {
-    const doPilar = chronological(
-      events
-        .filter((e) => e.pillar === pillar.id && !IGNORED_KINDS.includes(String(e.kind)))
-        .map((e) => ({ at: String(e.occurred_at), key: String(e.kind) })),
-    );
-    out[pillar.id] = highWaterMark(doPilar.map(() => 1), AFFINITY_EVENTS) as PillarAffinity;
+    const n = Number(counts[pillar.id] ?? 0);
+    out[pillar.id] = levelOf(Number.isFinite(n) ? n : 0, AFFINITY_EVENTS) as PillarAffinity;
   }
   return out;
+}
+
+/**
+ * Afinidade a partir da lista de eventos. DELEGA para a versão por contagem:
+ * como toda contribuição vale 1, a marca-d'água alta É a contagem total do
+ * pilar — então as duas versões não são "duas implementações que um teste
+ * mantém em sincronia", são a MESMA conta com a entrada em outra forma. É por
+ * isso que elas não podem divergir em silêncio.
+ *
+ * Eventos de peso/corpo são descartados aqui (regra 3). Quando a entrada vem
+ * por CONTAGEM, essa exclusão é responsabilidade de quem monta a consulta —
+ * ver o aviso em MokariTotals.
+ */
+export function mokariAffinity(events: readonly MokariEvent[]): Record<PillarId, PillarAffinity> {
+  const counts = {} as Record<PillarId, number>;
+  for (const pillar of PILLARS) {
+    counts[pillar.id] = events.filter(
+      (e) => e.pillar === pillar.id && !IGNORED_KINDS.includes(String(e.kind)),
+    ).length;
+  }
+  return mokariAffinityFromCounts(counts);
 }
 
 /**
@@ -258,9 +299,13 @@ export function mokariEnvironment(
   const dias = eventDays(events);
   const inicio = journeyStart ? dayOf(journeyStart) : (dias[0] ?? referenceDay);
   const journeyDays = Math.max(0, daysBetween(inicio, referenceDay));
-  let level = 0;
-  while (level < ENVIRONMENT_DAYS.length && journeyDays >= ENVIRONMENT_DAYS[level]) level++;
-  return { environment: Math.min(5, Math.max(1, level)) as MokariEnvironment, journeyDays };
+  return { environment: environmentForDays(journeyDays), journeyDays };
+}
+
+/** Etapa de ambiente para um número de dias de jornada. Usada pelas DUAS
+ *  entradas, para o ambiente não ter duas contas. */
+function environmentForDays(journeyDays: number): MokariEnvironment {
+  return Math.min(5, Math.max(1, levelOf(journeyDays, ENVIRONMENT_DAYS))) as MokariEnvironment;
 }
 
 /** Dias distintos com registro que conta, em ordem. */
@@ -299,6 +344,83 @@ export function mokariState(
   if (pilares >= 3) return { state: "curioso", activeDays };
   if (activeDays >= 3) return { state: "atento", activeDays };
   return { state: "sereno", activeDays };
+}
+
+/* ═══ Entrada por TOTAIS — é esta que a produção usa ══════════════════
+   POR QUE ELA EXISTE (bug real, achado na auditoria das fases 1-6):
+   a versão por array precisa da história inteira, e o hook a baixava com
+   `.limit(5000)`. O PostgREST corta em max-rows=1000. Lendo em ordem
+   CRESCENTE, as 1000 linhas mais antigas de quem importou 555 noites de sono
+   são TODAS de vitalidade — e alimentação e prosperidade sumiam da afinidade.
+   O Mokari mostrava pilar zerado de quem havia registrado nele.
+
+   Ler em ordem crescente protege contra REGRESSÃO (a marca-d'água não cai),
+   mas não contra um pilar inteiro ficar fora da janela. Esse era o furo.
+
+   O conserto não é limite maior, é não precisar das linhas: a afinidade é
+   contagem por pilar e o estágio é soma de XP. Os dois vêm agregados do banco,
+   exatos, sem teto. O estado recente continua vindo de eventos porque são só
+   sete dias — janela naturalmente pequena.
+
+   O repositório já tinha sido mordido por isto antes; a história está no
+   comentário de useXp.tsx. */
+
+export interface MokariTotals {
+  /**
+   * XP total EXCLUINDO os IGNORED_XP_REASONS.
+   *
+   * ⚠ REGRA 3 DEPENDE DE QUEM MONTA A CONSULTA. Com a entrada por array o
+   * filtro é feito aqui dentro; com totais, não há como este módulo verificar.
+   * Use o RPC `xp_total_mokari(uid)`, que aplica a exclusão em SQL ao lado do
+   * gatilho que grava esses motivos. NÃO use `xp_total(uid)`: ele soma tudo,
+   * inclusive "Peso registrado", e fura a regra 3 direto.
+   *
+   * E não derive no cliente (`xp_total − 3×peso − 4×corpo`): isso fixaria no
+   * frontend os pontos do gatilho, e no dia em que award_xp_for_event mudar o
+   * XP de peso volta a vazar para o estágio em silêncio.
+   */
+  xpTotal: number;
+  /** Registros por pilar, TAMBÉM já sem weight/body (regra 3, na consulta). */
+  pillarCounts: Readonly<Partial<Record<PillarId, number>>>;
+  /** Total de registros que contam, para o `detail`. */
+  eventsTotal: number;
+  /**
+   * Começo da jornada (normalmente a criação da conta, ou o primeiro registro
+   * por `occurred_at asc limit 1`). Sem ele o ambiente não tem de onde contar
+   * e fica na primeira etapa — melhor do que adivinhar.
+   */
+  journeyStart: string | null;
+  /** Eventos dos últimos RECENT_WINDOW_DAYS dias. Só o estado usa. */
+  recentEvents: readonly MokariEvent[];
+}
+
+/**
+ * O Mokari a partir de agregados. Idêntico, para o mesmo conjunto, ao que
+ * computeMokari devolve — ver o teste de equivalência, que é o que impede as
+ * duas entradas de divergirem em silêncio daqui em diante.
+ */
+export function computeMokariFromTotals(
+  totals: MokariTotals, referenceDay: string,
+): Mokari {
+  const journeyDays = totals.journeyStart
+    ? Math.max(0, daysBetween(dayOf(totals.journeyStart), referenceDay))
+    : 0;
+  const { state, activeDays } = mokariState(totals.recentEvents, referenceDay);
+
+  return {
+    calc_version: MOKARI_CALC_VERSION,
+    reference_day: referenceDay,
+    stage: mokariStageFromXpTotal(totals.xpTotal),
+    affinity: mokariAffinityFromCounts(totals.pillarCounts),
+    state,
+    environment: environmentForDays(journeyDays),
+    detail: {
+      xp: Number.isFinite(totals.xpTotal) ? totals.xpTotal : 0,
+      events: totals.eventsTotal,
+      journey_days: journeyDays,
+      active_days_recent: activeDays,
+    },
+  };
 }
 
 /* ═══ Orquestrador ════════════════════════════════════════════════════ */

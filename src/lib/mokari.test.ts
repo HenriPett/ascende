@@ -19,10 +19,12 @@ import { join } from "node:path";
 import {
   computeMokari, mokariStage, mokariAffinity, mokariState, mokariEnvironment,
   highWaterMark, daysBetween,
+  computeMokariFromTotals, mokariAffinityFromCounts, mokariStageFromXpTotal,
   MOKARI_STATES, MOKARI_CALC_VERSION, MOKARI_DEFAULT_ENABLED,
   IGNORED_KINDS, IGNORED_XP_REASONS, RECENT_WINDOW_DAYS,
-  type XpEntry, type MokariEvent,
+  type XpEntry, type MokariEvent, type MokariTotals,
 } from "@/lib/mokari";
+import { PILLARS, type PillarId } from "@/lib/pillars";
 import { addDays } from "@/lib/insights";
 
 /* ─── Fixtures ────────────────────────────────────────────────────────── */
@@ -479,5 +481,157 @@ describe("pureza (a mesma história tem que dar o mesmo Mokari)", () => {
 
   it("não usa Math.random", () => {
     expect(fonte).not.toContain("Math.random");
+  });
+});
+
+/* ═══ Entrada por TOTAIS: equivalência e o bug do max-rows ════════════ */
+
+/** Converte um conjunto na forma de agregados, do jeito que a consulta faria
+ *  (já sem weight/body — regra 3 é da consulta quando a entrada é por total). */
+function totaisDe(
+  pontos: readonly XpEntry[], eventos: readonly MokariEvent[], referenceDay: string,
+): MokariTotals {
+  const contam = eventos.filter((e) => !IGNORED_KINDS.includes(e.kind));
+  const pillarCounts = {} as Record<PillarId, number>;
+  for (const p of PILLARS) pillarCounts[p.id] = contam.filter((e) => e.pillar === p.id).length;
+  const dias = contam.map((e) => e.occurred_at.slice(0, 10)).sort();
+  const inicio = addDays(referenceDay, -(RECENT_WINDOW_DAYS - 1));
+  return {
+    xpTotal: pontos.filter((e) => !IGNORED_XP_REASONS.includes(e.reason))
+      .reduce((sum, e) => sum + e.points, 0),
+    pillarCounts,
+    eventsTotal: contam.length,
+    journeyStart: dias[0] ?? null,
+    recentEvents: contam.filter((e) => {
+      const d = e.occurred_at.slice(0, 10);
+      return d >= inicio && d <= referenceDay;
+    }),
+  };
+}
+
+describe("entrada por totais", () => {
+  it("EQUIVALÊNCIA: totais e array dão exatamente o mesmo Mokari", () => {
+    // É este teste que impede as duas entradas de divergirem em silêncio.
+    const { xp: pontos, events } = tresMeses();
+    for (const ref of [addDays(BASE, 30), addDays(BASE, 59), REF, addDays(BASE, 200)]) {
+      const porArray = computeMokari(pontos, events, ref, `${BASE}T00:00:00Z`);
+      const porTotais = computeMokariFromTotals(totaisDe(pontos, events, ref), ref);
+      expect(porTotais, `divergiu em ${ref}`).toEqual(porArray);
+      expect(JSON.stringify(porTotais)).toBe(JSON.stringify(porArray));
+    }
+  });
+
+  it("EQUIVALÊNCIA vale também com peso e corpo no meio", () => {
+    const { xp: pontos, events } = tresMeses();
+    const sujos: MokariEvent[] = [0, 10, 20].map((d) => ({
+      occurred_at: `${addDays(BASE, d)}T12:00:00Z`, pillar: "alimentacao", kind: "weight",
+    }));
+    const xpSujo = [...pontos, xp(5, 3, "Peso registrado"), xp(6, 4, "Composição corporal registrada")];
+    const todos = [...events, ...sujos];
+    expect(computeMokariFromTotals(totaisDe(xpSujo, todos, REF), REF))
+      .toEqual(computeMokari(xpSujo, todos, REF, `${BASE}T00:00:00Z`));
+  });
+
+  it("EQUIVALÊNCIA numa conta vazia", () => {
+    const vazio: MokariTotals = {
+      xpTotal: 0, pillarCounts: {}, eventsTotal: 0, journeyStart: null, recentEvents: [],
+    };
+    const porTotais = computeMokariFromTotals(vazio, REF);
+    const porArray = computeMokari([], [], REF);
+    expect(porTotais).toEqual(porArray);
+  });
+
+  it("as peças por total batem com as por array nas fronteiras", () => {
+    for (const total of [0, 199, 200, 999, 1000, 2999, 3000, 50_000]) {
+      expect(mokariStageFromXpTotal(total)).toBe(mokariStage([xp(0, total)]));
+    }
+    for (const n of [0, 1, 9, 10, 39, 40, 300]) {
+      const eventos = Array.from({ length: n }, (_, i) => ev(i, "mente"));
+      expect(mokariAffinityFromCounts({ mente: n }).mente).toBe(mokariAffinity(eventos).mente);
+    }
+  });
+
+  it("O BUG: lista truncada nos 1000 mais antigos zera pilar de quem registrou nele", () => {
+    // O caso real da auditoria. Um detalhe importante do mecanismo: com 900
+    // de vitalidade + 120 de alimentação, o corte em 1000 ainda deixa passar
+    // 100 refeições — e 100 e 120 caem no MESMO nível (o limiar 3 é 40), então
+    // a tela não muda. O dano aparece quando um pilar sozinho enche a janela
+    // de 1000, que é o que uma importação de histórico de sono faz.
+    const eventos: MokariEvent[] = [];
+    for (let i = 0; i < 1000; i++) eventos.push(ev(i % 300, "vitalidade", "sleep"));
+    for (let i = 0; i < 120; i++) eventos.push(ev(300 + (i % 30), "alimentacao", "meal"));
+
+    const truncado = eventos.slice(0, 1000); // o que o PostgREST devolvia
+    const ref = addDays(BASE, 400);
+
+    const comTruncagem = computeMokari([], truncado, ref, `${BASE}T00:00:00Z`);
+    const totaisExatos = computeMokariFromTotals(totaisDe([], eventos, ref), ref);
+
+    // A pessoa registrou 120 refeições. Pela lista truncada, o pilar aparece zerado.
+    expect(comTruncagem.affinity.alimentacao).toBe(0);
+    expect(totaisExatos.affinity.alimentacao).toBe(3);
+    // E vitalidade, que sobreviveu ao corte, bate nas duas.
+    expect(comTruncagem.affinity.vitalidade).toBe(totaisExatos.affinity.vitalidade);
+
+    // Sem truncagem, as duas entradas concordam — o erro era o corte, não a conta.
+    expect(computeMokari([], eventos, ref, `${BASE}T00:00:00Z`).affinity)
+      .toEqual(totaisExatos.affinity);
+  });
+
+  it("com 900+120 o corte SUBESTIMA sem mudar a tela (o dano depende de onde ele cai)", () => {
+    // Registrado para ninguém concluir que 900+120 já quebra: 100 e 120 caem
+    // no mesmo nível. O que a truncagem faz é tornar o número ERRADO e
+    // imprevisível — às vezes invisível, às vezes um pilar inteiro zerado.
+    const eventos: MokariEvent[] = [];
+    for (let i = 0; i < 900; i++) eventos.push(ev(i % 300, "vitalidade", "sleep"));
+    for (let i = 0; i < 120; i++) eventos.push(ev(300 + (i % 30), "alimentacao", "meal"));
+    const ref = addDays(BASE, 400);
+    const truncado = computeMokari([], eventos.slice(0, 1000), ref, `${BASE}T00:00:00Z`);
+    const exato = computeMokariFromTotals(totaisDe([], eventos, ref), ref);
+    expect(truncado.affinity.alimentacao).toBe(exato.affinity.alimentacao); // nível igual
+    expect(truncado.detail.events).toBe(1000);
+    expect(exato.detail.events).toBe(1020);   // mas a contagem já mente
+
+    // E um corte que cai EM CIMA de um limiar muda a tela: 45 -> 39 desce um nível.
+    const quase: MokariEvent[] = [];
+    for (let i = 0; i < 961; i++) quase.push(ev(i % 300, "vitalidade", "sleep"));
+    for (let i = 0; i < 45; i++) quase.push(ev(300 + (i % 20), "mente", "mood"));
+    const t2 = computeMokari([], quase.slice(0, 1000), ref, `${BASE}T00:00:00Z`);
+    const e2 = computeMokariFromTotals(totaisDe([], quase, ref), ref);
+    expect(t2.affinity.mente).toBe(2);  // 39 registros vistos
+    expect(e2.affinity.mente).toBe(3);  // 45 registros reais
+  });
+});
+
+/* ═══ Regra 3 na entrada por totais: o contrato com a consulta ════════ */
+
+describe("regra 3 com entrada por totais", () => {
+  it("o RPC de XP do Mokari exclui os motivos de peso (quando existir)", () => {
+    // A entrada por totais move a regra 3 para o SQL, e uma lista de exclusão
+    // duplicada em dois idiomas é exatamente o tipo de coisa que sai de
+    // sincronia sem ninguém ver. Este guarda compara a lista do TS com a do
+    // SQL. Ele ativa quando a função `xp_total_mokari` entrar numa migração;
+    // até lá, registra que a dependência está pendente.
+    const dir = "supabase/migrations";
+    const sql = readdirSync(dir)
+      .filter((f) => f.endsWith(".sql"))
+      .map((f) => readFileSync(join(dir, f), "utf8"))
+      .join("\n");
+    if (!sql.includes("xp_total_mokari")) {
+      expect(sql).not.toContain("xp_total_mokari"); // pendente: nada a verificar
+      return;
+    }
+    for (const reason of IGNORED_XP_REASONS) {
+      expect(sql, `xp_total_mokari não exclui "${reason}" — o XP de peso vaza para o estágio`)
+        .toContain(reason);
+    }
+  });
+
+  it("xp_total (o RPC antigo) não serve para o Mokari, e o módulo avisa", () => {
+    // `xp_total(uid)` soma tudo, inclusive "Peso registrado". O aviso está no
+    // contrato de MokariTotals, e este teste garante que ele continua lá.
+    const bruto = readFileSync("src/lib/mokari.ts", "utf8");
+    expect(bruto).toContain("xp_total_mokari");
+    expect(bruto).toMatch(/N[ÃA]O use `xp_total\(uid\)`/);
   });
 });

@@ -33,6 +33,7 @@ const MOKARI_FILES = [
   "src/lib/mokariIsolation.test.ts",
   "src/lib/mokariLayers.ts",
   "src/lib/mokariLayers.test.ts",
+  "src/lib/mokariReasons.test.ts",
   "src/hooks/useMokariPreference.tsx",
   "src/hooks/useMokariData.tsx",
   "src/components/core/Mokari.tsx",

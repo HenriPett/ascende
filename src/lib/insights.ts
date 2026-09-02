@@ -60,6 +60,10 @@ export interface DailyMetrics {
    * Só as análises financeiras exigem isto; treino_sono não depende dele.
    */
   has_finance: boolean;
+  /** Gasto coberto por EXTRATO CONFIRMADO — existe mesmo que a pessoa não
+   *  tenha aberto o app naquele dia. Mais rigoroso que `has_finance`, e é o
+   *  que `refeicao_gasto_comida` exige: ver o comentário lá. */
+  finance_from_statement: boolean;
 }
 
 export type InsightKind = "sono_gasto_seguinte" | "refeicao_gasto_comida" | "treino_sono";
@@ -75,7 +79,7 @@ export type InsufficientReason =
 /** Como os grupos foram partidos. Faz parte do que torna o número
  *  conferível: "acima_da_mediana" = alto é `> corte`; "a_partir_da_mediana" =
  *  alto é `>= corte`. Ver splitByMedian() para quando cada uma é usada. */
-export type SplitRule = "acima_da_mediana" | "a_partir_da_mediana";
+export type SplitRule = "acima_da_mediana" | "a_partir_da_mediana" | "houve_ou_nao";
 
 export interface InsightPeriod {
   /** Primeiro e último dia que ENTRARAM no cálculo (não a janela pedida). */
@@ -257,12 +261,34 @@ function insufficient(
 }
 
 /**
+ * Como o lado esquerdo vira "alto" e "baixo".
+ *
+ * `mediana` — para grandeza CONTÍNUA (horas de sono). "Nas noites mais longas"
+ * só existe em relação às outras noites da própria pessoa: não há um valor
+ * absoluto que separe dormir muito de dormir pouco.
+ *
+ * `presenca` — para CONTAGEM de uma coisa que aconteceu ou não (treinos,
+ * refeições registradas). Aqui o corte pela mediana produzia uma mentira de
+ * rótulo, e foi um bug real: quem treinava duas vezes em alguns dias tinha
+ * mediana 1, o corte virava "acima de 1", e todos os dias com UM treino caíam
+ * no grupo baixo — que a tela chama de "Em dias sem treino". O número estava
+ * certo para o grupo; o rótulo descrevia outro grupo.
+ *
+ * Com `presenca`, o corte é o que a frase promete: houve ou não houve. E quem
+ * treina TODOS os dias passa a receber "ainda não dá para dizer" em vez de uma
+ * comparação com nome errado — que é a resposta honesta, porque sem dia sem
+ * treino não há com o que comparar.
+ */
+type SplitStrategy = "mediana" | "presenca";
+
+/**
  * Recebe pares já montados e aplica o método. Devolver `dados_insuficientes`
  * aqui é SUCESSO, não erro: é a resposta honesta quando os dados não sustentam
  * conclusão, e a tela deve mostrá-la em vez de esconder o card.
  */
 function analyze(
   kind: InsightKind, labels: { left: string; right: string }, pairs: Pair[],
+  strategy: SplitStrategy = "mediana",
 ): Insight {
   const sorted = sortPairs(pairs);
   const days = sorted.map((p) => p.day).sort((a, b) => a.localeCompare(b));
@@ -276,9 +302,19 @@ function analyze(
       MIN_OVERLAP_DAYS - sorted.length);
   }
 
-  // 2. Corte pela mediana do lado esquerdo (ver splitByMedian).
-  const splitValue = median(sorted.map((p) => p.left));
-  const { low, high, rule } = splitByMedian(sorted, splitValue);
+  // 2. Corte do lado esquerdo. Qual regra vale depende do que o lado esquerdo É
+  //    — ver SplitStrategy.
+  const { low, high, rule, splitValue } = strategy === "presenca"
+    ? {
+      low: sorted.filter((p) => p.left <= 0),
+      high: sorted.filter((p) => p.left > 0),
+      rule: "houve_ou_nao" as SplitRule,
+      splitValue: 0,
+    }
+    : (() => {
+      const v = median(sorted.map((p) => p.left));
+      return { ...splitByMedian(sorted, v), splitValue: v };
+    })();
 
   // 3. Um lado constante não tem alto e baixo para comparar. Isso é falta de
   //    VARIAÇÃO, não de dias — dizer "faltam N dias" aqui seria mentira.
@@ -378,13 +414,29 @@ export function sono_gasto_seguinte(rows: DailyMetrics[]): Insight {
 export function refeicao_gasto_comida(rows: DailyMetrics[]): Insight {
   const pairs: Pair[] = [];
   for (const [day, row] of indexByDay(rows)) {
-    if (!row.has_finance) continue;   // gasto do dia precisa existir de verdade
+    /* AQUI É `finance_from_statement`, NÃO `has_finance` — e a diferença é a
+       validade da análise inteira.
+
+       Nesta análise os DOIS lados são "ela registrou algo hoje". Se o gasto
+       puder vir de lançamento manual, um dia só entra na conta quando ela
+       abriu o app — e nesse dia ela também registrou a refeição. Nos dias em
+       que não abriu, nenhum dos dois lados existe. A comparação então
+       "descobre", com folga acima do limiar, que quem registra refeição gasta
+       menos com comida, quando o que foi medido é: quem abre o app registra as
+       duas coisas. Correlação de um comportamento com ele mesmo, vestida de
+       achado sobre alimentação.
+
+       Com extrato confirmado o gasto existe independentemente de ela ter
+       aberto o app naquele dia, e os dois lados voltam a ser independentes.
+       `sono_gasto_seguinte` não tem esse problema (o sono vem em boa parte de
+       importação) e continua com `has_finance`. */
+    if (!row.finance_from_statement) continue;
     pairs.push({ day, left: row.meals_logged, right: row.food_spend });
   }
   return analyze("refeicao_gasto_comida", {
-    left: "refeições registradas no dia",
+    left: "houve refeição registrada no dia",
     right: "gasto com comida no mesmo dia",
-  }, pairs);
+  }, pairs, "presenca");
 }
 
 /**
@@ -414,9 +466,9 @@ export function treino_sono(rows: DailyMetrics[]): Insight {
     pairs.push({ day, left: row.workout_count, right: next.sleep_hours });
   }
   return analyze("treino_sono", {
-    left: "treinos registrados no dia",
+    left: "houve treino registrado no dia",
     right: "horas de sono da noite seguinte ao treino",
-  }, pairs);
+  }, pairs, "presenca");
 }
 
 /* ─── Orquestrador ────────────────────────────────────────────────────── */

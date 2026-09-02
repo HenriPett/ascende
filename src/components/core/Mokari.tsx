@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PILLARS, type PillarId } from "@/lib/pillars";
 import { useMokariPreference } from "@/hooks/useMokariPreference";
@@ -388,7 +389,7 @@ function MokariFigure({ data, reduced }: { data: MokariData; reduced: boolean })
 
 export default function Mokari() {
   const { enabled } = useMokariPreference();
-  const { data, isLoading } = useMokariData(enabled);
+  const { data, isLoading, isError, refetch, isFetching } = useMokariData(enabled);
   const reduced = useReducedMotion();
   const [openWhat, setOpenWhat] = useState(false);
 
@@ -398,7 +399,25 @@ export default function Mokari() {
 
   return (
     <Card className="p-4 space-y-2">
-      {isLoading || !data
+      {/* Falha de leitura tem cara PRÓPRIA, e isso é regra 1, não gentileza.
+          Antes, erro virava história vazia e o Mokari de quem tinha Árvore em
+          flor voltava a Broto — o desenho desfazia três meses por causa de um
+          timeout. Melhor não desenhar nada e dizer o que houve. */}
+      {isError ? (
+        <div className="py-6 text-center space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Não consegui desenhar seu Mokari agora.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            É falha de conexão — nada do que você construiu mudou.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            {isFetching
+              ? (<><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Tentando...</>)
+              : (<><RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Tentar de novo</>)}
+          </Button>
+        </div>
+      ) : isLoading || !data
         ? <Skeleton className="w-full h-[140px] rounded-lg" />
         : <MokariFigure data={data} reduced={reduced} />}
 

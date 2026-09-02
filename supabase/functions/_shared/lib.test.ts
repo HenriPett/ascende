@@ -223,12 +223,36 @@ Deno.test("memória nova nasce com autoria da IA e confiança limitada a 0..1", 
 });
 
 Deno.test("despejo por teto não remove memória confirmada", async () => {
-  // `known` é filtrado (rejeitadas não entram), mas o teto conta todas as
-  // linhas: é essa diferença que faz o despejo disparar de verdade.
+  // Quatro memórias VIVAS com teto 3: o despejo tem que disparar de verdade,
+  // senão o teste não prova nada. A confirmada é a mais ANTIGA de propósito —
+  // é ela que um despejo por antiguidade levaria primeiro.
   const { db, memories } = fakeDb([
     mem({ id: "confirmada", content: "Treina de manhã", status: "confirmada",
           created_by: "usuario", created_at: "2026-08-01T00:00:00Z" }),
-    mem({ id: "viva", content: "Prefere respostas curtas", created_at: "2026-08-02T00:00:00Z" }),
+    ...[0, 1, 2].map((i) => mem({
+      id: `viva-${i}`, content: `memória viva ${i}`,
+      created_at: `2026-08-0${i + 2}T00:00:00Z`,
+    })),
+  ]);
+  const stub = stubAnthropic([{ content: "Cuida da mãe idosa", category: "contexto" }]);
+  try {
+    await extractEventsAndMemories(db, USER, "Eu cuido da minha mãe, ela é idosa", "teste", 3);
+    assert(memories().length < 5, "o despejo por teto não rodou, o teste não provou nada");
+    assert(memories().some((m) => m.id === "confirmada"),
+      "a memória confirmada pela pessoa foi despejada por antiguidade");
+  } finally { stub.restore(); }
+});
+
+/* Recusar precisa LIBERAR espaço, não consumir.
+ *
+ * O teto contava a tabela inteira, então cada "isso não é sobre mim" custava
+ * uma vaga: quem recusasse dez memórias ficaria com dez vagas a menos e veria
+ * memórias VIVAS serem despejadas para dar lugar a linhas que ninguém mais lê.
+ * A pessoa era punida por usar exatamente o controle que a Fase 2 lhe deu. */
+Deno.test("memória rejeitada não ocupa vaga no teto", async () => {
+  const { db, memories } = fakeDb([
+    mem({ id: "viva-a", content: "Prefere respostas curtas", created_at: "2026-08-01T00:00:00Z" }),
+    mem({ id: "viva-b", content: "Mora em Jaraguá do Sul", created_at: "2026-08-02T00:00:00Z" }),
     ...[0, 1, 2, 3].map((i) => mem({
       id: `rej-${i}`, content: `descartada ${i}`, status: "rejeitada",
       created_at: `2026-08-0${i + 3}T00:00:00Z`,
@@ -236,10 +260,14 @@ Deno.test("despejo por teto não remove memória confirmada", async () => {
   ]);
   const stub = stubAnthropic([{ content: "Cuida da mãe idosa", category: "contexto" }]);
   try {
+    // Teto 3: duas vivas + a nova = 3. As quatro rejeitadas não contam.
     await extractEventsAndMemories(db, USER, "Eu cuido da minha mãe, ela é idosa", "teste", 3);
-    assert(memories().length < 7, "o despejo por teto não rodou, o teste não provou nada");
-    assert(memories().some((m) => m.id === "confirmada"),
-      "a memória confirmada pela pessoa foi despejada por antiguidade");
+    for (const id of ["viva-a", "viva-b"]) {
+      assert(memories().some((m) => m.id === id),
+        `${id} foi despejada por causa de memórias que a pessoa já tinha recusado`);
+    }
+    assert(memories().some((m) => m.content === "Cuida da mãe idosa"),
+      "a memória nova não coube, mesmo havendo vaga entre as vigentes");
   } finally { stub.restore(); }
 });
 
@@ -284,4 +312,47 @@ Deno.test("quem afirmou: só a pessoa torna a memória intocável", () => {
   assertFalse(isUserOwnedMemory({ id: "a", content: "c", category: "o", status: "ativa", created_by: "ia" }));
   // Linha legada (antes da migração): a IA ainda pode corrigir.
   assertFalse(isUserOwnedMemory({ id: "a", content: "c", category: "o" }));
+});
+
+/* ── A porta que foi fechada, e que não pode reabrir ─────────────────────────
+ *
+ * selectMemories já teve um TERCEIRO nível de degradação que lia
+ * "id,content,category" — sem status, sem validade, sem filtro nenhum. Ele
+ * existia para a janela em que a migração da Fase 2 ainda não estava aplicada.
+ * Com ele, uma memória que a pessoa REJEITOU ("isso não é sobre mim") voltava
+ * para o retrato do Conselheiro em silêncio, com um console.error como único
+ * aviso — a única promessa que a Fase 2 fez, quebrada pelo caminho de exceção.
+ *
+ * selectMemories não é exportada (e não deve ser: é detalhe de montagem do
+ * retrato). Então o teste olha o FONTE. É grosseiro de propósito: pega quem
+ * acrescentar um caminho de leitura sem a regra, que é exatamente a regressão
+ * que aconteceria "simplificando o fallback".
+ */
+Deno.test("nenhuma leitura de memória escapa da regra de status", async () => {
+  const fonte = await Deno.readTextFile(new URL("./lib.ts", import.meta.url));
+
+  // Cada `.from("ai_memories")` precisa ter o filtro de status logo adiante.
+  // (A view ai_memories_vigentes já aplica a regra em SQL e não entra aqui.)
+  const leituras = [...fonte.matchAll(/\.from\("ai_memories"\)/g)];
+  assert(leituras.length > 0, "esperava ao menos uma leitura da tabela");
+
+  for (const m of leituras) {
+    const trecho = fonte.slice(m.index ?? 0, (m.index ?? 0) + 400);
+    const filtraStatus = trecho.includes('.not("status", "in"')
+      || trecho.includes('.neq("status"')
+      || trecho.includes('.eq("status"')
+      // Escrita (insert/update/delete) não é leitura de conteúdo.
+      || /\.(insert|update|upsert|delete)\(/.test(trecho);
+    assert(
+      filtraStatus,
+      "leitura de ai_memories sem filtro de status — memória rejeitada voltaria "
+        + "para o retrato do Conselheiro:\n" + trecho.slice(0, 200),
+    );
+  }
+
+  // E a constante do caminho sem filtro não pode ressuscitar.
+  assertFalse(
+    fonte.includes("MEMORY_COLS_LEGACY"),
+    "MEMORY_COLS_LEGACY voltou: era a leitura sem status nem validade",
+  );
 });

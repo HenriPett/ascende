@@ -3,7 +3,11 @@ import { Card } from "@/components/ui/card";
 import Mokari from "@/components/core/Mokari";
 import MokariInvite from "@/components/core/MokariInvite";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronRight, Layers, BarChart3, ClipboardList, Swords } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  ChevronRight, Layers, BarChart3, ClipboardList, Swords,
+  AlertTriangle, RefreshCw, Loader2,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useProfile } from "@/hooks/useProfile";
 import { useXp } from "@/hooks/useXp";
@@ -38,12 +42,16 @@ const SIGNATURE_QUESTION =
 /** Uma seção do hub. `state` é a linha de estado; `invite` a substitui quando
  *  não há nada — mesmo lugar, mesmo tamanho. */
 function HubSection({
-  to, title, icon: Icon, loading, state, invite, dots,
+  to, title, icon: Icon, loading, error, state, invite, dots,
 }: {
   to: string;
   title: string;
   icon: LucideIcon;
   loading?: boolean;
+  /** Falha de leitura. Suprime a linha de estado E o convite: dizer
+   *  "Nenhum plano ainda" — com botão para criar — a quem tem cinco é pior
+   *  que não dizer nada. */
+  error?: boolean;
   state?: string;
   invite?: { line: string; label: string; to: string };
   /** Só Pilares usa cor, e como pontinhos: quatro seções com quatro cores
@@ -80,13 +88,13 @@ function HubSection({
             ? <Skeleton className="h-5 w-3/4 mt-0.5" />
             : (
               <p className="text-sm text-muted-foreground truncate">
-                {invite ? invite.line : state}
+                {error ? "Não consegui ler isto agora." : invite ? invite.line : state}
               </p>
             )}
         </div>
         <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
       </Link>
-      {!loading && invite && (
+      {!loading && !error && invite && (
         <div className="px-4 pb-3 -mt-1">
           <Link
             to={invite.to}
@@ -109,6 +117,15 @@ export default function Jornada() {
   const plans = useJornadaPlansQuery();
   const habits = useJornadaHabitsQuery();
   const battles = useBattlesTodayQuery();
+
+  const algumErro = activity.isError || trends.isError || plans.isError
+    || habits.isError || battles.isError;
+  const recarregando = activity.isFetching || trends.isFetching || plans.isFetching
+    || habits.isFetching || battles.isFetching;
+  const recarregar = () => {
+    void activity.refetch(); void trends.refetch(); void plans.refetch();
+    void habits.refetch(); void battles.refetch();
+  };
 
   /* ── Pilares ── */
   const active = activePillarSet(profile?.pillars);
@@ -202,12 +219,33 @@ export default function Jornada() {
       <Mokari />
       <MokariInvite />
 
+      {/* Aviso ÚNICO: na falha comum (rede fora) as quatro caem juntas, e
+          quatro botões de "tentar de novo" seriam mais ruído que informação. */}
+      {algumErro && (
+        <Card className="p-3.5 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" style={{ color: "hsl(var(--warning))" }} />
+          <div className="flex-1 min-w-0 space-y-2">
+            <p className="text-sm font-medium">Não consegui ler parte da sua jornada.</p>
+            <p className="text-xs text-muted-foreground">
+              É falha de conexão. Seus planos, batalhas e registros continuam salvos — o que
+              faltou foi a leitura, não o dado.
+            </p>
+            <Button variant="outline" size="sm" onClick={recarregar} disabled={recarregando}>
+              {recarregando
+                ? (<><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Tentando...</>)
+                : (<><RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Tentar de novo</>)}
+            </Button>
+          </div>
+        </Card>
+      )}
+
       <div className="space-y-2.5">
         <HubSection
           to={appPath("pilares")}
           title="Pilares"
           icon={Layers}
           loading={activity.isLoading}
+          error={activity.isError}
           state={pillarState}
           dots={PILLARS.filter((p) => active.has(p.id)).map((p) => p.colorVar)}
         />
@@ -216,6 +254,7 @@ export default function Jornada() {
           title="Indicadores"
           icon={BarChart3}
           loading={trends.isLoading}
+          error={trends.isError}
           state={scoreState}
         />
         <HubSection
@@ -223,6 +262,7 @@ export default function Jornada() {
           title="Planos"
           icon={ClipboardList}
           loading={plans.isLoading || habits.isLoading}
+          error={plans.isError || habits.isError}
           state={planState}
           invite={planInvite}
         />
@@ -231,6 +271,7 @@ export default function Jornada() {
           title="Batalhas"
           icon={Swords}
           loading={battles.isLoading}
+          error={battles.isError}
           state={battleState}
           invite={battleInvite}
         />
