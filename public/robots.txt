@@ -4,4 +4,4 @@ Disallow: /app
 Disallow: /onboarding
 Disallow: /auth
 
-Sitemap: https://ascende.app/sitemap.xml
+Sitemap: https://ascende.site/sitemap.xml

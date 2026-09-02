@@ -33,6 +33,7 @@ import {
 import {
   waSendText, waSendButtons, verifyWaSignature, saveEventsServer, xpForKind, appUrl,
   waDownloadMedia, groqTranscribe, toBase64,
+  classifyDocument, extractDocumentText,
 } from "../_shared/whatsapp.ts";
 
 const PENDING_TTL_MIN = 60;     // proposta sem resposta expira em 1h
@@ -48,6 +49,20 @@ const PAIR_WINDOW_MIN = 15;     // mesma janela de validade do código
 const MAX_IMG_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_BYTES = 4_500_000;
 const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
+/* Documentos que LEMOS aqui (.txt .csv .md .json .docx .xlsx): o teto de bytes
+   é o mesmo do PDF (nada que caiba na janela do WhatsApp passa disso), e o que
+   manda mesmo é o teto de CARACTERES do texto extraído:
+   • até CAPTURE_CHARS o texto segue o caminho de uma mensagem digitada
+     (captura → proposta → botão). O limite não é arbitrário: a extração de
+     eventos em _shared/lib.ts corta o relato em 4000 caracteres, então acima
+     disso a captura leria o arquivo pela METADE, em silêncio.
+   • acima disso, é documento para o Conselheiro ler e comentar (mesma rota do
+     PDF, mesma cota de análise) — ele recebe o texto inteiro.
+   • acima de MAX_DOC_CHARS, recusa honesta: melhor dizer "não li" do que
+     entregar meia informação de saúde. */
+const MAX_DOC_BYTES = 4_500_000;
+const MAX_DOC_CHARS = 30_000;
+const MAX_DOC_CAPTURE_CHARS = 3_500;
 const IMG_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const WA_STATEMENT_MAX_ITEMS = 8; // acima disso, o lote é trabalho para o app
 
@@ -180,7 +195,7 @@ async function proposeEvents(
 }
 
 const HELP = (url: string) =>
-  `Aqui é o Ascende 🏔️\n\nComigo você faz tudo por mensagem:\n\n1. *Registrar o dia*: "gastei 47 no mercado e treinei pernas" — por texto ou *áudio*. Eu proponho os registros e você confirma no botão.\n2. *Mandar foto*: prato de comida vira refeição com calorias; print de Pix ou compra vira lançamento.\n3. *Conversar com o Conselheiro*: "tô gastando demais esse mês?" — ele responde vendo todos os seus pilares, e a conversa continua no app de onde parou. PDF (fatura, exame) também entra por aqui (Ascende+).\n\nGráficos, planos e ajustes finos: ${url}/app\n\nComandos: "parar" silencia meus avisos · "ajuda" mostra esta mensagem.`;
+  `Aqui é o Ascende 🏔️\n\nComigo você faz tudo por mensagem:\n\n1. *Registrar o dia*: "gastei 47 no mercado e treinei pernas" — por texto ou *áudio*. Eu proponho os registros e você confirma no botão.\n2. *Mandar foto*: prato de comida vira refeição com calorias; print de Pix ou compra vira lançamento.\n3. *Mandar arquivo*: PDF, Word (.docx), Excel (.xlsx), .csv, .txt, .md ou .json. Planilha e CSV de app de sono/treino/peso viram registros para você confirmar; documento longo (fatura, exame, plano) o Conselheiro lê e comenta (Ascende+).\n4. *Conversar com o Conselheiro*: "tô gastando demais esse mês?" — ele responde vendo todos os seus pilares, e a conversa continua no app de onde parou.\n\nGráficos, planos e ajustes finos: ${url}/app\n\nComandos: "parar" silencia meus avisos · "ajuda" mostra esta mensagem.`;
 
 /* ── Sistema do Conselheiro no WhatsApp: a MESMA pessoa do app, adaptada ao
    canal. Sem ferramentas (os cartões interativos de plano/hábitos/perfil só
@@ -260,6 +275,23 @@ async function reserveChatTurn(
     return { id: null, message: `Você usou as ${L.chat_monthly} mensagens deste mês com o Conselheiro.${upsell}` };
   }
   return { id: null, message: `Você usou as ${L.chat_daily} mensagens de hoje com o Conselheiro. Amanhã ele volta — e registrar o dia por aqui continua funcionando normalmente.${upsell}` };
+}
+
+/** Reserva 1 análise de documento do mês (mesma cota do app, Ascende+).
+ *  Quando não há saldo, avisa a pessoa e devolve ok:false. */
+async function reserveDocAnalysis(
+  // deno-lint-ignore no-explicit-any
+  supabase: any, userId: string, ent: Awaited<ReturnType<typeof getEntitlements>>,
+  from: string, url: string,
+): Promise<{ ok: boolean; id: number | null }> {
+  if (!ent.flags.premium_limits_enabled) return { ok: true, id: null };
+  const cap = ent.limits.document_analyses_monthly ?? 0;
+  const { id } = await reserveUsage(supabase, userId, "chat-documento", cap, spMonthStartUtc());
+  if (id !== null) return { ok: true, id };
+  await waSendText(from, cap === 0
+    ? `A análise de documentos faz parte do Ascende+ — junto com 30 capturas/dia e briefing diário: ${url}/app/assinatura`
+    : `Você usou as ${cap} análises de documentos deste mês. O limite renova no início do próximo mês.`);
+  return { ok: false, id: null };
 }
 
 /** Conversa com o Conselheiro: mesma cota, mesmo retrato e MESMO histórico
@@ -521,53 +553,110 @@ Deno.serve(async (req) => {
       return new Response("ok", { status: 200 });
     }
 
-    // ── DOCUMENTO (PDF): como no app, é conversa com o Conselheiro — consome
-    //    1 mensagem de chat + 1 análise de documento do mês (Ascende+). ──
+    /* ── DOCUMENTO ───────────────────────────────────────────────────────
+       Dois destinos, e a diferença é o TAMANHO do que dá para ler, não o
+       formato:
+       • PDF vai inteiro para o Conselheiro (o modelo lê PDF nativo, com
+         layout e tabelas) — consome 1 mensagem de chat + 1 análise do mês.
+       • .txt .md .csv .tsv .json .log .docx .xlsx são lidos AQUI, sem IA
+         (parsing determinístico: mais barato, mais rápido e não alucina).
+         O texto extraído é curto → entra no MESMO caminho de uma mensagem
+         digitada (captura → proposta → botão); é longo → mesma rota do PDF.
+       • .doc .xls e afins (binário proprietário antigo): recusa explícita. ── */
+    let docText = "";   // texto extraído: cai no roteador de texto lá embaixo
+    let docName = "";   // nome do arquivo, para o eco e para o histórico
     if (msg.type === "document" && link) {
       await assertRateLimit(supabase, link.user_id, "whatsapp", 40, 5);
-      const mimeDoc = String(msg.document?.mime_type ?? "").split(";")[0];
-      if (mimeDoc !== "application/pdf") {
-        await waSendText(from, `Por enquanto eu leio documentos em PDF. Outros formatos (Word, planilhas, txt) funcionam no Conselheiro do app: ${url}/app/conselheiro`);
+      docName = String(msg.document?.filename ?? "documento").slice(0, 120);
+      const kind = classifyDocument(String(msg.document?.mime_type ?? ""), docName);
+      const caption = String(msg.document?.caption ?? "").trim();
+
+      if (kind === "legacy" || kind === "unsupported") {
+        // Recusa honesta: ler .doc/.xls "mais ou menos" produziria lixo, e
+        // lixo virando registro de saúde é pior que arquivo nenhum.
+        await waSendText(from, kind === "legacy"
+          ? `Esse é um formato antigo (.doc, .xls, .ppt e parentes) que eu não consigo abrir por aqui sem risco de ler errado — e prefiro te dizer isso a inventar o conteúdo.\n\nSalve como *.docx*, *.xlsx*, *.csv*, *.txt* ou *PDF* e me manda de novo.`
+          : `Não sei ler esse tipo de arquivo por aqui. Eu leio: *PDF*, *Word (.docx)*, *Excel (.xlsx)*, *.csv*, *.txt*, *.md*, *.json* e *.log*.\n\nSe for foto de algo, me manda como imagem mesmo que eu leio.`);
         return new Response("ok", { status: 200 });
       }
+
       const ent = await getEntitlements(supabase, link.user_id);
-      let docReservation: number | null = null;
-      if (ent.flags.premium_limits_enabled) {
-        const cap = ent.limits.document_analyses_monthly ?? 0;
-        const { id } = await reserveUsage(supabase, link.user_id, "chat-documento", cap, spMonthStartUtc());
-        if (id === null) {
-          await waSendText(from, cap === 0
-            ? `A análise de documentos (PDF) faz parte do Ascende+ — junto com 30 capturas/dia e briefing diário: ${url}/app/assinatura`
-            : `Você usou as ${cap} análises de documentos deste mês. O limite renova no início do próximo mês.`);
+
+      if (kind === "pdf") {
+        const { ok, id: docReservation } = await reserveDocAnalysis(supabase, link.user_id, ent, from, url);
+        if (!ok) return new Response("ok", { status: 200 });
+        const media = await waDownloadMedia(String(msg.document?.id ?? ""), MAX_PDF_BYTES);
+        if (media === "too_big" || !media) {
+          await releaseUsage(supabase, docReservation);
+          await waSendText(from, media === "too_big"
+            ? "Esse PDF é grande demais para o WhatsApp (máximo ~4 MB). No app o Conselheiro aceita arquivos maiores."
+            : "Não consegui baixar o documento (não contou no seu limite). Tenta de novo?");
           return new Response("ok", { status: 200 });
         }
-        docReservation = id;
-      }
-      const media = await waDownloadMedia(String(msg.document?.id ?? ""), MAX_PDF_BYTES);
-      if (media === "too_big" || !media) {
-        await releaseUsage(supabase, docReservation);
-        await waSendText(from, media === "too_big"
-          ? "Esse PDF é grande demais para o WhatsApp (máximo ~4 MB). No app o Conselheiro aceita arquivos maiores."
-          : "Não consegui baixar o documento (não contou no seu limite). Tenta de novo?");
+        const ask = caption || "Analise este documento considerando meus dados e me diga o que importa.";
+        const okTurn = await counselorTurn(
+          supabase, link.user_id, ent, from, ask, url,
+          [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: toBase64(media.bytes) } }],
+          `${ask}\n📎 ${docName}`,
+        );
+        if (!okTurn) await releaseUsage(supabase, docReservation); // falha não consome análise
         return new Response("ok", { status: 200 });
       }
-      const docName = String(msg.document?.filename ?? "documento.pdf").slice(0, 120);
-      const caption = String(msg.document?.caption ?? "").trim() ||
-        "Analise este documento considerando meus dados e me diga o que importa.";
-      const okTurn = await counselorTurn(
-        supabase, link.user_id, ent, from, caption, url,
-        [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: toBase64(media.bytes) } }],
-        `${caption}\n📎 ${docName}`,
-      );
-      if (!okTurn) await releaseUsage(supabase, docReservation); // falha não consome análise
-      return new Response("ok", { status: 200 });
+
+      // ── Formatos que lemos aqui: baixar e extrair, sem gastar cota nenhuma
+      //    (só o que virar captura ou conversa é que custa). ──
+      const media = await waDownloadMedia(String(msg.document?.id ?? ""), MAX_DOC_BYTES);
+      if (media === "too_big" || !media) {
+        await waSendText(from, media === "too_big"
+          ? "Esse arquivo é grande demais para o WhatsApp (máximo ~4 MB). Manda só a parte que importa, ou use o app."
+          : "Não consegui baixar esse arquivo. Tenta mandar de novo?");
+        return new Response("ok", { status: 200 });
+      }
+      const extracted = await extractDocumentText(kind, media.bytes, MAX_DOC_CHARS);
+      if (!extracted) {
+        await waSendText(from, `Não consegui abrir esse arquivo (pode estar protegido por senha, corrompido, ou não ser mesmo um ${kind === "xlsx" ? "Excel" : kind === "docx" ? "Word" : "arquivo de texto"}). Se der, exporte como *.csv* ou *PDF* e me manda de novo.`);
+        return new Response("ok", { status: 200 });
+      }
+      const content = extracted.text.trim();
+      if (!content) {
+        await waSendText(from, "Esse arquivo não tem texto que eu consiga ler (deve ser só imagem por dentro). Se for um documento escaneado, me manda como *PDF* ou como *foto* que eu leio.");
+        return new Response("ok", { status: 200 });
+      }
+      if (extracted.truncated) {
+        // Passou do teto: parar aqui é a escolha certa. Ler o começo e calar
+        // sobre o resto é como a IA registra dado errado com cara de certo.
+        await waSendText(from, `Esse arquivo tem texto demais para eu ler inteiro pelo WhatsApp, e ler só o começo seria pior que não ler: eu te daria meia informação com cara de completa.\n\nMe manda um trecho menor (um mês, uma aba), ou envie o arquivo no Conselheiro do app, que aceita arquivos maiores: ${url}/app/conselheiro`);
+        return new Response("ok", { status: 200 });
+      }
+
+      if (content.length > MAX_DOC_CAPTURE_CHARS) {
+        // Documento longo (plano alimentar, relatório): é leitura, não relato.
+        // Mesma rota do PDF — inclusive a mesma cota de análise.
+        const { ok, id: docReservation } = await reserveDocAnalysis(supabase, link.user_id, ent, from, url);
+        if (!ok) return new Response("ok", { status: 200 });
+        const ask = caption || "Analise este documento considerando meus dados e me diga o que importa.";
+        const okTurn = await counselorTurn(
+          supabase, link.user_id, ent, from,
+          `${ask}\n\n━━━ CONTEÚDO DE "${docName}" (extraído do arquivo, texto puro) ━━━\n${content}`,
+          url, [], `${ask}\n📎 ${docName}`,
+        );
+        if (!okTurn) await releaseUsage(supabase, docReservation);
+        return new Response("ok", { status: 200 });
+      }
+
+      // Curto: segue exatamente o caminho de uma mensagem de texto (sem
+      // `return` — o roteador lá embaixo decide captura ou Conselheiro).
+      docText = `${caption ? caption.slice(0, 300) + "\n\n" : ""}Conteúdo do arquivo "${docName}":\n${content}`;
     }
 
     // ── ÁUDIO: transcreve (Groq) e entra no MESMO roteador do texto —
     //    relato vira captura com botões, pergunta vai ao Conselheiro. ──
     let text = "";
     let transcribed = false;
-    if ((msg.type === "audio" || msg.type === "voice") && link) {
+    const fromDoc = docText.length > 0;
+    if (fromDoc) {
+      text = docText; // arquivo já lido acima: daqui para baixo é texto comum
+    } else if ((msg.type === "audio" || msg.type === "voice") && link) {
       const audioId = String(msg.audio?.id ?? msg.voice?.id ?? "");
       const media = await waDownloadMedia(audioId, MAX_AUDIO_BYTES);
       if (media === "too_big" || !media) {
@@ -652,8 +741,8 @@ Deno.serve(async (req) => {
       return new Response("ok", { status: 200 });
     }
 
-    await assertRateLimit(supabase, link.user_id, "whatsapp", 40, 5);
-    if (text.length > 2000) {
+    if (!fromDoc) await assertRateLimit(supabase, link.user_id, "whatsapp", 40, 5); // documento já contou
+    if (!fromDoc && text.length > 2000) {
       await waSendText(from, "Essa mensagem ficou grande demais. Me manda em partes menores, ou continue no app.");
       return new Response("ok", { status: 200 });
     }
@@ -664,13 +753,21 @@ Deno.serve(async (req) => {
 
     const ent = await getEntitlements(supabase, link.user_id);
 
-    // Eco da transcrição: a pessoa confere o que o áudio virou antes de
-    // qualquer proposta/resposta (honestidade com o STT).
-    const transcriptPreface = transcribed ? `🎙 _"${text.slice(0, 180)}${text.length > 180 ? "…" : ""}"_` : undefined;
+    // Eco do que eu entendi ANTES de propor qualquer coisa: a transcrição do
+    // áudio (honestidade com o STT) ou o arquivo que foi lido (honestidade
+    // sobre a fonte do registro).
+    const preface = transcribed
+      ? `🎙 _"${text.slice(0, 180)}${text.length > 180 ? "…" : ""}"_`
+      : fromDoc
+        ? `📎 _Li o arquivo "${docName}"._`
+        : undefined;
 
     // ── ROTA 1: claramente conversa → Conselheiro (cota de chat) ──
-    if (looksConversational(text)) {
-      if (transcriptPreface) await waSendText(from, transcriptPreface);
+    //    Arquivo nunca entra por aqui: uma planilha cheia de "?" não é
+    //    pergunta. Ele tenta captura e, se não houver nada registrável, o
+    //    fallback da ROTA 2 leva o conteúdo ao Conselheiro do mesmo jeito.
+    if (!fromDoc && looksConversational(text)) {
+      if (preface) await waSendText(from, preface);
       await counselorTurn(supabase, link.user_id, ent, from, text, url);
       return new Response("ok", { status: 200 });
     }
@@ -694,13 +791,13 @@ Deno.serve(async (req) => {
         return new Response("ok", { status: 200 });
       }
       if (events.length) {
-        await proposeEvents(supabase, link.user_id, from, events, url, text, transcriptPreface);
+        await proposeEvents(supabase, link.user_id, from, events, url, text, preface);
         return new Response("ok", { status: 200 });
       }
       // Nada registrável: a tentativa NÃO consome o limite de captura —
       // a mensagem era conversa, e conversa é com o Conselheiro.
       await releaseUsage(supabase, reservationId);
-      if (transcriptPreface) await waSendText(from, transcriptPreface);
+      if (preface) await waSendText(from, preface);
       await counselorTurn(supabase, link.user_id, ent, from, text, url);
       return new Response("ok", { status: 200 });
     }

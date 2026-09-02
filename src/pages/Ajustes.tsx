@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "sonner";
-import { LogOut, Loader2, Smartphone, Share, Sun, Moon, Monitor, Plus, X, Brain, Trash2, Download, ShieldAlert, Sparkles, Eye } from "lucide-react";
+import { LogOut, Loader2, Smartphone, Share, Sun, Moon, Monitor, Plus, X, Brain, Trash2, Download, ShieldAlert, Sparkles, Eye, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -21,6 +21,7 @@ import { PILLARS, pillarById, type PillarId } from "@/lib/pillars";
 import { TRACKERS } from "@/lib/trackers";
 import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
 import { MEMORY_CATEGORY_LABEL } from "@/components/core/LearnedInsights";
+import HealthImport from "@/components/core/HealthImport";
 import { useGuides } from "@/hooks/useGuides";
 import FeedbackDialog from "@/components/core/FeedbackDialog";
 import WhatsappCard from "@/components/core/WhatsappCard";
@@ -720,6 +721,21 @@ export default function Ajustes() {
             <li>Toque em <strong>"Adicionar à tela inicial"</strong> (ou "Instalar app").</li>
           </ol>
         </div>
+      </Card>
+
+      {/* Importar dados de saúde: o espelho da exportação logo abaixo.
+          Vale para sono, treino E peso ao mesmo tempo — por isso mora aqui,
+          e não dentro de um pilar só. */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="font-display font-semibold flex items-center gap-1.5">
+            <Upload className="w-4 h-4 text-primary" /> Importar dados de saúde
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Traga o histórico que já existe nos seus outros aplicativos: sono, treinos e peso.
+          </p>
+        </div>
+        <HealthImport />
       </Card>
 
       {/* Seus dados: exportação e exclusão — sempre gratuitas */}

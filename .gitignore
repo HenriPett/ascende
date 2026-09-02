@@ -12,3 +12,8 @@ supabase/.temp/project-ref
 supabase/.temp/rest-version
 supabase/.temp/storage-migration
 supabase/.temp/storage-version
+
+# Arquivos reais de teste de importação (dados pessoais de saúde do fundador,
+# e um export do Apple Health de ~1,2 GB descompactado). Servem para validar o
+# importador localmente; nunca devem entrar no repositório.
+test_files/

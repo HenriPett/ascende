@@ -3,6 +3,7 @@ import {
   corsFor, serviceClient, requireUser, assertRateLimit, buildSnapshot,
   MODEL_SMART, MODEL_FAST, SAFETY_RULES, extractEventsAndMemories,
   STATEMENT_TOOL, STATEMENT_SYSTEM, normalizeStatementItems,
+  ATTACHMENT_EXTRACT_MAX_CHARS, EXTRACTION_MAX_EVENTS,
 } from "../_shared/lib.ts";
 import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage } from "../_shared/usage.ts";
 import {
@@ -62,6 +63,14 @@ Você só pode afirmar que ela comeu, treinou, gastou, dormiu ou registrou algo 
 • Nunca cite alimento, exercício, valor, horário ou refeição específicos que você não leu no retrato ou no histórico.
 • O retrato é a fonte mais confiável sobre o que foi REGISTRADO; o histórico é a fonte sobre o que foi DITO. Quando os dois divergirem, diga o que você vê em vez de escolher a versão mais bonita.
 • Errar por perguntar custa uma frase. Errar por inventar custa a confiança dela em tudo que você diz, inclusive no que está correto.
+
+━━━ ARQUIVOS ANEXADOS: DIGA O QUE ENTROU, NUNCA "ABSORVI" ━━━
+Quando a pessoa anexa um arquivo (CSV, planilha, exportação de app, PDF, anotações), o sistema lê o conteúdo, extrai o que é registrável e coloca no bloco "LEITURA DOS ARQUIVOS ANEXADOS" mais abaixo, com números apurados. Ao falar do arquivo:
+• Use EXATAMENTE os números daquele bloco. Se ele não estiver presente, você não recebeu conteúdo textual nenhum: não finja que leu.
+• Diga com precisão o que foi extraído e PROPOSTO para registro, e o que ficou de fora (linhas antigas, dados além do limite de leitura). O cartão de confirmação aparece abaixo da sua resposta; nada é gravado até a pessoa confirmar.
+• PROIBIDO dizer "absorvi", "importei", "salvei", "já está tudo no seu histórico" ou qualquer variação que sugira que os dados entraram sozinhos. Esse foi um bug real: a IA dizia que tinha absorvido e não registrava nada.
+• Se sobrou dado no arquivo, diga em UMA frase e aponte "Importar dados de saúde", no app, que é o caminho para trazer o arquivo inteiro. Não prometa fazer isso você mesmo em outra mensagem.
+• Comentar o conteúdo do arquivo (padrões, médias, o que chama atenção) continua sendo seu trabalho e é bem-vindo: o que não pode é confundir COMENTAR com REGISTRAR.
 
 ━━━ PONDERE ANTES DE RESPONDER ━━━
 Antes de qualquer resposta personalizada (recomendação, análise, decisão sobre a vida da pessoa), avalie em silêncio: "tenho as informações para uma resposta de QUALIDADE, específica para ESTA pessoa, ou vou entregar algo genérico?". Se faltarem dados essenciais, NÃO responda genericamente: faça as perguntas objetivas que faltam (máximo 3) e pare por aí. Uma resposta curta que pede o dado certo vale mais que uma resposta longa e rasa.
@@ -245,6 +254,15 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const contentBlocks: any[] = [];
     const attNames: string[] = [];
+    /* BUG (fundador, 01/09): o anexo virava contentBlocks e ia para a resposta
+       conversacional — por isso a IA DIZIA que tinha lido — mas a extração de
+       eventos recebia só `message`. O conteúdo do arquivo nunca chegava nela:
+       a IA comentava o arquivo e não registrava absolutamente nada.
+       Agora o texto dos anexos é acumulado aqui e entra na extração. */
+    const attachmentChunks: string[] = [];
+    // deno-lint-ignore no-explicit-any
+    const pdfBlocks: any[] = [];
+    let attachmentTruncated = false;
     for (const a of atts) {
       const name = String(a?.name ?? "arquivo").slice(0, 120);
       if (a?.kind === "image" && typeof a.data === "string" && a.data.length <= MAX_IMG_B64
@@ -252,15 +270,29 @@ Deno.serve(async (req) => {
         contentBlocks.push({ type: "image", source: { type: "base64", media_type: a.media_type, data: a.data } });
         attNames.push(name);
       } else if (a?.kind === "pdf" && typeof a.data === "string" && a.data.length <= MAX_PDF_B64) {
-        contentBlocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: a.data } });
+        const block = { type: "document", source: { type: "base64", media_type: "application/pdf", data: a.data } };
+        contentBlocks.push(block);
+        // O texto do PDF não existe no servidor (não há parser aqui), então o
+        // próprio documento vai junto para a extração. Só o primeiro: cada PDF
+        // custa dezenas de milhares de tokens de entrada.
+        if (!pdfBlocks.length) pdfBlocks.push(block);
         attNames.push(name);
       } else if (a?.kind === "text" && typeof a.text === "string") {
         contentBlocks.push({ type: "text", text: `[Conteúdo do arquivo "${name}" enviado pelo usuário]\n\n${a.text.slice(0, MAX_TEXT_CHARS)}` });
+        // Para a EXTRAÇÃO o teto é menor que o da conversa: 25 eventos é o que
+        // cabe num cartão de confirmação, então ler mais só gastaria tokens.
+        const forExtraction = a.text.slice(0, ATTACHMENT_EXTRACT_MAX_CHARS);
+        if (a.text.length > forExtraction.length) attachmentTruncated = true;
+        attachmentChunks.push(
+          `[conteúdo do arquivo "${name}" · ${a.text.length} caracteres no total]\n${forExtraction}`,
+        );
         attNames.push(name);
       } else {
         return json({ error: `Anexo inválido ou grande demais: ${name}.` }, 400);
       }
     }
+    const attachmentText = attachmentChunks.join("\n\n");
+    const hasFileContent = attachmentText.length > 0 || pdfBlocks.length > 0;
 
     // Limites do Conselheiro — validados NO SERVIDOR, por plano, no fuso de
     // São Paulo. A contagem saiu de chat_messages (check-depois-insert, que
@@ -366,6 +398,60 @@ Deno.serve(async (req) => {
       /plano|dieta|treino|or[çc]ament|financ|analis|relat[óo]rio|semana|m[êe]s|como (estou|est[áa]|anda)|minha vida|meta|estrat[ée]gia|cruz|compar/i.test(message);
     const model = ent.flags.model_routing_enabled && !needsSmart ? MODEL_FAST : MODEL_SMART;
 
+    /* ── Anexo com dado dentro: extrair ANTES de responder ──────────────
+       Para mensagens comuns a extração roda depois da resposta (não gastar
+       chamada quando a principal falha). Com arquivo isso não serve: a IA
+       precisa dizer com precisão o que foi extraído, e ela só consegue se
+       souber o resultado ANTES de escrever. Era exatamente essa lacuna que
+       produzia o "absorvi seus dados" sem nada registrado. */
+    type Extraction = Awaited<ReturnType<typeof extractEventsAndMemories>>;
+    let fileExtraction: Extraction | null = null;
+    let ingestionFacts = "";
+    if (hasFileContent) {
+      const raw = await extractEventsAndMemories(
+        supabase, user.id,
+        attachmentText ? `${message}\n\n${attachmentText}` : message,
+        "chat-extracao", ent.limits.memory_cap,
+        { bulk: true, blocks: pdfBlocks },
+      );
+
+      /* Linhas com data ANTERIOR a hoje não podem virar proposta aqui: quem
+         grava a confirmação no app (src/lib/captureEvents.ts) carimba tudo
+         com a data de hoje, então 22 noites de 2024 entrariam como 22 noites
+         de hoje. Corromper o histórico é pior que não importar: essas linhas
+         são contadas e a pessoa é mandada para o importador em massa. */
+      const todayIso = spParts().dateIso;
+      // deno-lint-ignore no-explicit-any
+      const isPastDated = (ev: any) => {
+        const d = String(ev?.occurred_at ?? "").slice(0, 10);
+        return /^\d{4}-\d{2}-\d{2}$/.test(d) && d < todayIso;
+      };
+      const proposable = raw.events.filter((ev) => !isPastDated(ev));
+      const historical = raw.events.length - proposable.length;
+      fileExtraction = { ...raw, events: proposable };
+
+      const nomes = attNames.map((n) => `"${n}"`).join(", ");
+      const partes: string[] = [];
+      if (!raw.ok) {
+        partes.push(`A leitura de ${nomes} FALHOU: nenhum registro foi extraído e NADA foi proposto. Diga isso com honestidade e ofereça reenviar o arquivo.`);
+      } else {
+        partes.push(`Arquivos lidos: ${nomes}.`);
+        partes.push(proposable.length
+          ? `Registros extraídos e PROPOSTOS no cartão de confirmação desta resposta: ${proposable.length}. A pessoa ainda precisa confirmar no cartão; nada foi gravado ainda.`
+          : `Nenhum registro do dia de hoje foi extraído do arquivo, então NADA foi proposto para registro.`);
+        if (historical > 0) {
+          partes.push(`O arquivo tem ${historical} linha(s) com data de dias anteriores. Elas NÃO foram propostas: o registro por conversa carimba a data de hoje, e importar histórico por aqui bagunçaria a linha do tempo dela. O caminho certo para histórico é "Importar dados de saúde", no app.`);
+        }
+        if (attachmentTruncated || raw.capped) {
+          partes.push(`ATENÇÃO: o arquivo tem MAIS dados do que coube nesta leitura (o limite é ${EXTRACTION_MAX_EVENTS} registros por conversa). Diga isso claramente e aponte "Importar dados de saúde", no app, para trazer o arquivo inteiro.`);
+        }
+      }
+      ingestionFacts =
+        `\n\n━━━ LEITURA DOS ARQUIVOS ANEXADOS (fatos apurados pelo sistema, não estimativa) ━━━\n` +
+        partes.join("\n") +
+        `\nUse EXATAMENTE estes números ao falar do arquivo. É PROIBIDO dizer que absorveu, importou, salvou ou registrou os dados: o que existe é uma proposta de ${proposable.length} registro(s) aguardando a confirmação dela. Não invente quantidades e não prometa importar o resto sozinho.`;
+    }
+
     const { res, data: mainData } = await anthropicCall(supabase, user.id, "chat-principal", {
       model,
       max_tokens: 3000,
@@ -373,7 +459,7 @@ Deno.serve(async (req) => {
       // o retrato (variável) fica fora do cache.
       system: [
         { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
-        { type: "text", text: snapshot + deliveryDirective },
+        { type: "text", text: snapshot + deliveryDirective + ingestionFacts },
       ],
       tools: [SAVE_PLAN_TOOL, UPDATE_PROFILE_TOOL, PROPOSE_HABITS_TOOL],
       tool_choice: { type: "auto" },
@@ -395,9 +481,11 @@ Deno.serve(async (req) => {
     // eventos registráveis E memórias duráveis da mensagem (plano §9.2). São
     // PROPOSTAS — o app pede confirmação antes de gravar eventos. Mensagens
     // triviais ("obrigado", "pode continuar") não geram chamada nenhuma.
-    const extractPromise = extractEventsAndMemories(
-      supabase, user.id, message, "chat-extracao", ent.limits.memory_cap,
-    );
+    const extractPromise = fileExtraction
+      ? Promise.resolve(fileExtraction)   // já extraída antes da resposta
+      : extractEventsAndMemories(
+        supabase, user.id, message, "chat-extracao", ent.limits.memory_cap,
+      );
 
     // ── Fatura em toda IA: imagens na conversa também podem ser prints de
     // fatura, comprovantes de Pix ou cupons. Uma extração econômica (o mesmo
