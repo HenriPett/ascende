@@ -24,6 +24,7 @@ import HealthImport from "@/components/core/HealthImport";
 import SourcesAndImports from "@/components/core/SourcesAndImports";
 import MemoryControl from "@/components/core/MemoryControl";
 import { useGuides } from "@/hooks/useGuides";
+import { useMokariPreference } from "@/hooks/useMokariPreference";
 import FeedbackDialog from "@/components/core/FeedbackDialog";
 import WhatsappCard from "@/components/core/WhatsappCard";
 import { todayISOInSP } from "@/lib/dates";
@@ -276,6 +277,7 @@ export default function Ajustes() {
   // ── Memória do Conselheiro: ver e apagar o que a IA aprendeu ──
   const qc = useQueryClient();
   const { resetAll: resetGuides, disableAll: disableGuides } = useGuides();
+  const mokari = useMokariPreference();
   const [clearingMemories, setClearingMemories] = useState(false);
   const clearMemories = async () => {
     if (!user) return;
@@ -585,6 +587,43 @@ export default function Ajustes() {
             Desligar todas
           </Button>
         </div>
+      </Card>
+
+      {/* Mokari: o interruptor.
+          DESLIGADO por padrão — e o campo é anulável de propósito, para o app
+          distinguir "nunca perguntei" de "ela disse não". O convite aparece
+          UMA vez, na Jornada, e o silêncio é respeitado: personagem que
+          aparece sem ser convidado, no app de quem está tentando organizar a
+          vida, é atrito.
+          Desligar aqui não afeta função nenhuma do app — XP, indicadores,
+          captura, planos e batalhas seguem idênticos. Isso não é promessa de
+          comentário: src/lib/mokariIsolation.test.ts reprova quem quebrar. */}
+      <Card className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <Label htmlFor="mokari" className="cursor-pointer font-display font-semibold">
+              Mokari
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Um broto que cresce com o que você registra: o retrato da sua jornada, no topo da
+              tela Jornada. Desligado, nada mais no app muda.
+            </p>
+          </div>
+          <Switch
+            id="mokari"
+            checked={mokari.enabled}
+            disabled={!mokari.ready}
+            onCheckedChange={(v) => {
+              mokari.setEnabled(v);
+              toast.success(v
+                ? "Mokari ligado. Ele aparece no topo da Jornada."
+                : "Mokari desligado. Nada mais muda no app.");
+            }}
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Ele nunca reflete peso nem composição corporal, e não envia nenhuma notificação.
+        </p>
       </Card>
 
       {/* Assinatura */}

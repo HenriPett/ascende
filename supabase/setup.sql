@@ -1426,3 +1426,15 @@ create or replace view public.ai_memories_vigentes
     and (m.valid_until is null or m.valid_until > now());
 
 grant select on public.ai_memories_vigentes to authenticated;
+
+-- ─── 34. MOKARI: PREFERÊNCIA DA PESSOA (Fase 5) ─────────────────
+-- NULLABLE e SEM DEFAULT de propósito — não "conserte" para o padrão
+-- `not null default false` das outras preferências acima: a anulabilidade É
+-- o dado. null = nunca perguntamos (o convite pode aparecer) · false =
+-- recusou ou desligou (silêncio, o convite não volta) · true = ligado.
+-- Com default, "nunca perguntei" e "ela disse não" viram o mesmo valor, e o
+-- convite ou insiste para sempre com quem já recusou, ou nunca aparece.
+alter table public.profiles add column if not exists mokari_enabled boolean;
+
+comment on column public.profiles.mokari_enabled is
+  'Mokari: null = nunca perguntamos (pode convidar) · false = recusou ou desligou (silêncio) · true = ligado. NULLABLE de propósito — com default os dois primeiros estados viram um só.';

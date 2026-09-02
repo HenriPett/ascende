@@ -67,6 +67,13 @@ export interface Profile {
   est_food_spend: number | null;
   /** Quando o Blueprint da Subida foi gerado (cortesia, 1x por conta). */
   blueprint_generated_at: string | null;
+  /** Mokari: TRÊS estados num campo anulável, e a anulabilidade É o dado.
+   *  null = nunca perguntamos (o convite aparece uma vez na Jornada) ·
+   *  false = ela disse não, ou desligou depois (silêncio) · true = ligado.
+   *  Não troque por `not null default false`: isso apagaria a diferença
+   *  entre "nunca perguntei" e "ela recusou", e o convite passaria a
+   *  aparecer para sempre ou nunca. */
+  mokari_enabled: boolean | null;
 }
 
 export function useProfile() {
