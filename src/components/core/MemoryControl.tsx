@@ -17,8 +17,7 @@ import {
   MEMORY_CATEGORY_LABEL, MEMORY_VALIDITY_PRESET_LABEL,
   MEMORY_CONTENT_MAX, isMemoryVigente, memorySourceLine, memoryValidityLabel,
   validUntilFromPreset, validateMemoryContent,
-  type MemoryValidityPreset,
-} from "@/lib/memories";
+  type MemoryValidityPreset, semOrigemTexto,} from "@/lib/memories";
 import {
   listMemoriesWithSources, confirmMemory, updateMemoryContent, setMemoryValidity,
   rejectMemory, reactivateMemory, deleteMemory,
@@ -279,10 +278,7 @@ export default function MemoryControl({
                   {m.sources.map((s) => <SourceDetail key={s.id} source={s} />)}
                 </ul>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  Esta memória não tem origem registrada — ela é anterior ao momento em que passei
-                  a guardar de onde cada coisa veio. Se não fizer sentido, é só recusar.
-                </p>
+                <p className="text-xs text-muted-foreground">{semOrigemTexto(m.created_at)}</p>
               )}
             </div>
 

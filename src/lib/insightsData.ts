@@ -44,6 +44,12 @@ export interface DailyMetrics {
    * são ausência.
    */
   has_finance: boolean;
+  /** Critério MAIS RIGOROSO: o gasto do dia vem de extrato CONFIRMADO, então
+   *  existe mesmo que a pessoa não tenha aberto o app naquele dia.
+   *  `refeicao_gasto_comida` exige este, e não `has_finance`: lá os dois lados
+   *  são "ela registrou algo hoje", e sem extrato a análise mediria o uso do
+   *  app em vez do comportamento com comida. */
+  finance_from_statement: boolean;
 }
 
 /** Nomes internos das três análises (viram a coluna `kind`, com CHECK no
@@ -114,6 +120,7 @@ function toDailyMetrics(row: Row): DailyMetrics {
     food_spend: num(row.food_spend),
     total_spend: num(row.total_spend),
     has_finance: row.has_finance === true,
+    finance_from_statement: row.finance_from_statement === true,
   };
 }
 
@@ -156,7 +163,7 @@ export async function readDailyMetrics(
   const { data, error } = await supabase.from("daily_metrics")
     .select(
       "day,sleep_hours,workout_minutes,workout_count,meals_logged," +
-      "food_spend,total_spend,has_finance",
+      "food_spend,total_spend,has_finance,finance_from_statement",
     )
     .eq("user_id", userId)
     .gte("day", periodStart)

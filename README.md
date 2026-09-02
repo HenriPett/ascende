@@ -29,7 +29,19 @@ Este guia leva você do zero ao app no ar, **mesmo que você nunca tenha feito i
 1. No painel do Supabase, abra **SQL Editor** (ícone de terminal no menu lateral).
 2. Abra o arquivo **`supabase/setup.sql`** desta pasta no Bloco de Notas, selecione TUDO (Ctrl+A) e copie.
 3. Cole no SQL Editor e clique em **Run**.
-4. Deve aparecer "Success. No rows returned". Pronto — banco criado, com segurança (RLS) já configurada.
+4. Deve aparecer "Success. No rows returned".
+5. **Ainda falta um pedaço.** O `setup.sql` é a linha de base; o que veio
+   depois dele vive em `supabase/migrations/`. Abra cada arquivo `.sql` daquela
+   pasta **em ordem de nome** (eles começam com a data) e rode um por um, do
+   mesmo jeito. São poucos, e todos podem ser rodados de novo sem estragar nada.
+
+   Sem este passo o app sobe, mas as **tendências** (a seção "O que andou
+   junto", em Indicadores) e o **Mokari** não funcionam — as tabelas delas
+   nascem nas migrações, não no `setup.sql`.
+
+   Se você usa o Supabase CLI, os dois passos viram um: `npx supabase db push`.
+
+Pronto — banco criado, com segurança (RLS) já configurada.
 
 > 💡 **Opcional, recomendado para testar sem fricção:** em **Authentication → Sign In / Providers → Email**, desative **"Confirm email"**. Assim, quem criar conta entra na hora, sem precisar confirmar e-mail. Você pode reativar depois.
 
@@ -137,7 +149,8 @@ O app usa **Claude Haiku** para a captura (baratíssimo) e **Claude Sonnet** par
 
 ```
 ├── src/                    # aplicativo (React + Vite + Tailwind)
-├── supabase/setup.sql      # cria todo o banco (Passo 2)
+├── supabase/setup.sql      # linha de base do banco (Passo 2)
+├── supabase/migrations/    # tudo que veio depois — roda em ordem (Passo 2)
 ├── supabase/functions/     # as funções de IA (Passo 4)
 ├── netlify.toml            # configuração do Netlify (já pronta)
 └── .env.example            # modelo das variáveis (Passo 5)

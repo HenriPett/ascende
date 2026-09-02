@@ -11,8 +11,7 @@ import { describe, it, expect } from "vitest";
 import {
   isMemoryVigente, compareMemoriesForSnapshot, selectMemoriesForSnapshot,
   validateMemoryContent, memoryValidityLabel, validUntilFromPreset, memorySourceLine,
-  MEMORY_STATUS_LABEL, MEMORY_CONTENT_MAX,
-} from "@/lib/memories";
+  MEMORY_STATUS_LABEL, MEMORY_CONTENT_MAX, semOrigemTexto,} from "@/lib/memories";
 
 const AGORA = new Date("2026-09-03T12:00:00-03:00");
 const ONTEM = "2026-09-02T12:00:00-03:00";
@@ -172,5 +171,33 @@ describe("MEMORY_STATUS_LABEL", () => {
     expect(MEMORY_STATUS_LABEL.confirmada).toBe("Confirmado por você");
     expect(MEMORY_STATUS_LABEL.rejeitada).toBe("Descartado");
     expect(MEMORY_STATUS_LABEL.expirada).toBe("Fora do prazo");
+  });
+});
+
+/* ═══ "De onde eu tirei isso" não pode inventar a explicação ══════════════
+ *
+ * Achado de auditoria: quando a conversa produz MEMÓRIA mas nenhum evento,
+ * não há mensagem registrada para a origem apontar — e a tela afirmava, para
+ * uma memória de segundos atrás, que ela era "anterior ao momento em que
+ * passei a guardar de onde cada coisa veio".
+ *
+ * É falso, e é falso justamente na tela cujo propósito é a pessoa poder
+ * CONFERIR o que dizemos sobre ela. Ela não tem como saber que a frase é
+ * mentira — e afirmar uma explicação não verificada custa mais confiança do
+ * que admitir a falha.
+ */
+describe("semOrigemTexto", () => {
+  it("memória antiga: a explicação da data é verdadeira e pode ser dita", () => {
+    expect(semOrigemTexto("2026-08-01T10:00:00Z")).toContain("anterior ao momento");
+  });
+
+  it("memória recente: admite que não guardou, sem inventar o motivo", () => {
+    const texto = semOrigemTexto("2026-09-10T10:00:00Z");
+    expect(texto).not.toContain("anterior ao momento");
+    expect(texto).toContain("Não guardei de onde tirei esta");
+  });
+
+  it("data ilegível cai no texto que não afirma nada", () => {
+    expect(semOrigemTexto("ontem de manhã")).not.toContain("anterior ao momento");
   });
 });

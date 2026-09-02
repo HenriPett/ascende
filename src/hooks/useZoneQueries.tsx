@@ -52,15 +52,21 @@ export function useBattlesTodayQuery() {
     queryKey: ["battles-today", user?.id, todayISO()],
     enabled: !!user,
     queryFn: async () => {
-      const [{ data: battles }, { data: checkins }] = await Promise.all([
+      const [batalhas, checkins] = await Promise.all([
         supabase.from("battles").select("*").eq("user_id", user!.id)
           .eq("active", true).order("created_at"),
         supabase.from("battle_checkins").select("*").eq("user_id", user!.id)
           .gte("checkin_date", daysAgoISOInSP(120)),
       ]);
+      // Vazio só pode significar vazio: sem isto, uma falha de leitura fazia
+      // o hub dizer "Nenhuma batalha declarada" e CONVIDAR a declarar uma —
+      // para quem já está no meio de uma.
+      if (batalhas.error) throw batalhas.error;
+      if (checkins.error) throw checkins.error;
+      const battles = batalhas.data;
       return {
         battles: (battles ?? []) as Battle[],
-        checkins: (checkins ?? []) as BattleCheckin[],
+        checkins: (checkins.data ?? []) as BattleCheckin[],
       };
     },
   });

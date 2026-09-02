@@ -1,7 +1,18 @@
 -- ═══════════════════════════════════════════════════════════════
--- ASCENDE — Setup completo do banco de dados
+-- ASCENDE — Linha de base do banco de dados
+--
 -- Cole este arquivo INTEIRO no SQL Editor do Supabase e clique em RUN.
 -- Pode rodar mais de uma vez sem problema (idempotente).
+--
+-- ⚠ ELE NÃO É O BANCO INTEIRO, e dizer que era foi um erro corrigido em
+-- auditoria. Ambiente novo precisa de DOIS passos:
+--     1. este arquivo;
+--     2. TODAS as migrações de supabase/migrations/, em ordem de nome.
+--
+-- Objetos que existem só nas migrações (de propósito — a definição tem um
+-- dono só; ver supabase/migrations/README.md): jsonb_num, daily_metrics e
+-- insights (Fase 3); insight_feedback e as sete views metric_* (Fase 6).
+-- Não procure por eles aqui, e não os copie para cá.
 -- ═══════════════════════════════════════════════════════════════
 
 -- ─── 1. PERFIS ──────────────────────────────────────────────────
@@ -1218,6 +1229,28 @@ revoke all on function public.wa_pair_clear(text) from anon, authenticated;
 -- Continua SEM security definer de propósito: roda como o usuário, então o
 -- RLS de xp_log garante que ninguém lê o total de outra conta.
 grant execute on function public.xp_total(uuid) to authenticated;
+
+-- XP do Mokari: a mesma soma, EXCLUINDO peso e composição corporal (regra 3 —
+-- nada no Mokari muda em função do corpo). Nunca use xp_total(uuid) para o
+-- estágio do Mokari: ela soma tudo, inclusive "Peso registrado".
+-- ⚠ A lista de motivos vive TAMBÉM em IGNORED_XP_REASONS (src/lib/mokari.ts) e
+-- na migração 20260908120000. src/lib/mokariReasons.test.ts lê os três e falha
+-- se divergirem. Não apague os marcadores.
+create or replace function public.xp_total_mokari(uid uuid)
+returns bigint language sql stable set search_path = public as $$
+  select coalesce(sum(points), 0)::bigint
+  from public.xp_log
+  where user_id = uid
+    and coalesce(reason, '') <> all (array[
+      -- IGNORED_XP_REASONS:BEGIN
+      'Peso registrado',
+      'Composição corporal registrada',
+      'Registro: weight',
+      'Registro: body'
+      -- IGNORED_XP_REASONS:END
+    ]);
+$$;
+grant execute on function public.xp_total_mokari(uuid) to authenticated;
 
 -- ─── 32. FONTES E RECIBOS (Fase 1 do plano refinado) ─────────
 -- ─── A FONTE: o arquivo (ou origem) que produziu registros ──────────────
