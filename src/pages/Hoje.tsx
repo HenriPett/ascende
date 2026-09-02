@@ -25,9 +25,14 @@ import {
 } from "lucide-react";
 import { PLAN_KIND_META } from "@/lib/blueprint";
 import { invalidateKeys, FINANCE_KEYS, LIFE_DATA_KEYS } from "@/lib/queryKeys";
-import { levelFromXp, levelTitle, xpToastSuffix } from "@/lib/xp";
+import { xpToastSuffix } from "@/lib/xp";
+import { appPath } from "@/lib/routes";
+import { focusCaptureElement, useProvideCaptureFocus } from "@/hooks/useCaptureFocus";
+import {
+  useSleepZoneVisible, useBattleZoneVisible, useWhatsappZoneVisible,
+} from "@/hooks/useHojeZones";
 import { DEFAULT_WATER_GOAL_ML, DEFAULT_WATER_BOTTLES } from "@/hooks/useProfile";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { greet, todayISO } from "@/lib/format";
 import { dateISOInSP, daysAgoISOInSP } from "@/lib/dates";
 import { pillarById, activePillarSet } from "@/lib/pillars";
@@ -347,57 +352,13 @@ function QuickActions() {
 }
 
 /* ── Complete seu retrato (1.2): completude do perfil com atalhos ── */
-function ProfileCompleteness() {
-  const { profile } = useProfile();
-  if (!profile) return null;
-
-  const items = [
-    { label: "Ano de nascimento", done: !!profile.birth_year },
-    { label: "Sexo", done: !!profile.sex },
-    { label: "Altura", done: !!profile.height_cm },
-    { label: "Nível de atividade", done: !!profile.activity_level },
-  ];
-  const done = items.filter((i) => i.done).length;
-  if (done === items.length) return null;
-  const pct = Math.round((done / items.length) * 100);
-
-  return (
-    <Card className="p-4">
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-full grid place-items-center shrink-0 bg-gold/10">
-          <UserRound className="w-5 h-5 text-gold-ink" />
-        </div>
-        <div className="flex-1 min-w-0 space-y-2">
-          <div>
-            <p className="text-sm font-semibold">Complete seu retrato — {pct}%</p>
-            <p className="text-xs text-muted-foreground">
-              Com esses dados, o Conselheiro monta planos de verdade em vez de pedir informações.
-            </p>
-          </div>
-          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-            <div className="h-full rounded-full bg-gold transition-all duration-500" style={{ width: `${pct}%` }} />
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {items.filter((i) => !i.done).map((i) => (
-              <Link key={i.label} to="/app/ajustes"
-                className="text-[11px] rounded-full border px-2.5 py-1 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
-                + {i.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-/* ── Seus planos ativos (análise UX item 2): o Blueprint é o clímax de um
-   onboarding de 9 blocos — e sumia atrás de dois toques (Pilares > Meus
-   planos). Aqui ele volta para a tela onde a pessoa vive, como atalho, sem
-   duplicar a gestão: ver, abrir e acompanhar continua em Meus planos. ── */
-function ActivePlans() {
+/** UMA definição da query, usada pelo componente E pelo hook de
+ *  visibilidade. Duas definições com a mesma queryKey e formas
+ *  diferentes envenenariam o cache uma da outra: quem resolvesse
+ *  primeiro ditaria o formato para as duas. */
+function useActivePlansQuery() {
   const { user } = useAuth();
-  const { data } = useQuery({
+  return useQuery({
     queryKey: ["active-plans-hoje", user?.id],
     enabled: !!user,
     staleTime: 1000 * 60 * 5,
@@ -409,6 +370,11 @@ function ActivePlans() {
       return (data ?? []) as { id: string; title: string; kind: string }[];
     },
   });
+}
+
+function ActivePlans() {
+  const { user } = useAuth();
+  const { data } = useActivePlansQuery();
 
   if (!data?.length) return null;
 
@@ -452,19 +418,13 @@ function ActivePlans() {
    Ao completar: clímax com XP de marco em vez de sumir em silêncio. ── */
 const SIGNATURE_QUESTION = "Monte um plano alimentar para o meu objetivo que caiba no meu orçamento";
 
-function FirstSteps() {
+/** Uma definição só (ver useActivePlansQuery). */
+function useFirstStepsQuery() {
   const { user } = useAuth();
   const { profile } = useProfile();
-  const qc = useQueryClient();
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem("ascend-firststeps-done") === "1");
-  const awarded = useRef(false);
-
-  // Absorvida pelo Blueprint (Emenda 4): quem gerou o Blueprint da Subida no
-  // onboarding já viveu o essencial da trilha (metas, plano e compromissos no
-  // dia 1) — a lista some para não cobrar o que já aconteceu.
+  const dismissed = readLocalFlag("ascend-firststeps-done");
   const absorbed = !!profile?.blueprint_generated_at;
-
-  const { data } = useQuery({
+  return useQuery({
     queryKey: ["first-steps", user?.id],
     enabled: !!user && !dismissed && !absorbed,
     staleTime: 1000 * 60,
@@ -482,6 +442,21 @@ function FirstSteps() {
       };
     },
   });
+}
+
+function FirstSteps() {
+  const { user } = useAuth();
+  const { profile } = useProfile();
+  const qc = useQueryClient();
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem("ascend-firststeps-done") === "1");
+  const awarded = useRef(false);
+
+  // Absorvida pelo Blueprint (Emenda 4): quem gerou o Blueprint da Subida no
+  // onboarding já viveu o essencial da trilha (metas, plano e compromissos no
+  // dia 1) — a lista some para não cobrar o que já aconteceu.
+  const absorbed = !!profile?.blueprint_generated_at;
+
+  const { data } = useFirstStepsQuery();
 
   const raioxDone = (data?.raiox ?? 0) > 0 || Number(profile?.monthly_income ?? 0) > 0;
 
@@ -572,16 +547,14 @@ function FirstSteps() {
 /* ── Sua primeira retrospectiva (análise UX P1.3): dias 2–6 de conta.
    Transforma a espera por domingo em preparação — sem culpa: mostra o que
    JÁ foi registrado e uma única sugestão, dispensável a qualquer momento. ── */
-function RetroCountdown() {
+/** Uma definição só (ver useActivePlansQuery). */
+function useRetroPreviewQuery() {
   const { user } = useAuth();
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem("ascend-retro-preview-done") === "1");
-
-  const createdAt = user?.created_at ? new Date(user.created_at).getTime() : 0;
-  const ageDays = createdAt ? Math.floor((Date.now() - createdAt) / 864e5) : 0;
-  const isSunday = new Date().getDay() === 0;
-  const eligible = !dismissed && !isSunday && ageDays >= 1 && ageDays <= 6;
-
-  const { data } = useQuery({
+  const dismissed = readLocalFlag("ascend-retro-preview-done");
+  const ageDays = user?.created_at
+    ? Math.floor((Date.now() - Date.parse(user.created_at)) / 864e5) : 0;
+  const eligible = !dismissed && new Date().getDay() !== 0 && ageDays >= 1 && ageDays <= 6;
+  return useQuery({
     queryKey: ["retro-preview", user?.id, todayISO()],
     enabled: !!user && eligible,
     staleTime: 1000 * 60 * 10,
@@ -595,6 +568,18 @@ function RetroCountdown() {
       return { weekEvents: count ?? 0 };
     },
   });
+}
+
+function RetroCountdown() {
+  const { user } = useAuth();
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem("ascend-retro-preview-done") === "1");
+
+  const createdAt = user?.created_at ? new Date(user.created_at).getTime() : 0;
+  const ageDays = createdAt ? Math.floor((Date.now() - createdAt) / 864e5) : 0;
+  const isSunday = new Date().getDay() === 0;
+  const eligible = !dismissed && !isSunday && ageDays >= 1 && ageDays <= 6;
+
+  const { data } = useRetroPreviewQuery();
 
   if (!eligible || !data) return null;
   const daysToSunday = (7 - new Date().getDay()) % 7 || 7;
@@ -938,84 +923,119 @@ const DAILY_FOCUS = [
   "Semana fechando: cada registro de hoje aparece na retrospectiva de domingo.",
 ];
 
-function Briefing() {
-  const { profile } = useProfile();
-  const { data, isLoading, isError } = useQuery({
+/* O briefing virou DUAS zonas, e isso é de propósito (Fase 4).
+ *
+ * Antes era um card só que renderizava SEMPRE: no plano gratuito caía no "Foco
+ * de hoje" — a meta da pessoa + uma dica fixa por dia da semana — ocupando a
+ * vaga nº 1 todo santo dia, com conteúdo que não muda de valor e link de
+ * upgrade. Paywall permanente na primeira dobra.
+ *
+ * A decisão do fundador foi sobre o TRAVADO: ele não some, desce para o fim da
+ * ordem. Quem tem vida registrada vê a própria vida primeiro; quem não tem
+ * registro nenhum continua vendo o convite, que ali é a coisa mais útil da
+ * tela. O briefing DE VERDADE é a leitura da vida da pessoa e continua na
+ * posição 4.
+ *
+ * Daí duas entradas no HOJE_ZONES com visibilidade mutuamente exclusiva. */
+
+interface BriefingData {
+  briefing: string | null;
+  locked?: boolean;
+  reason?: string;
+  courtesy?: boolean;
+}
+
+/** Query única das duas zonas e dos dois hooks. O React Query dedupa pela
+ *  chave, então chamar em quatro lugares custa uma requisição. */
+function useBriefingQuery() {
+  return useQuery({
     queryKey: ["briefing", todayISO()],
     staleTime: 1000 * 60 * 60,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("briefing", { body: {} });
       if (error || data?.error) throw new Error(data?.error ?? "erro");
-      return data as { briefing: string | null; locked?: boolean; reason?: string; courtesy?: boolean };
+      return data as BriefingData;
     },
   });
+}
 
-  const locked = !!data?.locked;
+/** Briefing real: só quando há texto de verdade. Enquanto carrega, NENHUMA das
+ *  duas zonas aparece — esqueleto dentro de card também é moldura, e a regra da
+ *  fase é que zona sem dado não ocupa espaço. */
+function useBriefingRealVisible(): boolean {
+  const { data, isLoading, isError } = useBriefingQuery();
+  if (isLoading || isError) return false;
+  return !data?.locked && !!data?.briefing;
+}
+
+/** Briefing travado: o convite ao Ascende+. */
+function useBriefingLockedVisible(): boolean {
+  const { data, isLoading, isError } = useBriefingQuery();
+  if (isLoading || isError) return false;
+  return !!data?.locked;
+}
+
+function Briefing() {
+  const { data } = useBriefingQuery();
+  if (!data?.briefing) return null;
 
   return (
     <Card className="p-5 bg-primary text-primary-foreground">
       <div className="flex items-center gap-2 text-sm font-medium mb-2 opacity-90">
         <Sunrise className="w-4 h-4" />
-        {locked ? "Foco de hoje" : new Date().getDay() === 0 ? "Retrospectiva da semana" : "Seu briefing de hoje"}
+        {new Date().getDay() === 0 ? "Retrospectiva da semana" : "Seu briefing de hoje"}
       </div>
-      {isLoading && (
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-full bg-primary-foreground/20" />
-          <Skeleton className="h-4 w-4/5 bg-primary-foreground/20" />
-          <Skeleton className="h-4 w-3/5 bg-primary-foreground/20" />
-        </div>
-      )}
-      {isError && (
-        <p className="text-sm opacity-90">
-          O briefing não carregou agora — sem problema, o resto do app segue normal.
-          Ele volta ao recarregar a página.
-        </p>
-      )}
-      {/* Sem cadeado como primeira mensagem: o card muda de assunto e entrega
-          conteúdo local — a meta da pessoa + o foco do dia. O Ascende+ vira
-          uma linha discreta de rodapé, não a manchete. */}
-      {locked && (
-        <div className="space-y-2">
-          {profile?.goal && (
-            <p className="text-sm leading-relaxed">
-              Sua bússola: <em>"{profile.goal}"</em>
-            </p>
-          )}
-          <p className="text-sm leading-relaxed opacity-90">{DAILY_FOCUS[new Date().getDay()]}</p>
-          <p className="text-[11px] opacity-70 pt-1">
-            {data?.reason ?? "O briefing diário com IA vive no Ascende+."}{" "}
-            <Link to="/app/assinatura" className="underline underline-offset-2">Conhecer</Link>
+      <div className="space-y-2">
+        <p className="text-sm leading-relaxed whitespace-pre-line">{data.briefing}</p>
+        {data.courtesy && (
+          <p className="text-[11px] opacity-70">
+            Seus primeiros briefings são por nossa conta ✨ — depois, ele chega todo dia
+            no Ascende+ e toda semana na sua retrospectiva gratuita de domingo.
           </p>
-        </div>
-      )}
-      {data?.briefing && (
-        <div className="space-y-2">
-          <p className="text-sm leading-relaxed whitespace-pre-line">{data.briefing}</p>
-          {data.courtesy && (
-            <p className="text-[11px] opacity-70">
-              Seus primeiros briefings são por nossa conta ✨ — depois, ele chega todo dia
-              no Ascende+ e toda semana na sua retrospectiva gratuita de domingo.
-            </p>
-          )}
-        </div>
-      )}
-      {/* Rede de segurança (achado de QA ao vivo): query resolveu, não é locked,
-          mas briefing veio vazio (ex.: ainda sem dado suficiente) — o card não
-          pode ficar sem corpo nenhum, só com o título. Mesmo conteúdo local do
-          modo locked, sem o convite ao Ascende+ (a pessoa já tem acesso). */}
-      {!isLoading && !isError && !locked && !data?.briefing && (
-        <p className="text-sm leading-relaxed opacity-90">{DAILY_FOCUS[new Date().getDay()]}</p>
-      )}
+        )}
+      </div>
     </Card>
   );
 }
 
-function HabitsToday() {
-  const { user } = useAuth();
-  const qc = useQueryClient();
-  const today = todayISO();
+/* O convite ao Ascende+, último da fila.
+   NÃO repete a linha de foco do dia: ela subiu para o cabeçalho, e dizer a
+   mesma frase duas vezes na mesma tela é o tipo de repetição que faz a pessoa
+   parar de ler. O conteúdo aqui é a bússola dela + o que o briefing entrega. */
+function BriefingLocked() {
+  const { profile } = useProfile();
+  const { data } = useBriefingQuery();
+  if (!data?.locked) return null;
 
-  const { data, isLoading } = useQuery({
+  return (
+    <Card className="p-5 bg-primary text-primary-foreground">
+      <div className="flex items-center gap-2 text-sm font-medium mb-2 opacity-90">
+        <Sunrise className="w-4 h-4" /> Briefing diário
+      </div>
+      <div className="space-y-2">
+        {profile?.goal && (
+          <p className="text-sm leading-relaxed">
+            Sua bússola: <em>"{profile.goal}"</em>
+          </p>
+        )}
+        <p className="text-sm leading-relaxed opacity-90">
+          Todas as manhãs, uma leitura do seu dia: o que os seus registros mostram,
+          o que merece atenção e o próximo degrau.
+        </p>
+        <p className="text-[11px] opacity-70 pt-1">
+          {data?.reason ?? "O briefing diário com IA vive no Ascende+."}{" "}
+          <Link to={appPath("assinatura")} className="underline underline-offset-2">Conhecer</Link>
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+/** Uma definição só (ver useActivePlansQuery). */
+function useHabitsTodayQuery() {
+  const { user } = useAuth();
+  const today = todayISO();
+  return useQuery({
     queryKey: ["habits-today", user?.id, today],
     enabled: !!user,
     queryFn: async () => {
@@ -1042,6 +1062,14 @@ function HabitsToday() {
       return { habits: habits ?? [], logs: logs ?? [], streaks };
     },
   });
+}
+
+function HabitsToday() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const today = todayISO();
+
+  const { data, isLoading } = useHabitsTodayQuery();
 
   const toggle = async (habitId: string) => {
     if (!user || !data) return;
@@ -1057,26 +1085,10 @@ function HabitsToday() {
   };
 
   if (isLoading) return <Skeleton className="h-24 w-full" />;
-  if (!data?.habits.length) {
-    // Sem compromissos ainda — de propósito: nada vem pré-definido. Eles
-    // nascem da meta da pessoa, com o Conselheiro (cartão de escolha).
-    return (
-      <Card className="p-5 space-y-1.5">
-        <p className="text-sm font-medium">Seus compromissos diários nascem da sua meta.</p>
-        <p className="text-sm text-muted-foreground">
-          Nada de lista pronta:{" "}
-          <Link
-            className="underline text-foreground"
-            to={`/app/conselheiro?q=${encodeURIComponent("A partir da minha meta, proponha 2 ou 3 compromissos diários pequenos para eu começar")}`}
-          >
-            construa com o Conselheiro
-          </Link>{" "}
-          — ou <Link to="/app/vitalidade" className="underline text-foreground">crie manualmente</Link>, do seu jeito.
-          É o compromisso cumprido, dia após dia, que constrói a subida (+10 XP cada).
-        </p>
-      </Card>
-    );
-  }
+  // Sem compromissos, a zona não existe: quem é conta nova recebe o convite
+  // pelo FirstSteps, e quem não é recebe pelo hub, na seção Planos. Convite
+  // repetido em três lugares é a superfície que a Fase 4 corta.
+  if (!data?.habits.length) return null;
 
   const done = data.logs.length;
   return (
@@ -1124,6 +1136,126 @@ function HabitsToday() {
    (água na meta, dia dentro da meta calórica, dia dentro do teto de gasto).
    Avaliação preguiçosa no servidor (claim_goal_bonuses) — zero cron,
    unicidade garantida pelo reason datado no xp_log. ── */
+/* ═══════════════════════════════════════════════════════════════════════
+   VISIBILIDADE DAS ZONAS + ORDEM DE PRIORIDADE
+
+   As zonas se escondiam sozinhas, cada uma com um `return null` no próprio
+   corpo. Funcionava para esconder, mas a página não tinha como saber QUANTAS
+   teriam conteúdo antes de renderizar — e sem isso não existe teto de 5.
+
+   Cada zona ganha um hook que responde "tenho conteúdo?" usando a MESMA query
+   do componente (o React Query dedupa: custa zero requisição a mais). O
+   `return null` de dentro continua lá como rede de segurança: se hook e
+   guarda discordarem, a zona se esconde e a Hoje perde uma vaga naquele
+   render — falha mostrando menos, nunca mostrando moldura vazia.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function useFirstStepsVisible(): boolean {
+  const { profile } = useProfile();
+  const { data } = useFirstStepsQuery();
+  const dismissed = readLocalFlag("ascend-firststeps-done");
+  const absorbed = !!profile?.blueprint_generated_at;
+  // >= 25 eventos: a trilha da primeira semana já foi absorvida pelo uso.
+  return !dismissed && !absorbed && !!data && data.events < 25;
+}
+
+function useHabitsTodayVisible(): boolean {
+  const { data } = useHabitsTodayQuery();
+  return (data?.habits.length ?? 0) > 0;
+}
+
+function useActivePlansVisible(): boolean {
+  const { data } = useActivePlansQuery();
+  return (data?.length ?? 0) > 0;
+}
+
+/** A condição é a META EXISTIR, não o valor ser > 0: com meta e sem registro
+ *  hoje o painel RENDERIZA, porque barra em zero ali é informação legítima
+ *  ("o dia começou") e não moldura vazia. */
+function useDayProgressVisible(): boolean {
+  const { profile } = useProfile();
+  const trackers = activeTrackerSet(profile);
+  const goal = (v: unknown) => Number(v) > 0;
+  return (
+    (trackers.has("meals") && goal(profile?.calorie_goal_kcal))
+    || (trackers.has("protein") && goal(profile?.protein_goal_g))
+    || (trackers.has("spend_limit") && goal(profile?.daily_spend_limit))
+    || (trackers.has("workouts") && goal(profile?.weekly_workouts_goal))
+    || (trackers.has("sleep") && goal(profile?.sleep_goal_h))
+  );
+}
+
+function useRetroCountdownVisible(): boolean {
+  const { user } = useAuth();
+  const { data } = useRetroPreviewQuery();
+  const dismissed = readLocalFlag("ascend-retro-preview-done");
+  const ageDays = user?.created_at
+    ? Math.floor((Date.now() - Date.parse(user.created_at)) / 864e5) : 0;
+  const eligible = !dismissed && new Date().getDay() !== 0 && ageDays >= 1 && ageDays <= 6;
+  return eligible && !!data;
+}
+
+/** localStorage pode lançar. Sem a flag, a zona aparece: mostrar de novo é
+ *  menos grave que sumir por engano. */
+function readLocalFlag(key: string): boolean {
+  try { return localStorage.getItem(key) === "1"; } catch { return false; }
+}
+
+/**
+ * ORDEM DE PRIORIDADE DAS ZONAS DA HOJE. Teto: MAX_ZONES.
+ *
+ * Princípio: o que PERECE hoje > o que ela PROMETEU > o que JÁ ACONTECEU >
+ * o que PODE ESPERAR.
+ *
+ * Renderiza as MAX_ZONES primeiras QUE TÊM CONTEÚDO. As demais não existem
+ * naquele render e reaparecem sozinhas quando uma de cima resolve (passou do
+ * meio-dia, o check-in de sono sai e abre vaga). O teto é rodízio, não corte.
+ *
+ * ZONA SEM DADO NÃO RENDERIZA NADA — nem título, nem card vazio, nem "você
+ * ainda não registrou". Espaço vazio com moldura cobra sem oferecer.
+ *
+ * FORA DESTE ARRAY, de propósito: o cabeçalho, o bloco de captura
+ * (CaptureBar + QuickActions — é registrar em 1 toque, não informação) e o
+ * ReturnRitual, que é MODO e substitui a página inteira.
+ *
+ * MEXER AQUI MUDA A TELA INTEIRA. Leia o `why` de cada posição antes de
+ * inserir a sexta — se ela não couber no princípio acima, ela não é zona da
+ * Hoje.
+ */
+const MAX_ZONES = 5;
+
+const HOJE_ZONES = [
+  { id: "sleep", Component: SleepCheckin, useVisible: useSleepZoneVisible,
+    why: "Perece: some ao meio-dia e a noite não volta. Um toque." },
+  { id: "battle", Component: BattleCheckinCard, useVisible: useBattleZoneVisible,
+    why: "Perece hoje, e é o assunto de maior peso do app. Só com check-in pendente." },
+  { id: "habits", Component: HabitsToday, useVisible: useHabitsTodayVisible,
+    why: "O que ela prometeu a si mesma. Só com pelo menos um hábito ativo." },
+  { id: "briefing", Component: Briefing, useVisible: useBriefingRealVisible,
+    why: "A leitura da própria vida — briefing do dia ou retrospectiva de domingo." },
+  { id: "progress", Component: DayProgress, useVisible: useDayProgressVisible,
+    why: "O que já aconteceu hoje. Só com pelo menos uma meta definida." },
+  { id: "plans", Component: ActivePlans, useVisible: useActivePlansVisible,
+    why: "O plano existe e é consultável; não perece." },
+  { id: "first_steps", Component: FirstSteps, useVisible: useFirstStepsVisible,
+    why: "Trilha da primeira semana; só conta nova sem Blueprint." },
+  { id: "retro", Component: RetroCountdown, useVisible: useRetroCountdownVisible,
+    why: "Expectativa, não ação. Dispensável." },
+  { id: "whatsapp", Component: WhatsappHojeCard, useVisible: useWhatsappZoneVisible,
+    why: "Crescimento — serve mais a nós do que a ela." },
+  { id: "briefing_locked", Component: BriefingLocked, useVisible: useBriefingLockedVisible,
+    why: "Convite ao Ascende+. Último por decisão do fundador: quem tem vida "
+      + "registrada vê a própria vida primeiro; quem não tem registro nenhum "
+      + "continua vendo o convite, que ali é o mais útil da tela." },
+] as const;
+
+/** Chama TODOS os hooks, sempre na mesma ordem (regra dos hooks), e filtra
+ *  depois. O corte em MAX_ZONES acontece sobre o que sobrou. */
+function useVisibleZones() {
+  const visible = HOJE_ZONES.map((zone) => zone.useVisible());
+  return HOJE_ZONES.filter((_, i) => visible[i]).slice(0, MAX_ZONES);
+}
+
 function useGoalBonuses() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -1151,6 +1283,14 @@ export default function Hoje() {
   // culpa. Enquanto ativo, a tela troca o painel pelo ritual — a pessoa
   // pode dispensar (por hoje) e ver o painel normal quando quiser.
   const { returning, gapDays } = useReturnGap();
+  const zones = useVisibleZones();
+
+  /* O REGISTRAR da barra foca ESTA caixa em vez de abrir uma segunda igual
+     dois centímetros ao lado. Ao desmontar, o registro é limpo e a barra
+     volta a abrir a folha — quem faz isso é o useProvideCaptureFocus. */
+  const captureRef = useRef<HTMLDivElement>(null);
+  const focusCapture = useCallback(() => focusCaptureElement(captureRef.current), []);
+  useProvideCaptureFocus(focusCapture);
   const [panelForced, setPanelForced] = useState(
     () => localStorage.getItem(`ascend-return-panel-${todayISO()}`) === "1"
   );
@@ -1160,18 +1300,6 @@ export default function Hoje() {
     setPanelForced(true);
   };
 
-  // Nível com significado desde o dia 1 (análise UX P2.3): os títulos
-  // poéticos são um ativo de marca — mostrá-los, não escondê-los.
-  const { data: xpTotal } = useQuery({
-    queryKey: ["xp", "total", user?.id],
-    enabled: !!user,
-    staleTime: 1000 * 60,
-    queryFn: async () => {
-      const { data } = await supabase.rpc("xp_total", { uid: user!.id });
-      return Number(data) || 0;
-    },
-  });
-  const level = levelFromXp(xpTotal ?? 0).level;
 
   // Momento de retorno: sem dashboard vazio na cara, sem streak em
   // destaque — uma tela única, e a CaptureBar absorve (Sugestão 3).
@@ -1191,89 +1319,53 @@ export default function Hoje() {
 
   return (
     <div className="max-w-2xl lg:max-w-4xl mx-auto space-y-4 animate-fade-up">
+      {/* CABEÇALHO — fixo, fora do teto de 5.
+          Saiu daqui o chip de nível: ele vive no avatar da barra agora, e
+          repetir nível na Hoje era a duplicação que esta fase corta. Entrou a
+          LINHA DE FOCO DO DIA, uma linha de texto sem card e sem moldura — o
+          Briefing travado deixou de ser a única forma de a pessoa ver isso. */}
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h1 className="font-display text-2xl font-semibold">
             {greet()}{firstName ? `, ${firstName}` : ""}.
           </h1>
-          <p className="text-sm text-muted-foreground">Um dia de cada vez. Um degrau de cada vez.</p>
+          <p className="text-sm text-muted-foreground">{DAILY_FOCUS[new Date().getDay()]}</p>
           {streak === 2 && (
             <p className="text-[11px] text-gold-ink mt-0.5">
               Sua primeira sequência começou — e um dia de descanso por semana não quebra.
             </p>
           )}
         </div>
-        <div className="shrink-0 flex flex-col items-end gap-1.5">
-          {xpTotal !== undefined && (
-            <Link
-              to="/app/score"
-              className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              title="Ver sua jornada de níveis"
-            >
-              Nv. {level} · {levelTitle(level)}
-            </Link>
-          )}
-          {streak >= 2 && (
-            <span
-              className="flex items-center gap-1 rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-xs font-semibold text-gold-ink"
-              title={`${streak} dias ativos seguidos (1 descanso por semana não quebra a sequência)`}
-            >
-              <Flame className="w-3.5 h-3.5" /> {streak} dias
-            </span>
-          )}
-        </div>
+        {streak >= 2 && (
+          <span
+            className="shrink-0 flex items-center gap-1 rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-xs font-semibold text-gold-ink"
+            title={`${streak} dias ativos seguidos (1 descanso por semana não quebra a sequência)`}
+          >
+            <Flame className="w-3.5 h-3.5" /> {streak} dias
+          </span>
+        )}
       </div>
 
-      {/* Ordem da tela Hoje (plano §5.5): prioridade do dia (briefing/primeiros
-          passos) → captura inteligente → compromissos → indicadores principais
-          → ações rápidas → batalhas → Conselheiro → informações secundárias.
-          A ordem continua a mesma; o que mudou (análise UX item 2) é a
-          HIERARQUIA: nove cartões de peso idêntico não diziam o que pede ação
-          hoje e o que é só acompanhamento. Duas seções nomeadas resolvem isso
-          sem mexer na lógica de nenhum cartão. */}
-      <section className="space-y-4" aria-labelledby="hoje-agora">
-        <h2 id="hoje-agora" className="text-xs font-semibold uppercase tracking-wider flex items-center gap-2">
-          Agora
-          <span className="ascend-line flex-1" aria-hidden />
-        </h2>
-        <Briefing />
-        <FirstSteps />
-        <CaptureBar />
-        <SleepCheckin />
-        <HabitsToday />
-        <ActivePlans />
-      </section>
-
-      <section className="space-y-3 pt-3" aria-labelledby="hoje-acompanhamento">
-        <h2
-          id="hoje-acompanhamento"
-          className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2"
-        >
-          Acompanhamento
-          <span className="h-px flex-1 bg-border" aria-hidden />
-        </h2>
-        <DayProgress />
+      {/* BLOCO DE CAPTURA — fixo, fora do teto.
+          É a ação central do produto e a superfície que ENSINA a frase; não
+          disputa espaço com informação. QuickActions vem colado porque também
+          é registrar (em um toque), não é zona de leitura.
+          O botão REGISTRAR da barra foca ESTA caixa quando a pessoa já está
+          aqui, em vez de abrir uma segunda igual dois centímetros ao lado. */}
+      <div className="space-y-3">
+        <div ref={captureRef}>
+          <CaptureBar />
+        </div>
         <QuickActions />
-        <RetroCountdown />
-        <WhatsappHojeCard />
-        <BattleCheckinCard />
+      </div>
 
-        <Link
-          to="/app/conselheiro"
-          className="flex items-center justify-between rounded-lg border bg-card p-4 hover:bg-muted/50 transition-colors"
-        >
-          <div>
-            <p className="text-sm font-semibold">Falar com o Conselheiro</p>
-            <p className="text-xs text-muted-foreground">
-              Ele conhece seus dados de todos os pilares — pergunte qualquer coisa.
-            </p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-muted-foreground" />
-        </Link>
-
-        {/* Informação secundária: completude do perfil fica por último */}
-        <ProfileCompleteness />
-      </section>
+      {/* AS ZONAS — no máximo MAX_ZONES, e só as que têm conteúdo.
+          A ordem e o porquê de cada posição vivem em HOJE_ZONES, acima. */}
+      {zones.length > 0 && (
+        <div className="space-y-4">
+          {zones.map(({ id, Component }) => <Component key={id} />)}
+        </div>
+      )}
     </div>
   );
 }

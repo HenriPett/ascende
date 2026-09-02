@@ -21,6 +21,7 @@ import { todayISO } from "@/lib/format";
 import { hourInSP } from "@/lib/dates";
 import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
 import { isTrackerActive } from "@/lib/trackers";
+import { useSleepTodayQuery } from "@/hooks/useZoneQueries";
 
 export default function SleepCheckin() {
   const { user } = useAuth();
@@ -38,19 +39,7 @@ export default function SleepCheckin() {
   const morning = hourInSP() < 12; // depois do meio-dia o convite some sozinho
   const eligible = !!user && !!profile && trackerOn && scheduleHours !== null && morning && !dismissed;
 
-  const { data: sleptToday } = useQuery({
-    queryKey: ["sleep-today", user?.id, todayISO()],
-    enabled: eligible,
-    staleTime: 1000 * 60 * 5,
-    queryFn: async () => {
-      const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-      const { count } = await supabase.from("life_events")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user!.id).eq("kind", "sleep")
-        .gte("occurred_at", dayStart.toISOString());
-      return (count ?? 0) > 0;
-    },
-  });
+  const { data: sleptToday } = useSleepTodayQuery(eligible);
 
   if (!eligible || sleptToday !== false) return null;
 

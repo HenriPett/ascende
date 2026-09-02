@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { usePillarActivityQuery } from "@/hooks/useJornadaData";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { Card } from "@/components/ui/card";
@@ -21,18 +22,7 @@ export default function Pilares() {
   const { profile, refresh } = useProfile();
   const [activating, setActivating] = useState<PillarId | null>(null);
 
-  const { data: counts } = useQuery({
-    queryKey: ["pillar-activity", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      const since = new Date(Date.now() - 14 * 864e5).toISOString();
-      const { data } = await supabase.from("life_events")
-        .select("pillar").eq("user_id", user!.id).gte("occurred_at", since);
-      const c: Record<string, number> = {};
-      for (const e of data ?? []) c[e.pillar] = (c[e.pillar] ?? 0) + 1;
-      return c;
-    },
-  });
+  const { data: counts } = usePillarActivityQuery();
 
   const active = activePillarSet(profile?.pillars);
   const activeList = PILLARS.filter((p) => active.has(p.id));
