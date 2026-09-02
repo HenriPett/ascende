@@ -85,6 +85,107 @@ export async function assertRateLimit(
   }
 }
 
+/* ═══ MEMÓRIA CONTROLÁVEL (Fase 2) ═══════════════════════════════════════
+   Antes, ai_memories era uma lista plana que só a IA escrevia e ninguém podia
+   corrigir: o retrato lia tudo, sem filtro, sem saber o que a pessoa havia
+   confirmado ou rejeitado. O contrato da fase separa três coisas que estavam
+   juntas: se a memória VALE (status/validade), o quanto ela é CONFIÁVEL
+   (confidence) e QUEM a afirmou (created_by).
+
+   REGRA DE LEITURA (única, vale para todo lugar que lê memória):
+     status <> 'rejeitada' AND status <> 'expirada'
+     AND (valid_until is null OR valid_until > now())
+
+   E memória confirmada PELA PESSOA vale mais que memória inferida pela IA:
+   vai na frente do retrato e é marcada como tal, para o modelo não confundir
+   o que ela afirmou com o que ele deduziu. */
+
+export interface MemoryRow {
+  id: string;
+  content: string;
+  category: string;
+  status?: string | null;
+  created_by?: string | null;
+  confidence?: number | null;
+  valid_until?: string | null;
+}
+
+/** A REGRA DE LEITURA, num único lugar testável. Vale para o retrato e para
+ *  qualquer outro ponto que leia memória. */
+export function isMemoryReadable(m: MemoryRow, now = new Date()): boolean {
+  if (m.status === "rejeitada" || m.status === "expirada") return false;
+  if (m.valid_until == null) return true;
+  const until = new Date(String(m.valid_until)).getTime();
+  // Data ilegível não pode esconder memória válida: na dúvida, ela vale.
+  if (!Number.isFinite(until)) return true;
+  return until > now.getTime();
+}
+
+/** Memória confirmada pela pessoa (ou escrita por ela). É intocável para a IA. */
+export const isUserOwnedMemory = (m: MemoryRow) =>
+  m.status === "confirmada" || m.created_by === "usuario";
+
+/** A view já ordena por trust_rank (confirmada antes de ativa). Isto refina:
+ *  memória que a PRÓPRIA PESSOA escreveu (created_by='usuario') é palavra dela
+ *  também, mesmo com status 'ativa', e o trust_rank olha só o status. Ordenação
+ *  estável, então a ordem da view é preservada dentro de cada grupo. */
+const byUserFirst = (rows: MemoryRow[]) => [
+  ...rows.filter(isUserOwnedMemory),
+  ...rows.filter((m) => !isUserOwnedMemory(m)),
+];
+
+/* A migração da Fase 2 (colunas status/created_by/confidence/valid_until) é
+   entregue à parte. Enquanto ela não estiver aplicada, o select das colunas
+   novas falha — e memória sumindo do retrato seria uma regressão silenciosa
+   pior que a ausência do filtro. Então: tenta o formato novo e, se o banco
+   ainda não o tiver, cai no antigo. Sai quando a migração estiver em produção. */
+const MEMORY_COLS_VIEW = "id,content,category,status,created_by,confidence,valid_until,trust_rank";
+const MEMORY_COLS_TABLE = "id,content,category,status,created_by,confidence,valid_until";
+const MEMORY_COLS_LEGACY = "id,content,category";
+
+async function selectMemories(
+  supabase: SupabaseClient, userId: string, limit: number,
+): Promise<MemoryRow[]> {
+  /* Fonte única: a view ai_memories_vigentes já aplica a REGRA DE LEITURA em
+     SQL e traz trust_rank (0 = confirmada pela pessoa, 1 = resto). Reescrever
+     o filtro aqui era a duplicação que a view existe para evitar — e deixa o
+     `valid_until > now()` no banco, onde não depende de parse de data nem de
+     interpolar timestamp na microssintaxe de filtro do PostgREST. */
+  const view = await supabase.from("ai_memories_vigentes")
+    .select(MEMORY_COLS_VIEW)
+    .eq("user_id", userId)
+    .order("trust_rank", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (!view.error) return (view.data ?? []) as MemoryRow[];
+
+  /* A migração da Fase 2 é entregue à parte. Enquanto a view não existir,
+     degradamos em dois passos — e memória sumindo do retrato seria uma
+     regressão pior que a ausência do filtro, então nunca falhamos para vazio
+     enquanto houver como ler. Este bloco sai quando a migração estiver em
+     produção. */
+  console.error("memories: view vigentes indisponível, degradando", view.error.message ?? view.error);
+  const table = await supabase.from("ai_memories")
+    .select(MEMORY_COLS_TABLE)
+    .eq("user_id", userId)
+    .not("status", "in", '("rejeitada","expirada")')
+    .order("created_at", { ascending: false }).limit(limit);
+  if (!table.error) {
+    // Sem a view, a validade volta a ser decidida aqui.
+    return ((table.data ?? []) as MemoryRow[]).filter((m) => isMemoryReadable(m));
+  }
+
+  const legacy = await supabase.from("ai_memories")
+    .select(MEMORY_COLS_LEGACY)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false }).limit(limit);
+  if (legacy.error) {
+    console.error("memories: falha ao ler ai_memories", legacy.error.message ?? legacy.error);
+    return [];
+  }
+  return (legacy.data ?? []) as MemoryRow[];
+}
+
 const BRL = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 /**
@@ -97,7 +198,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   const todaySpIso = spParts().dateIso;
   const monthStartSpIso = spMonthStartUtc().slice(0, 10);
 
-  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, xpTotalRes, { data: battles }, { data: bCheckins }, { data: plans }, { data: memories }, { data: estimates }, { data: recurrings }] =
+  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, xpTotalRes, { data: battles }, { data: bCheckins }, { data: plans }, memoriesRaw, { data: estimates }, { data: recurrings }] =
     await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       supabase.from("life_events").select("pillar,kind,occurred_at,payload")
@@ -115,8 +216,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       supabase.from("plans").select("title,kind,content,created_at")
         .eq("user_id", userId).eq("status", "ativo")
         .order("created_at", { ascending: false }).limit(3),
-      supabase.from("ai_memories").select("content,category")
-        .eq("user_id", userId).order("created_at", { ascending: false }).limit(50),
+      selectMemories(supabase, userId, 50),
       supabase.from("category_estimates").select("category,amount").eq("user_id", userId),
       supabase.from("recurring_transactions").select("kind,amount,category,description,active")
         .eq("user_id", userId).eq("active", true),
@@ -609,12 +709,18 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   }
 
   // Memória do Conselheiro: nuances aprendidas em conversas anteriores
-  const mems = (memories ?? []) as { content: string; category: string }[];
+  const mems = byUserFirst((memoriesRaw ?? []) as MemoryRow[]);
   if (mems.length) {
+    const confirmadas = mems.filter(isUserOwnedMemory).length;
     lines.push(
-      `O QUE VOCÊ JÁ APRENDEU SOBRE A PESSOA em conversas anteriores (memórias — use com naturalidade para personalizar respostas e planos; NÃO recite a lista de volta nem soe como vigilância):`
+      `O QUE VOCÊ JÁ APRENDEU SOBRE A PESSOA em conversas anteriores (memórias — use com naturalidade para personalizar respostas e planos; NÃO recite a lista de volta nem soe como vigilância):` +
+      (confirmadas
+        ? ` As marcadas com CONFIRMADA foram revisadas ou corrigidas PELA PRÓPRIA PESSOA: são fato declarado por ela, não sua inferência. Valem mais que as demais, nunca as contradiga com base em dedução sua, e se algo no relato de hoje parecer conflitar, pergunte em vez de concluir.`
+        : "")
     );
-    for (const m of mems) lines.push(`• [${m.category}] ${m.content}`);
+    for (const m of mems) {
+      lines.push(`• [${m.category}]${isUserOwnedMemory(m) ? " CONFIRMADA:" : ""} ${m.content}`);
+    }
   }
 
   // Planos ativos (entregas anteriores do Conselheiro que a pessoa salvou)
@@ -785,9 +891,13 @@ const MEMORY_TOOL = {
               enum: MEMORY_CATEGORIES,
               description: "preferencia (gostos e aversões) | rotina (horários, hábitos de vida) | contexto (família, trabalho, moradia) | motivacao (o que move a pessoa) | personalidade (jeito de ser e de se comunicar) | outro.",
             },
+            confidence: {
+              type: "number",
+              description: "De 0 a 1: o quanto você está seguro desta nuance. Use 0.9+ só quando a pessoa AFIRMOU literalmente; 0.5 a 0.7 quando você inferiu do contexto. Seja honesto: confiança baixa é informação útil, chute alto não.",
+            },
             replaces_id: {
               type: "string",
-              description: "APENAS se esta memória ATUALIZA ou CONTRADIZ uma memória existente: o id exato dela (da lista fornecida). A antiga será substituída.",
+              description: "APENAS se esta memória ATUALIZA ou CONTRADIZ uma memória existente: o id exato dela (da lista fornecida). NUNCA use o id de uma memória marcada como CONFIRMADA: essas foram revisadas pela própria pessoa e não podem ser substituídas por você.",
             },
           },
           required: ["content", "category"],
@@ -837,39 +947,104 @@ export function isTrivialMessage(text: string): boolean {
 }
 
 /** Persiste memórias extraídas (dedupe, substituição e teto por plano). */
+/** Registra de ONDE veio cada memória. Sem isto a pessoa não tem como saber
+ *  por que a IA "sabe" algo sobre ela, que é o ponto da Fase 2. Best-effort:
+ *  a memória já está gravada, perder a origem não pode derrubar o turno. */
+export async function attachMemorySources(
+  supabase: SupabaseClient, userId: string, memoryIds: string[],
+  kind: "life_event" | "chat_message" | "data_source", refId: string | null,
+): Promise<void> {
+  if (!memoryIds.length || !refId) return;
+  const rows = memoryIds.map((memory_id) => ({ memory_id, user_id: userId, kind, ref_id: refId }));
+  const { error } = await supabase.from("memory_sources").insert(rows);
+  if (!error) return;
+  /* memory_sources tem índice único (memory_id, kind, ref_id): um insert em
+     lote é tudo-ou-nada, então UMA origem já existente (reenvio da mesma
+     requisição) derrubaria as outras junto. Cai para linha a linha. */
+  for (const row of rows) {
+    const one = await supabase.from("memory_sources").insert(row);
+    if (one.error) console.error("memory_sources: falha ao registrar origem", one.error.message ?? one.error);
+  }
+}
+
+/** Persiste memórias extraídas (dedupe, substituição e teto por plano).
+ *  Fase 2: nasce created_by='ia' com a confiança declarada pelo modelo, e
+ *  NUNCA sobrescreve o que a pessoa confirmou. */
 async function persistMemories(
   supabase: SupabaseClient, userId: string,
   // deno-lint-ignore no-explicit-any
-  raw: any[], known: { id: string; content: string }[], memoryCap: number,
-): Promise<{ content: string; category: string }[]> {
+  raw: any[], known: MemoryRow[], memoryCap: number,
+): Promise<{ id: string; content: string; category: string }[]> {
   const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
   const knownNorm = new Set(known.map((m) => norm(m.content)));
-  const knownIds = new Set(known.map((m) => m.id));
-  const learned: { content: string; category: string }[] = [];
+  const byId = new Map(known.map((m) => [m.id, m]));
+  const learned: { id: string; content: string; category: string }[] = [];
+
+  const clampConfidence = (v: unknown): number | null => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return Math.min(1, Math.max(0, Math.round(n * 100) / 100));
+  };
 
   for (const m of (raw ?? []).slice(0, MEMORY_MAX_PER_MESSAGE)) {
     const content = String(m?.content ?? "").trim().slice(0, 160);
     if (content.length < 3) continue;
     const category = MEMORY_CATEGORIES.includes(String(m?.category)) ? String(m.category) : "outro";
+    const confidence = clampConfidence(m?.confidence);
     const n = norm(content);
     if (knownNorm.has(n)) continue;
+
+    const target = typeof m?.replaces_id === "string" ? byId.get(m.replaces_id) : undefined;
+
+    /* CRITÉRIO DE PRONTO DA FASE: a correção da pessoa sobrevive ao turno
+       seguinte. O modelo é instruído a não substituir memória CONFIRMADA, mas
+       instrução de prompt não é garantia — quem garante é este bloqueio. Sem
+       ele, a extração da mensagem seguinte reescrevia a correção e a pessoa
+       via a IA "esquecer" o que ela acabou de corrigir. */
+    if (target && isUserOwnedMemory(target)) {
+      console.warn("memories: substituição recusada (memória confirmada pela pessoa)", target.id);
+      continue;
+    }
+
     knownNorm.add(n);
 
-    const replacesId = typeof m?.replaces_id === "string" && knownIds.has(m.replaces_id) ? m.replaces_id : null;
-    if (replacesId) {
-      const { error } = await supabase.from("ai_memories")
-        .update({ content, category, updated_at: new Date().toISOString() })
-        .eq("id", replacesId).eq("user_id", userId);
+    if (target) {
+      const patch: Record<string, unknown> = {
+        content, category, updated_at: new Date().toISOString(),
+        created_by: "ia", status: "ativa", last_verified_at: new Date().toISOString(),
+        ...(confidence === null ? {} : { confidence }),
+      };
+      let { error } = await supabase.from("ai_memories")
+        .update(patch).eq("id", target.id).eq("user_id", userId);
+      if (error) {
+        // Migração da Fase 2 ainda não aplicada: grava o que o banco aceita.
+        ({ error } = await supabase.from("ai_memories")
+          .update({ content, category, updated_at: new Date().toISOString() })
+          .eq("id", target.id).eq("user_id", userId));
+      }
       if (error) console.error("memories: falha ao atualizar", error.message ?? error);
-      else learned.push({ content, category });
-    } else {
-      // Teto por plano: no limite, não cria memórias novas (as antigas ficam).
-      if (known.length + learned.length >= memoryCap) continue;
-      const { error } = await supabase.from("ai_memories")
-        .insert({ user_id: userId, content, category });
-      if (error) console.error("memories: falha ao inserir", error.message ?? error);
-      else learned.push({ content, category });
+      else learned.push({ id: target.id, content, category });
+      continue;
     }
+
+    // Teto por plano: no limite, não cria memórias novas (as antigas ficam).
+    if (known.length + learned.length >= memoryCap) continue;
+
+    const row: Record<string, unknown> = {
+      user_id: userId, content, category,
+      created_by: "ia", status: "ativa",
+      ...(confidence === null ? {} : { confidence }),
+    };
+    let ins = await supabase.from("ai_memories").insert(row).select("id").maybeSingle();
+    if (ins.error) {
+      ins = await supabase.from("ai_memories")
+        .insert({ user_id: userId, content, category }).select("id").maybeSingle();
+    }
+    if (ins.error || !ins.data?.id) {
+      console.error("memories: falha ao inserir", ins.error?.message ?? ins.error);
+      continue;
+    }
+    learned.push({ id: String(ins.data.id), content, category });
   }
 
   if (learned.length) {
@@ -877,30 +1052,36 @@ async function persistMemories(
       .select("id", { count: "exact", head: true }).eq("user_id", userId);
     const excess = (count ?? 0) - memoryCap;
     if (excess > 0) {
-      const { data: oldest } = await supabase.from("ai_memories")
+      /* Despejo por teto NUNCA leva memória confirmada pela pessoa: ela
+         revisou aquilo à mão, não pode perder por antiguidade. Se o banco
+         ainda não tem as colunas, cai na regra antiga (só a mais velha). */
+      let oldest = await supabase.from("ai_memories")
         .select("id").eq("user_id", userId)
+        .neq("status", "confirmada").neq("created_by", "usuario")
         .order("created_at", { ascending: true }).limit(excess);
-      const ids = (oldest ?? []).map((o) => o.id);
+      if (oldest.error) {
+        oldest = await supabase.from("ai_memories")
+          .select("id").eq("user_id", userId)
+          .order("created_at", { ascending: true }).limit(excess);
+      }
+      const ids = (oldest.data ?? []).map((o) => o.id);
       if (ids.length) await supabase.from("ai_memories").delete().in("id", ids);
     }
   }
   return learned;
 }
 
+/** Memórias que a IA vê ao extrair. Mesma REGRA DE LEITURA do retrato: uma
+ *  memória rejeitada ou expirada não pode voltar à conversa por esta porta. */
 async function loadKnownMemories(supabase: SupabaseClient, userId: string) {
-  const { data, error } = await supabase.from("ai_memories")
-    .select("id,content").eq("user_id", userId)
-    .order("created_at", { ascending: false }).limit(80);
-  if (error) {
-    console.error("memories: falha ao ler ai_memories", error.message ?? error);
-    return null;
-  }
-  return (data ?? []) as { id: string; content: string }[];
+  return byUserFirst(await selectMemories(supabase, userId, 80));
 }
 
-const memoriesBlock = (known: { id: string; content: string }[]) =>
+const memoriesBlock = (known: MemoryRow[]) =>
   known.length
-    ? `MEMÓRIAS JÁ EXISTENTES (não repita; use replaces_id do item que for atualizado):\n${known.map((m) => `- [id: ${m.id}] ${m.content}`).join("\n")}`
+    ? `MEMÓRIAS JÁ EXISTENTES (não repita; use replaces_id do item que for atualizado). As marcadas CONFIRMADA foram revisadas pela própria pessoa: NÃO as substitua nem as contradiga — se o relato de hoje conflitar com uma delas, ignore o conflito e não gere memória nova sobre o assunto.\n${
+        known.map((m) => `- [id: ${m.id}]${isUserOwnedMemory(m) ? " CONFIRMADA:" : ""} ${m.content}`).join("\n")
+      }`
     : "Ainda não há memórias sobre esta pessoa.";
 
 /**
@@ -911,12 +1092,11 @@ const memoriesBlock = (known: { id: string; content: string }[]) =>
 export async function learnFromMessage(
   supabase: SupabaseClient, userId: string, message: string,
   feature = "memorias", memoryCap = 150,
-): Promise<{ content: string; category: string }[]> {
+): Promise<{ id: string; content: string; category: string }[]> {
   try {
     const text = String(message ?? "").trim();
     if (isTrivialMessage(text)) return [];
     const known = await loadKnownMemories(supabase, userId);
-    if (known === null) return [];
 
     const { res, data } = await anthropicCall(supabase, userId, feature, {
       model: MODEL_FAST,
@@ -963,7 +1143,8 @@ const COMBINED_TOOL = {
           properties: {
             content: { type: "string", description: "Nuance durável em UMA frase curta (máx. 160 caracteres), 3ª pessoa implícita." },
             category: { type: "string", enum: MEMORY_CATEGORIES },
-            replaces_id: { type: "string", description: "APENAS se atualiza/contradiz uma memória existente: o id exato dela." },
+            confidence: { type: "number", description: "De 0 a 1: o quanto você está seguro. 0.9+ só quando a pessoa afirmou literalmente." },
+            replaces_id: { type: "string", description: "APENAS se atualiza/contradiz uma memória existente: o id exato dela. NUNCA o id de uma memória marcada como CONFIRMADA." },
           },
           required: ["content", "category"],
         },
@@ -999,7 +1180,7 @@ export async function extractEventsAndMemories(
     blocks?: any[];
   } = {},
   // deno-lint-ignore no-explicit-any
-): Promise<{ ok: boolean; events: any[]; learned: { content: string; category: string }[]; capped: boolean }> {
+): Promise<{ ok: boolean; events: any[]; learned: { id: string; content: string; category: string }[]; capped: boolean }> {
   const bulk = opts.bulk === true;
   const blocks = opts.blocks ?? [];
   try {
@@ -1009,7 +1190,7 @@ export async function extractEventsAndMemories(
     if (!bulk && !blocks.length && isTrivialMessage(t)) {
       return { ok: true, events: [], learned: [], capped: false };
     }
-    const known = (await loadKnownMemories(supabase, userId)) ?? [];
+    const known = await loadKnownMemories(supabase, userId);
 
     // Mensagens com "?" costumam misturar pergunta + relato — é o padrão em que
     // o modelo econômico mais falha em extrair o relato (achado de QA ao vivo:

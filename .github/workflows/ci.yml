@@ -2,6 +2,11 @@
 # Toda alteração enviada ao repositório executa: instalação limpa,
 # TypeScript, lint, testes, build e verificação de higiene do repositório
 # (nada de node_modules/.env/.DS_Store versionados).
+#
+# As EDGE FUNCTIONS rodam em Deno, não em Node: `tsc -b` e o vitest não as
+# enxergam. Até 03/09/2026 todo o backend de IA (memória, captura, cobrança,
+# WhatsApp) ia para produção sem nenhuma verificação automática — os passos
+# de Deno abaixo fecham esse buraco.
 name: CI
 
 on:
@@ -31,6 +36,20 @@ jobs:
 
       - name: Testes
         run: npm test
+
+      # ─── Edge functions (Deno) ───────────────────────────────────────
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: TypeScript das edge functions
+        run: deno check supabase/functions/*/index.ts supabase/functions/_shared/*.ts
+
+      # Cobre a garantia central da Fase 2: a IA não sobrescreve memória
+      # confirmada pela pessoa. Verificado por mutação — removendo a guarda
+      # em persistMemories, dois testes deste arquivo falham.
+      - name: Testes das edge functions
+        run: deno test --allow-env --allow-net supabase/functions/
 
       - name: Build
         run: npm run build

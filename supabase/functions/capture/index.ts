@@ -12,7 +12,7 @@
 // descartada — nada fica armazenado (página /recusas).
 import {
   serviceClient, requireUser, assertRateLimit, corsFor, isTrivialMessage,
-  extractEventsAndMemories, SAFETY_RULES,
+  extractEventsAndMemories, SAFETY_RULES, attachMemorySources,
   MODEL_FAST, CAPTURE_TOOL, CAPTURE_SYSTEM,
   STATEMENT_TOOL, STATEMENT_SYSTEM, normalizeStatementItems,
 } from "../_shared/lib.ts";
@@ -54,20 +54,23 @@ const eventBullets = (events: AnyEvent[]) => events.slice(0, 12)
 async function pushCaptureHistory(
   // deno-lint-ignore no-explicit-any
   supabase: any, userId: string, userText: string, events: AnyEvent[],
-): Promise<void> {
+): Promise<string | null> {
   try {
     const relato = String(userText ?? "").trim();
-    if (!relato || !events.length) return; // sem relato ou sem nada registrável, não há o que lembrar
-    const { error } = await supabase.from("chat_messages").insert([
+    if (!relato || !events.length) return null; // sem relato ou sem nada registrável, não há o que lembrar
+    const { data, error } = await supabase.from("chat_messages").insert([
       { user_id: userId, role: "user", content: relato.slice(0, 4000) },
       {
         user_id: userId, role: "assistant",
         content: `[registro no diário · ${spStamp()}] A partir do que você contou, propus na tela Hoje:\n${eventBullets(events)}\n(O que você confirmou aparece no retrato.)`.slice(0, 4000),
       },
-    ]);
-    if (error) console.error("captura: histórico", error.message ?? error);
+    ]).select("id,role");
+    if (error) { console.error("captura: histórico", error.message ?? error); return null; }
+    // deno-lint-ignore no-explicit-any
+    return (data ?? []).find((m: any) => m.role === "user")?.id ?? null;
   } catch (e) {
     console.error("captura: histórico", e);
+    return null;
   }
 }
 
@@ -324,7 +327,9 @@ Deno.serve(async (req) => {
       await refund();
       return json({ error: "Não consegui interpretar agora. Tente de novo em instantes — a tentativa não contou no seu limite." }, 502);
     }
-    await pushCaptureHistory(supabase, user.id, text, events);
+    const msgId = await pushCaptureHistory(supabase, user.id, text, events);
+    // Origem das memórias deste relato (Fase 2).
+    await attachMemorySources(supabase, user.id, learned.map((m) => m.id), "chat_message", msgId);
     const commentary = await planAdherenceComment(supabase, user.id, events);
     return json({ events, learned, commentary });
   } catch (e) {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -20,16 +20,15 @@ import {
 import { PILLARS, pillarById, type PillarId } from "@/lib/pillars";
 import { TRACKERS } from "@/lib/trackers";
 import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
-import { MEMORY_CATEGORY_LABEL } from "@/lib/memories";
 import HealthImport from "@/components/core/HealthImport";
 import SourcesAndImports from "@/components/core/SourcesAndImports";
+import MemoryControl from "@/components/core/MemoryControl";
 import { useGuides } from "@/hooks/useGuides";
 import FeedbackDialog from "@/components/core/FeedbackDialog";
 import WhatsappCard from "@/components/core/WhatsappCard";
 import { todayISOInSP } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
-interface AiMemory { id: string; content: string; category: string; created_at: string }
 
 const THEMES: { id: Theme; label: string; icon: typeof Sun }[] = [
   { id: "light", label: "Claro", icon: Sun },
@@ -278,25 +277,6 @@ export default function Ajustes() {
   const qc = useQueryClient();
   const { resetAll: resetGuides, disableAll: disableGuides } = useGuides();
   const [clearingMemories, setClearingMemories] = useState(false);
-  const { data: memories, isLoading: memoriesLoading } = useQuery({
-    queryKey: ["ai-memories", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      const { data } = await supabase.from("ai_memories")
-        .select("id,content,category,created_at")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
-      return (data ?? []) as AiMemory[];
-    },
-  });
-
-  const deleteMemory = async (id: string) => {
-    const { error } = await supabase.from("ai_memories").delete().eq("id", id);
-    if (error) { toast.error("Não consegui apagar. Tente de novo."); return; }
-    toast.success("Memória apagada. O Conselheiro não vai mais considerar isso.");
-    qc.invalidateQueries({ queryKey: ["ai-memories"] });
-  };
-
   const clearMemories = async () => {
     if (!user) return;
     if (!window.confirm("Apagar TUDO que o Conselheiro aprendeu sobre você em conversas? Isso não apaga seus registros (gastos, treinos, refeições...), só as memórias da IA.")) return;
@@ -644,53 +624,11 @@ export default function Ajustes() {
 
       {/* Memória do Conselheiro: transparência total sobre o que a IA aprendeu */}
       <Card className="p-4 space-y-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h2 className="font-display font-semibold flex items-center gap-1.5">
-              <Brain className="w-4 h-4 text-primary" /> Memória do Conselheiro
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              A cada conversa, o Conselheiro aprende nuances sobre você (preferências, rotina,
-              contexto) e usa isso para respostas e planos mais pessoais. Tudo que ele sabe está
-              aqui — apague o que quiser, a qualquer momento.
-            </p>
-          </div>
-          {(memories?.length ?? 0) > 0 && (
-            <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground"
-              onClick={clearMemories} disabled={clearingMemories}>
-              {clearingMemories ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Trash2 className="w-3.5 h-3.5 mr-1" /> Apagar tudo</>)}
-            </Button>
-          )}
-        </div>
+        <h2 className="font-display font-semibold flex items-center gap-1.5">
+          <Brain className="w-4 h-4 text-primary" /> O que o Ascende sabe sobre você
+        </h2>
 
-        {memoriesLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
-
-        {!memoriesLoading && (memories?.length ?? 0) === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Ainda não aprendi nada sobre você. Converse com o Conselheiro ou use a caixa
-            "Conte como foi" na tela Hoje — o que eu aprender aparece aqui.
-          </p>
-        )}
-
-        {(memories ?? []).map((m) => (
-          <div key={m.id} className="flex items-start gap-3 rounded-md border p-2.5">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm break-words">{m.content}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {MEMORY_CATEGORY_LABEL[m.category] ?? MEMORY_CATEGORY_LABEL.outro}
-                {" · aprendido em "}
-                {new Date(m.created_at).toLocaleDateString("pt-BR")}
-              </p>
-            </div>
-            <button
-              type="button" onClick={() => deleteMemory(m.id)}
-              aria-label={`Apagar memória: ${m.content}`}
-              className="shrink-0 -m-2 grid h-11 w-11 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
+        <MemoryControl onClearAll={clearMemories} clearing={clearingMemories} />
       </Card>
 
       <Card className="p-4 space-y-3">

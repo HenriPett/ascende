@@ -3,7 +3,7 @@ import {
   corsFor, serviceClient, requireUser, assertRateLimit, buildSnapshot,
   MODEL_SMART, MODEL_FAST, SAFETY_RULES, extractEventsAndMemories,
   STATEMENT_TOOL, STATEMENT_SYSTEM, normalizeStatementItems,
-  ATTACHMENT_EXTRACT_MAX_CHARS, EXTRACTION_MAX_EVENTS,
+  ATTACHMENT_EXTRACT_MAX_CHARS, EXTRACTION_MAX_EVENTS, attachMemorySources,
 } from "../_shared/lib.ts";
 import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage } from "../_shared/usage.ts";
 import {
@@ -731,14 +731,19 @@ Deno.serve(async (req) => {
       }, 502);
     }
 
-    const { error: insertErr } = await supabase.from("chat_messages").insert([
+    // `.select` para saber o id da mensagem do usuário: é ela a ORIGEM das
+    // memórias extraídas deste turno (Fase 2 — a pessoa precisa poder ver de
+    // onde a IA tirou cada coisa que "sabe" sobre ela).
+    const { data: insertedMsgs, error: insertErr } = await supabase.from("chat_messages").insert([
       { user_id: user.id, role: "user", content: attNames.length ? `${message}\n📎 ${attNames.join(", ")}` : message },
       { user_id: user.id, role: "assistant", content: reply },
-    ]);
+    ]).select("id,role");
     if (insertErr) console.error("chat_messages insert", insertErr);
+    const userMsgId = (insertedMsgs ?? []).find((m) => m.role === "user")?.id ?? null;
     chatConsumed = true; // daqui pra frente a mensagem foi entregue: cota é devida
 
     const [{ events: captured, learned }, statement] = await Promise.all([extractPromise, statementPromise]);
+    await attachMemorySources(supabase, user.id, learned.map((m) => m.id), "chat_message", userMsgId);
     return json({
       reply, captured, plan, profile_suggestion: profileSuggestion, learned,
       habit_proposal: habitProposal.length ? habitProposal : null,
