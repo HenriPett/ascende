@@ -65,6 +65,16 @@
     --sidebar-accent-foreground: 46 40% 94%;
     --sidebar-border: 240 7% 14%;
     --sidebar-ring: 44 95% 58%;
+
+    /* Mokari: três peças de BAIXA OPACIDADE que não herdam do tema.
+       Sobreposição translúcida não acompanha a inversão do token — o que é
+       névoa sutil no claro simplesmente some no escuro, e vice-versa. Por
+       isso valor por tema, e não `hsl(var(--x) / 0.1)` no componente. */
+    --mokari-cloud: hsl(var(--foreground) / 0.07);
+    --mokari-spark: hsl(var(--gold) / 0.55);
+    /* O --gold puro sobre o marfim tem contraste baixíssimo e o brilho não
+       aparece: no claro usamos o mesmo tom do .text-gold-ink. */
+    --mokari-glow: hsl(40 90% 34% / 0.28);
   }
 
   .dark {
@@ -119,6 +129,12 @@
     --sidebar-accent-foreground: 45 30% 95%;
     --sidebar-border: 240 7% 12%;
     --sidebar-ring: 44 95% 58%;
+
+    /* Mokari — ver o comentário no :root. No escuro a névoa precisa de mais
+       corpo, e os pontos de luz viram estrela em vez de mota de sol. */
+    --mokari-cloud: hsl(var(--foreground) / 0.12);
+    --mokari-spark: hsl(var(--foreground) / 0.70);
+    --mokari-glow: hsl(var(--gold) / 0.38);
   }
 
   * { @apply border-border; }
@@ -244,6 +260,24 @@
     animation: capture-pulse 600ms ease-out;
     border-radius: var(--radius);
   }
+
+  /* Mokari: as duas únicas animações, ambas discretas.
+     Ficam em CSS (e não em <animate> do SVG) porque o corte global de
+     prefers-reduced-motion no @layer base só alcança CSS — <animate> passaria
+     batido. O componente TAMBÉM checa a preferência em JS e simplesmente não
+     aplica estas classes: a partícula precisa continuar DESENHADA e parada,
+     não desaparecer. Some o movimento, não a informação. */
+  @keyframes mokari-sway {
+    0%, 100% { transform: rotate(-1.5deg); }
+    50% { transform: rotate(1.5deg); }
+  }
+  .mokari-sway { animation: mokari-sway 3s ease-in-out infinite; }
+
+  @keyframes mokari-drift {
+    0% { transform: translateY(0); opacity: 0.7; }
+    100% { transform: translateY(-18px); opacity: 0; }
+  }
+  .mokari-drift { animation: mokari-drift 4s ease-out infinite; }
 
   /* Linha de elevação: assinatura visual */
   .ascend-line {

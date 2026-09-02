@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
+import Mokari from "@/components/core/Mokari";
+import MokariInvite from "@/components/core/MokariInvite";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronRight, Layers, BarChart3, ClipboardList, Swords } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -188,6 +190,17 @@ export default function Jornada() {
           O acumulado da sua subida. A tela Hoje é o dia; aqui é o caminho.
         </p>
       </div>
+
+      {/* O Mokari no TOPO — e só aqui.
+          Não vai para a Hoje: a Hoje é o dia e acabou de ser cortada para 5
+          zonas na Fase 4; enchê-la de novo na semana seguinte desfaria a fase
+          anterior. A Jornada é a tela do caminho, e é onde um espelho da
+          jornada faz sentido.
+          Os dois componentes são mutuamente exclusivos pela preferência:
+          desligado ou recusado, NENHUM dos dois renderiza — nem card, nem
+          moldura, nem "ative o Mokari". */}
+      <Mokari />
+      <MokariInvite />
 
       <div className="space-y-2.5">
         <HubSection
