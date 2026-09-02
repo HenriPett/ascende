@@ -55,16 +55,57 @@ export function CheckinRow({ battle, todayCheckin }: { battle: Battle; todayChec
 
   if (todayCheckin && !pendingStatus) {
     const M = STATUS_META[todayCheckin.status];
+    const relapsed = todayCheckin.status === "relapsed";
     return (
-      <div className="flex items-center gap-2.5 rounded-md border bg-success/5 border-success/20 p-3">
-        <M.icon className="w-4 h-4 text-success shrink-0" />
-        <p className="text-sm flex-1">
-          <span className="font-medium">{battleLabel(battle)}</span>
-          <span className="text-muted-foreground"> — {M.done}</span>
-        </p>
-        <button className="text-xs text-muted-foreground underline" onClick={() => setPendingStatus(todayCheckin.status)}>
-          Corrigir
-        </button>
+      <div className={cn(
+        "rounded-md border p-3",
+        /* A recaída deixa de ser pintada de verde. Os três estados caíam na
+           MESMA caixa de sucesso (`bg-success/5`), então o dia da recaída era
+           renderizado como um dia bem-sucedido, com uma nuvem de chuva por
+           cima. Neutro não é punição: é parar de dizer a coisa errada. */
+        relapsed ? "bg-muted/40" : "bg-success/5 border-success/20",
+      )}>
+        <div className="flex items-center gap-2.5">
+          <M.icon className={cn("w-4 h-4 shrink-0", relapsed ? "text-muted-foreground" : "text-success")} />
+          <p className="text-sm flex-1">
+            <span className="font-medium">{battleLabel(battle)}</span>
+            <span className="text-muted-foreground"> — {M.done}</span>
+          </p>
+          <button className="text-xs text-muted-foreground underline" onClick={() => setPendingStatus(todayCheckin.status)}>
+            Corrigir
+          </button>
+        </div>
+
+        {/* O DIA DA RECAÍDA PRECISA EXISTIR.
+            O app era exemplar NO INSTANTE do registro (o toast da honestidade)
+            e desaparecia em seguida: o cartão voltava ao normal e a pessoa
+            ficava sozinha nas 24 a 72 horas em que o deslize vira desistência
+            — a janela do "que-se-dane" de Marlatt.
+
+            Duas coisas entram, e só duas. Primeiro o que NÃO se perdeu, porque
+            o efeito que faz alguém desistir é acreditar que zerou. Depois o
+            plano de emergência que ela mesma escreveu no frio, aberto na tela
+            em vez de guardado atrás de um botão que é preciso saber apertar.
+
+            E nada além disso: sem confete, sem "você é incrível", sem
+            comemorar. Uma cerimônia bonita de recaída torna a recaída
+            saliente, e saliência é o começo do desejo. O tom é o de quem
+            entrega uma toalha, não o de quem dá um troféu. */}
+        {relapsed && (
+          <div className="mt-2.5 space-y-2 border-t pt-2.5">
+            <p className="text-xs text-muted-foreground">
+              Isto não apagou nada: seus dias limpos acumulados e o seu recorde continuam seus.
+            </p>
+            {battle.emergency_plan.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium">O plano que você escreveu para agora:</p>
+                <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside">
+                  {battle.emergency_plan.map((step, i) => <li key={i}>{step}</li>)}
+                </ol>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }

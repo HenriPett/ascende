@@ -20,6 +20,10 @@ import {
 import { PILLARS, pillarById, type PillarId } from "@/lib/pillars";
 import { TRACKERS } from "@/lib/trackers";
 import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import FirstTimeTip from "@/components/core/FirstTimeTip";
 import HealthImport from "@/components/core/HealthImport";
 import SourcesAndImports from "@/components/core/SourcesAndImports";
@@ -281,9 +285,20 @@ export default function Ajustes() {
   const { resetAll: resetGuides, disableAll: disableGuides } = useGuides();
   const mokari = useMokariPreference();
   const [clearingMemories, setClearingMemories] = useState(false);
+  /* A CONFIRMAÇÃO SAIU DO window.confirm NATIVO.
+     Duas coisas estavam erradas, e as duas na mesma tela. (a) "Apagar TUDO"
+     em maiúsculas é grito, e esta é uma ação de PRIVACIDADE — um direito da
+     pessoa, não um risco do qual ela deva ser dissuadida. O app promete "seus
+     dados continuam seus", e a tela que exerce essa promessa era a que mais
+     parecia advertência. (b) O diálogo nativo mostra o domínio no título
+     ("ascende.app diz:") e rotula os botões como "OK" e "Cancelar" — dois
+     rótulos que não dizem o que acontece, justamente onde isso mais importa.
+     A exclusão de conta, logo abaixo nesta página, já usava um diálogo com
+     botões nomeados; esta tinha ficado para trás. */
+  const [confirmClearMemories, setConfirmClearMemories] = useState(false);
   const clearMemories = async () => {
     if (!user) return;
-    if (!window.confirm("Apagar TUDO que o Conselheiro aprendeu sobre você em conversas? Isso não apaga seus registros (gastos, treinos, refeições) — só as memórias dele.")) return;
+    setConfirmClearMemories(false);
     setClearingMemories(true);
     const { error } = await supabase.from("ai_memories").delete().eq("user_id", user.id);
     setClearingMemories(false);
@@ -683,8 +698,35 @@ export default function Ajustes() {
           <Brain className="w-4 h-4 text-primary" /> O que o Ascende sabe sobre você
         </h2>
 
-        <MemoryControl onClearAll={clearMemories} clearing={clearingMemories} />
+        <MemoryControl onClearAll={() => setConfirmClearMemories(true)} clearing={clearingMemories} />
       </Card>
+
+      <AlertDialog open={confirmClearMemories} onOpenChange={setConfirmClearMemories}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar o que o Conselheiro aprendeu sobre você?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-left">
+                <p>
+                  Ele esquece o que deduziu das conversas: suas preferências, restrições, o que
+                  você contou de passagem.
+                </p>
+                <p className="rounded-md border p-2.5 text-foreground">
+                  Seus registros ficam. Gastos, treinos, refeições, sono, XP e dias limpos
+                  continuam todos aqui.
+                </p>
+                <p className="text-xs">
+                  A partir da próxima conversa ele começa a aprender de novo, do zero.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Manter o que ele aprendeu</AlertDialogCancel>
+            <AlertDialogAction onClick={clearMemories}>Apagar as memórias</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card className="p-4 space-y-3">
         <div>

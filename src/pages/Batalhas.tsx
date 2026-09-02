@@ -24,9 +24,16 @@ import { useGuides } from "@/hooks/useGuides";
 import { cn } from "@/lib/utils";
 
 /* ─── Criação ─── */
-function CreateBattle({ onCreated }: { onCreated: () => void }) {
+/* `open` é CONTROLADO pela página porque existe um segundo ponto de entrada: o
+   estado vazio, que precisava abrir este mesmo diálogo sem duplicá-lo. Antes o
+   cartão vazio apenas DESCREVIA o botão ("Toque em 'Nova batalha'"), e o botão
+   descrito vive no topo da tela, fora do campo de visão de quem está lendo o
+   cartão — mandar procurar um botão é fricção sem retorno. */
+function CreateBattle({
+  onCreated, open, onOpenChange,
+}: { onCreated: () => void; open: boolean; onOpenChange: (v: boolean) => void }) {
   const { user } = useAuth();
-  const [open, setOpen] = useState(false);
+  const setOpen = onOpenChange;
   const [name, setName] = useState("");
   const [discreet, setDiscreet] = useState("");
   const [triggers, setTriggers] = useState<string[]>([]);
@@ -252,6 +259,9 @@ export default function Batalhas() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const { markSeen } = useGuides();
+  /* Um diálogo, dois pontos de entrada: o botão do topo e o cartão do estado
+     vazio. Ver o comentário em CreateBattle. */
+  const [newBattleOpen, setNewBattleOpen] = useState(false);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["battles", user?.id],
@@ -302,7 +312,11 @@ export default function Batalhas() {
           </p>
         </div>
         <div className="w-full sm:w-auto [&_button]:w-full sm:[&_button]:w-auto">
-          <CreateBattle onCreated={() => { markSeen("batalhas"); qc.invalidateQueries(); }} />
+          <CreateBattle
+            open={newBattleOpen}
+            onOpenChange={setNewBattleOpen}
+            onCreated={() => { markSeen("batalhas"); qc.invalidateQueries(); }}
+          />
         </div>
       </div>
 
@@ -322,12 +336,22 @@ export default function Batalhas() {
       {!isLoading && !isError && !(data?.battles ?? []).length && (
         <Card className="p-8 text-center">
           <Swords className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-          <p className="font-display font-semibold">Nenhuma batalha ativa</p>
+          {/* O tom baixo deste cartão é DELIBERADO e continua: aqui um "Comece
+              agora!" seria invasivo. O que muda é (a) o título, que abria a
+              tela com uma contabilidade de ausência num assunto que é vergonha
+              — ler "nenhuma" primeiro soa como cobrança mesmo sem querer — e
+              (b) a última frase, que mandava procurar um botão em vez de
+              oferecer um. O rótulo condicional ("se fizer sentido") preserva o
+              tom, e a linha do nome discreto responde o medo real desta tela. */}
+          <p className="font-display font-semibold">Aqui é onde as suas ficam</p>
           <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
             Redes sociais, pornografia, cigarro, apostas, compras por impulso. Se existe algo
             que você enfrenta em silêncio, este é o lugar para enfrentar com método — e sem
-            julgamento. Toque em "Nova batalha" quando fizer sentido.
+            julgamento. O nome pode ser discreto: só você sabe o que ele quer dizer.
           </p>
+          <Button variant="outline" className="mt-3" onClick={() => setNewBattleOpen(true)}>
+            Declarar uma batalha, se fizer sentido
+          </Button>
         </Card>
       )}
 
