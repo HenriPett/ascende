@@ -179,13 +179,16 @@ async function proposeEvents(
   // deno-lint-ignore no-explicit-any
   supabase: any, userId: string, from: string, events: any[], url: string,
   userText: string, preface?: string,
+  /** A rota conversacional já gravou o turno em chat_messages antes de chegar
+   *  aqui; sem isto a fala da pessoa entraria duas vezes no histórico. */
+  skipHistory = false,
 ): Promise<void> {
   await supabase.from("whatsapp_pending").upsert({
     user_id: userId, events, created_at: new Date().toISOString(),
   });
   // Só o relato da pessoa: o desfecho entra no wa_confirm/wa_discard, porque
   // é lá que se sabe o que de fato foi para o diário.
-  await pushHistory(supabase, userId, "user", userText);
+  if (!skipHistory) await pushHistory(supabase, userId, "user", userText);
   const lines = events.slice(0, WA_STATEMENT_MAX_ITEMS)
     // deno-lint-ignore no-explicit-any
     .map((e: any) => `• ${e.summary ?? e.kind} (+${xpForKind(String(e.kind))} XP)`).join("\n");
@@ -225,6 +228,12 @@ Você só pode afirmar que ela comeu, treinou, gastou, dormiu ou registrou algo 
 • Nunca cite alimento, exercício, valor, horário ou refeição específicos que você não leu no retrato ou no histórico. Na dúvida entre um detalhe e nenhum detalhe, fique sem o detalhe.
 • Se o registro aparecer no retrato mas o histórico não tiver a conversa (ou o contrário), confie no que existe e siga: o dado do retrato é sempre o mais confiável sobre o que foi registrado.
 • Errar por perguntar custa uma frase. Errar por inventar custa a confiança dela em tudo que você diz, inclusive no que está certo.
+
+━━━ VOCÊ NÃO REGISTRA NADA (quem registra é o botão) ━━━
+Você CONVERSA; quem grava no diário é o cartão de confirmação com os botões "✓ Confirmar" / "✗ Descartar". Você não tem nenhuma ferramenta de gravação nesta conversa.
+• PROIBIDO escrever "registrei", "anotei", "salvei", "já está no seu diário", "adicionei" ou qualquer variação no passado que sugira que VOCÊ gravou. Isso já aconteceu de verdade e o registro não existia: a pessoa confiou, o dado não estava lá.
+• Quando ela relatar algo registrável (uma refeição, um treino, um gasto, o sono), comente normalmente e, se couber, diga no FUTURO e como convite: "se quiser, dá para registrar isso" ou "posso te mandar para confirmar". O sistema envia o cartão logo depois da sua resposta, quando encontra algo registrável.
+• Se ela perguntar se algo foi registrado, responda pelo RETRATO (o que está lá foi registrado de fato) — nunca pela sua própria memória do que você "fez".
 
 ━━━ REGRA DE OURO ━━━
 Cada mensagem da pessoa consome o limite do plano dela. Se faltar um dado essencial, faça UMA pergunta objetiva (nunca mais de uma rodada); senão, entregue a resposta completa neste turno.
@@ -360,10 +369,47 @@ async function counselorTurn(
 
   await waSendText(from, reply.slice(0, 3900));
 
-  // Memórias duráveis também nascem da conversa de WhatsApp (mesma extração
-  // econômica do app; eventos aqui são ignorados — relato tem o fluxo próprio).
+  /* ── Relato DENTRO da conversa também vira registro ──────────────────
+     BUG DE PRODUÇÃO (01/09/2026): "Comi 3 pães franceses com requeijão.
+     Ficou muito fora do plano?" tem "?", então caiu na rota conversacional.
+     A extração rodava aqui, mas os eventos eram DESCARTADOS (só as memórias
+     eram aproveitadas) — o Conselheiro do WhatsApp nunca teve como registrar
+     nada. Ele respondeu "Registrei pra você: • Jantar: 3 pães franceses" e
+     nada foi para o diário. Segunda vez que a IA afirma um feito que não
+     aconteceu; é o tipo de erro que destrói a confiança no resto.
+
+     Agora o relato vira PROPOSTA com os mesmos botões da captura: a promessa
+     do produto ("responde a pergunta e registra ao mesmo tempo") passa a
+     valer nos dois canais, não só no app. */
   try {
-    await extractEventsAndMemories(supabase, userId, text, "chat-extracao", ent.limits.memory_cap);
+    // "Foi jantar" sozinho não tem evento nenhum: o relato estava na mensagem
+    // anterior. Respostas curtas herdam a última fala da pessoa como contexto,
+    // senão o complemento de uma pergunta do Conselheiro se perde.
+    const SHORT_REPLY_CHARS = 60;
+    let forExtraction = text;
+    if (text.length <= SHORT_REPLY_CHARS) {
+      // deno-lint-ignore no-explicit-any
+      const prevUser = ((history ?? []) as any[]).find((m) => m.role === "user");
+      const prev = String(prevUser?.content ?? "").trim();
+      if (prev && prev !== text) forExtraction = `${prev}\n${text}`;
+    }
+
+    const { ok, events } = await extractEventsAndMemories(
+      supabase, userId, forExtraction, "chat-extracao", ent.limits.memory_cap,
+    );
+
+    // Uma proposta pendente por vez: sobrescrever a que a pessoa ainda não
+    // respondeu faria o botão "Confirmar" gravar outra coisa.
+    if (ok && events.length) {
+      const { data: pending } = await supabase.from("whatsapp_pending")
+        .select("user_id").eq("user_id", userId).maybeSingle();
+      if (!pending) {
+        await proposeEvents(
+          supabase, userId, from, events, url, text,
+          "A propósito, isso dá para registrar:", true,
+        );
+      }
+    }
   } catch (e) {
     console.error("wa chat-extracao", e);
   }
