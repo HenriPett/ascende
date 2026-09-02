@@ -397,6 +397,23 @@ export default function Onboarding() {
         applied.push(chosen.length === 1 ? "1 compromisso" : `${chosen.length} compromissos`);
         setActivatedHabits(chosen.length);
       }
+      /* O CARIMBO DA ATIVAÇÃO. Sem ele, a tela Hoje não tem como distinguir
+         quem ativou de quem gerou e recusou — e desligava a trilha de
+         Primeiros Passos para os dois, deixando quem recusou com um app sem
+         zona nenhuma além do convite de assinatura. Ver a migração
+         20260913120000 e o comentário em Hoje.tsx:498.
+
+         Só quando `applied` tem algo: "ativei nada" não é ativação, e é
+         exatamente o caso que precisa continuar recebendo o andaime.
+         A falha aqui não desfaz o que já foi ativado nem quebra o fluxo — no
+         pior caso a pessoa vê a trilha que ela já cumpriu, que é o lado
+         errado menos grave dos dois. */
+      if (applied.length) {
+        const { error: stampErr } = await supabase.from("profiles")
+          .update({ blueprint_activated_at: new Date().toISOString() })
+          .eq("user_id", user.id);
+        if (stampErr) console.error("blueprint_activated_at", stampErr.message ?? stampErr);
+      }
       qc.invalidateQueries();
       refresh();
       toast.success(applied.length

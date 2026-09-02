@@ -13,6 +13,7 @@ import { CaptureFocusContext, useCaptureFocus } from "@/hooks/useCaptureFocus";
 import Logo from "@/components/core/Logo";
 import FeedbackDialog from "@/components/core/FeedbackDialog";
 import CaptureBar from "@/components/core/CaptureBar";
+import QuickActions from "@/components/core/QuickActions";
 import ProfileCompleteness from "@/components/core/ProfileCompleteness";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -265,6 +266,15 @@ function CaptureSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
           <SheetTitle className="font-display">Registrar</SheetTitle>
         </SheetHeader>
         <CaptureBar onConfirmed={() => onOpenChange(false)} />
+        {/* O caminho de 1 toque, que antes só existia na tela Hoje.
+            REGISTRAR está em toda tela do app, mas a folha só oferecia a
+            captura por IA: quem estava na Prosperidade e queria marcar um copo
+            de água pagava quatro interações mais uma espera de rede por um
+            copo de água. Os dois chips que navegam (Refeição e Treino) fecham
+            a folha sozinhos — o efeito de rota acima já cuida disso. */}
+        <div className="mt-3">
+          <QuickActions />
+        </div>
       </SheetContent>
     </Sheet>
   );

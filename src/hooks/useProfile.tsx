@@ -96,6 +96,10 @@ export interface Profile {
   est_food_spend: number | null;
   /** Quando o Blueprint da Subida foi gerado (cortesia, 1x por conta). */
   blueprint_generated_at: string | null;
+  /** Quando a pessoa ATIVOU algo do Blueprint. Nulo para quem gerou e
+   *  recusou — e é essa diferença que decide se a trilha de Primeiros Passos
+   *  ainda faz falta (ver a migração 20260913120000). */
+  blueprint_activated_at: string | null;
   /** Mokari: TRÊS estados num campo anulável, e a anulabilidade É o dado.
    *  null = nunca perguntamos (o convite aparece uma vez na Jornada) ·
    *  false = ela disse não, ou desligou depois (silêncio) · true = ligado.
