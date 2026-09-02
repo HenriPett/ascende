@@ -64,3 +64,15 @@ export function xpReasonLabel(reason: string): string {
   const m = reason.match(/^Registro: (\w+)$/);
   return m ? (XP_REASON_LABEL[m[1]] ?? reason) : reason;
 }
+/* Explica o XP uma única vez, no primeiro registro da vida do usuário
+   (análise UX P2.3): "+4 XP" sem contexto não significa nada no dia 1.
+   Única função com efeito colateral neste módulo — mora aqui porque é copy
+   de XP, e o acesso a localStorage está protegido para nunca derrubar quem
+   navega com armazenamento bloqueado (nem os testes, que rodam sem DOM). */
+export function xpToastSuffix(): string {
+  try {
+    if (localStorage.getItem("ascend-xp-explained")) return "";
+    localStorage.setItem("ascend-xp-explained", "1");
+    return " — cada registro sobe seu nível de vida real";
+  } catch { return ""; }
+}

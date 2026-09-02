@@ -150,7 +150,9 @@ export default function Auth() {
       }
     })();
     return () => { cancelled = true; };
-  }, [GOOGLE_CLIENT_ID, navigate]);
+    // `iosStandalone` deriva de navigator/display-mode: não muda entre renders,
+    // então declará-lo não reexecuta o efeito — só deixa a dependência honesta.
+  }, [GOOGLE_CLIENT_ID, navigate, iosStandalone]);
 
   // Renderiza o botão oficial do Google quando o GIS fica pronto.
   useEffect(() => {

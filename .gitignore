@@ -17,3 +17,7 @@ supabase/.temp/storage-version
 # e um export do Apple Health de ~1,2 GB descompactado). Servem para validar o
 # importador localmente; nunca devem entrar no repositório.
 test_files/
+
+# Documentos de estratégia recebidos do fundador (base do plano de
+# implementação). Material de trabalho, não código.
+base_files/

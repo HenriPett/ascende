@@ -20,7 +20,7 @@ import {
 import { PILLARS, pillarById, type PillarId } from "@/lib/pillars";
 import { TRACKERS } from "@/lib/trackers";
 import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
-import { MEMORY_CATEGORY_LABEL } from "@/components/core/LearnedInsights";
+import { MEMORY_CATEGORY_LABEL } from "@/lib/memories";
 import HealthImport from "@/components/core/HealthImport";
 import { useGuides } from "@/hooks/useGuides";
 import FeedbackDialog from "@/components/core/FeedbackDialog";

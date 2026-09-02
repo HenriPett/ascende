@@ -1,21 +1,7 @@
 import { Link } from "react-router-dom";
 import { Brain, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-/** Uma nuance que a IA acabou de aprender sobre o usuário (vinda do backend). */
-export interface LearnedMemory {
-  content: string;
-  category: string;
-}
-
-export const MEMORY_CATEGORY_LABEL: Record<string, string> = {
-  preferencia: "Preferência",
-  rotina: "Rotina",
-  contexto: "Contexto",
-  motivacao: "Motivação",
-  personalidade: "Jeito de ser",
-  outro: "Sobre você",
-};
+import { MEMORY_CATEGORY_LABEL, type LearnedMemory } from "@/lib/memories";
 
 /**
  * Bloco discreto exibido logo após uma resposta da IA: mostra o que ela
