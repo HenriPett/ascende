@@ -652,6 +652,15 @@ export const SAFETY_RULES = `
 
 export const MUSCLE_GROUPS = ["Peito", "Costas", "Pernas", "Ombros", "Braços", "Core", "Cardio"];
 
+/* Tetos da extração a partir de ARQUIVO (o Conselheiro aceita anexos).
+   Um CSV de exportação de app pode ter centenas de linhas: 555 noites de sono
+   viraram o caso real que expôs o bug. Extrair tudo seria um cartão de
+   confirmação inutilizável e uma conta de IA desproporcional, então lemos um
+   pedaço e dizemos a verdade sobre o resto — o caminho da massa é o importador
+   da tela, não a conversa. */
+export const EXTRACTION_MAX_EVENTS = 25;
+export const ATTACHMENT_EXTRACT_MAX_CHARS = 8000;
+
 export const CAPTURE_TOOL = {
   name: "registrar_eventos",
   description: "Registra os eventos de vida extraídos do relato do usuário.",
@@ -667,6 +676,13 @@ export const CAPTURE_TOOL = {
               type: "string",
               enum: ["transaction", "sleep", "nap", "workout", "meal", "water", "weight", "mood", "gratitude", "practice", "note"],
               description: "Tipo do evento.",
+            },
+            occurred_at: {
+              type: "string",
+              description:
+                "Data do evento em YYYY-MM-DD, APENAS quando o relato ou o arquivo disserem explicitamente " +
+                "a data ('ontem', 'dia 12', uma coluna de data no CSV). OMITA quando for do dia de hoje ou " +
+                "quando não houver data explícita: o app usa o momento do registro. NUNCA invente a data.",
             },
             pillar: {
               type: "string",
@@ -934,7 +950,12 @@ const COMBINED_TOOL = {
   input_schema: {
     type: "object",
     properties: {
-      events: (CAPTURE_TOOL.input_schema.properties as Record<string, unknown>).events,
+      // Cópia com teto próprio: mutar o objeto do CAPTURE_TOOL afetaria também
+      // a captura falada (capture e WhatsApp), que não precisa de teto.
+      events: {
+        ...((CAPTURE_TOOL.input_schema.properties as Record<string, Record<string, unknown>>).events),
+        maxItems: EXTRACTION_MAX_EVENTS,
+      },
       memories: {
         type: "array",
         items: {
@@ -952,15 +973,42 @@ const COMBINED_TOOL = {
   },
 };
 
+/* Regras extras quando a extração vem de um ARQUIVO anexado (CSV, planilha,
+   exportação de app, anotações). Sem elas o modelo trata uma tabela como
+   "não é relato" e devolve events: [] — o CAPTURE_SYSTEM foi escrito para
+   frases faladas, não para linhas de dado. */
+const BULK_EXTRACTION_RULES = `
+━━━ EXTRAÇÃO A PARTIR DE ARQUIVO ANEXADO ━━━
+O conteúdo abaixo inclui um arquivo enviado pela pessoa. Aqui, tabela e CSV SÃO relato:
+• Cada linha que descreva algo que JÁ aconteceu com ela (uma noite de sono, um treino, uma refeição, um peso, um gasto) é um evento registrável, mesmo sem nenhuma frase narrativa em volta.
+• Cabeçalhos, totais, médias, metas, legendas e linhas vazias NÃO são eventos.
+• Quando a linha tiver data, preencha occurred_at (YYYY-MM-DD) e comece o summary pela data ("12/03: 7h de sono"). Sem data explícita, omita occurred_at.
+• TETO RÍGIDO: no máximo ${EXTRACTION_MAX_EVENTS} eventos nesta resposta. Se o arquivo tiver mais, extraia os ${EXTRACTION_MAX_EVENTS} MAIS RECENTES (datas mais novas primeiro) e ignore o resto — o app avisa a pessoa que sobrou dado, isso não é sua responsabilidade e não é motivo para resumir ou agrupar linhas.
+• NUNCA invente linhas, datas ou valores que não estejam no arquivo, e nunca agregue várias linhas num evento só.`;
+
 export async function extractEventsAndMemories(
   supabase: SupabaseClient, userId: string, text: string,
   feature: string, memoryCap = 150,
-  opts: { reservationId?: number | null } = {},
+  opts: {
+    reservationId?: number | null;
+    /** A extração inclui conteúdo de arquivo: mais texto de entrada, mais
+     *  tokens de saída e as regras de leitura de tabela acima. */
+    bulk?: boolean;
+    /** Blocos extras (ex.: um PDF) que entram na mensagem da extração. */
+    // deno-lint-ignore no-explicit-any
+    blocks?: any[];
+  } = {},
   // deno-lint-ignore no-explicit-any
-): Promise<{ ok: boolean; events: any[]; learned: { content: string; category: string }[] }> {
+): Promise<{ ok: boolean; events: any[]; learned: { content: string; category: string }[]; capped: boolean }> {
+  const bulk = opts.bulk === true;
+  const blocks = opts.blocks ?? [];
   try {
     const t = String(text ?? "").trim();
-    if (isTrivialMessage(t)) return { ok: true, events: [], learned: [] };
+    // Um anexo com dado dentro nunca é "trivial", mesmo que a frase digitada
+    // seja só "segue" — antes essa checagem sozinha já matava a extração.
+    if (!bulk && !blocks.length && isTrivialMessage(t)) {
+      return { ok: true, events: [], learned: [], capped: false };
+    }
     const known = (await loadKnownMemories(supabase, userId)) ?? [];
 
     // Mensagens com "?" costumam misturar pergunta + relato — é o padrão em que
@@ -971,27 +1019,36 @@ export async function extractEventsAndMemories(
     // registro perdido silenciosamente.
     const hasQuestion = t.includes("?");
 
+    // Com arquivo, o texto é maior e a saída também: 25 eventos estruturados
+    // não cabem nos 1800 tokens que bastam para uma frase falada.
+    const inputCap = bulk ? 4000 + ATTACHMENT_EXTRACT_MAX_CHARS : 4000;
+    const userText =
+      `${memoriesBlock(known)}\n\nRELATO DO USUÁRIO (se houver pergunta junto, ignore-a e extraia só o que foi relatado como já acontecido):\n${t.slice(0, inputCap)}`;
+
     const { res, data } = await anthropicCall(supabase, userId, feature, {
       model: hasQuestion ? MODEL_SMART : MODEL_FAST,
-      max_tokens: 1800,
-      system: `${CAPTURE_SYSTEM}\n\n━━━ MEMÓRIA DE LONGO PRAZO ━━━\n${MEMORY_SYSTEM.split("Use SEMPRE a ferramenta")[0]}\nUse SEMPRE a ferramenta extrair_registros_e_memorias, preenchendo events E memories (vazios quando não houver).`,
+      max_tokens: bulk ? 8000 : 1800,
+      system: `${CAPTURE_SYSTEM}${bulk ? `\n${BULK_EXTRACTION_RULES}` : ""}\n\n━━━ MEMÓRIA DE LONGO PRAZO ━━━\n${MEMORY_SYSTEM.split("Use SEMPRE a ferramenta")[0]}\nUse SEMPRE a ferramenta extrair_registros_e_memorias, preenchendo events E memories (vazios quando não houver).`,
       tools: [COMBINED_TOOL],
       tool_choice: { type: "tool", name: "extrair_registros_e_memorias" },
       messages: [{
         role: "user",
-        content: `${memoriesBlock(known)}\n\nRELATO DO USUÁRIO (se houver pergunta junto, ignore-a e extraia só o que foi relatado como já acontecido):\n${t.slice(0, 4000)}`,
+        content: blocks.length ? [...blocks, { type: "text", text: userText }] : userText,
       }],
     }, { reservationId: opts.reservationId ?? null });
-    if (!res.ok || !data) return { ok: false, events: [], learned: [] };
+    if (!res.ok || !data) return { ok: false, events: [], learned: [], capped: false };
     // deno-lint-ignore no-explicit-any
     const tu = ((data as any).content ?? []).find((b: any) => b.type === "tool_use");
-    const events = Array.isArray(tu?.input?.events) ? tu.input.events : [];
+    const rawEvents = Array.isArray(tu?.input?.events) ? tu.input.events : [];
+    // Teto aplicado também aqui: o schema pede maxItems, mas quem garante é
+    // o servidor (o modelo pode passar do teto e não é o usuário que paga).
+    const events = rawEvents.slice(0, EXTRACTION_MAX_EVENTS);
     const rawMems = Array.isArray(tu?.input?.memories) ? tu.input.memories : [];
     const learned = await persistMemories(supabase, userId, rawMems, known, memoryCap);
-    return { ok: true, events, learned };
+    return { ok: true, events, learned, capped: rawEvents.length >= EXTRACTION_MAX_EVENTS };
   } catch (e) {
     console.error("extração combinada: erro inesperado", e);
-    return { ok: false, events: [], learned: [] };
+    return { ok: false, events: [], learned: [], capped: false };
   }
 }
 /* ─── Extração de fatura/comprovante (compartilhada) ──────────────────────
