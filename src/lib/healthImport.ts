@@ -29,6 +29,12 @@ const APP_UTC_OFFSET = "-03:00";
  *  virar uma fila de milhares de inserts. */
 export const MAX_IMPORT_EVENTS = 1000;
 
+/** Versão da REGRA que produziu estes eventos, gravada na fonte
+ *  (data_sources.parser_version). Quando o parsing mudar de comportamento,
+ *  suba o número: é o que permite saber depois o que foi lido pela regra
+ *  antiga, sem adivinhação. */
+export const PARSER_VERSION = "health-csv/1";
+
 export type HealthCsvFormat = "sleep" | "workout" | "measurement";
 
 /** Grupos musculares do app — os mesmos de Vitalidade, para o mapa de
@@ -41,7 +47,16 @@ export interface ImportedEvent extends ProposedEvent {
   occurred_at: string;
   /** "YYYY-MM-DD" — chave de deduplicação e rótulo na revisão. */
   day: string;
+  /** Chave estável do registro DENTRO do arquivo ("sleep|2022-08-03"). É a
+   *  mesma regra da deduplicação interna (um registro por tipo e por dia), e
+   *  o mesmo arquivo lido de novo produz exatamente as mesmas chaves — é ela
+   *  que, junto com a fonte, torna a reimportação idempotente no banco. */
+  record_key: string;
 }
+
+/** Evento recém-lido do arquivo, ANTES de ganhar a chave de proveniência
+ *  (que só existe depois da deduplicação, em parseHealthCsv). */
+type ParsedEvent = Omit<ImportedEvent, "record_key">;
 
 export interface ImportStats {
   /** Linhas de dado lidas (sem o cabeçalho). */
@@ -285,7 +300,7 @@ function readRows(text: string, detected: DetectedFormat, onRow: RowReader): num
 }
 
 function parseSleep(text: string, detected: DetectedFormat) {
-  const events: ImportedEvent[] = [];
+  const events: ParsedEvent[] = [];
   let skipped = 0;
 
   const rows = readRows(text, detected, (_row, col) => {
@@ -354,7 +369,7 @@ function parseWorkout(text: string, detected: DetectedFormat) {
     if (kg && reps) session.volume += kg * reps;
   });
 
-  const events: ImportedEvent[] = [];
+  const events: ParsedEvent[] = [];
   for (const s of sessions.values()) {
     const muscles = [...new Set([...s.exercises].flatMap(musclesForExercise))];
     const ordered = MUSCLE_GROUPS.filter((g) => muscles.includes(g));
@@ -376,7 +391,7 @@ function parseWorkout(text: string, detected: DetectedFormat) {
 }
 
 function parseMeasurement(text: string, detected: DetectedFormat) {
-  const events: ImportedEvent[] = [];
+  const events: ParsedEvent[] = [];
   let skipped = 0;
 
   const rows = readRows(text, detected, (_row, col) => {
@@ -428,9 +443,12 @@ export function parseHealthCsv(text: string): ImportResult | null {
   let duplicates = 0;
   const chronological = [...parsed.events].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
   for (const ev of chronological) {
+    // A chave da deduplicação É a chave de proveniência: a mesma regra que
+    // colapsa dois registros do mesmo dia aqui é a que reconhece, no banco,
+    // que este registro já veio deste arquivo antes.
     const key = `${ev.kind}|${ev.day}`;
     if (byDay.has(key)) { duplicates++; continue; }
-    byDay.set(key, ev);
+    byDay.set(key, { ...ev, record_key: key });
   }
 
   // Mais recentes primeiro, e o teto corta a cauda antiga.

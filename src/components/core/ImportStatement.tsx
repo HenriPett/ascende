@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { FileUp, Loader2 } from "lucide-react";
 import { fileToBase64 } from "@/lib/files";
+import { formatSP } from "@/lib/dates";
+import { hashFile, findSourceByHash } from "@/lib/dataSources";
 import { readFnError, isPlanLimit, type PlanLimitError } from "@/lib/fnError";
 import type { ProposedStatementTx } from "@/lib/prosperidade";
 import StatementReview from "@/components/core/StatementReview";
@@ -42,23 +44,31 @@ export default function ImportStatement({
   const [checked, setChecked] = useState<boolean[]>([]);
   const [dup, setDup] = useState<boolean[]>([]);
   const [note, setNote] = useState<string | null>(null);
+  // Identidade do documento. O hash é o que reconhece a reimportação: sem
+  // ele, o MESMO PDF abriria uma fonte nova a cada envio e o marco de +15 XP
+  // voltaria à regra genérica de 1x/mês.
+  const [file, setFile] = useState<{ name: string; hash: string } | null>(null);
+  const [seenBefore, setSeenBefore] = useState<string | null>(null);
   const { confirm: confirmStatement, saving } = useStatementConfirm();
 
-  const reset = () => { setItems(null); setChecked([]); setDup([]); setNote(null); };
+  const reset = () => {
+    setItems(null); setChecked([]); setDup([]); setNote(null);
+    setFile(null); setSeenBefore(null);
+  };
 
   const pick = () => fileRef.current?.click();
 
-  const analyze = async (file: File) => {
-    if (file.size > MAX_FILE_BYTES) {
+  const analyze = async (picked: File) => {
+    if (picked.size > MAX_FILE_BYTES) {
       toast.error("Arquivo muito grande. Envie só a fatura do mês (até ~6 MB).");
       return;
     }
     setAnalyzing(true);
     reset();
     try {
-      const b64 = await fileToBase64(file);
+      const b64 = await fileToBase64(picked);
       const { data, error } = await supabase.functions.invoke("import-statement", {
-        body: { file: b64, media_type: file.type || "application/pdf" },
+        body: { file: b64, media_type: picked.type || "application/pdf" },
       });
       if (error) {
         const body = await readFnError(error);
@@ -77,6 +87,13 @@ export default function ImportStatement({
         return;
       }
       const dups = user ? await findStatementDuplicates(user.id, list) : list.map(() => false);
+      // Hash do próprio arquivo (Blob), que é o que foi enviado para leitura.
+      const hash = await hashFile(picked);
+      setFile({ name: picked.name, hash });
+      if (user) {
+        const previous = await findSourceByHash(user.id, hash);
+        setSeenBefore(previous?.created_at ?? null);
+      }
       setItems(list);
       setDup(dups);
       setChecked(list.map((_, i) => !dups[i]));
@@ -93,7 +110,20 @@ export default function ImportStatement({
     if (!items) return;
     const selected = items.filter((_, i) => checked[i]);
     if (!selected.length) { toast.error("Selecione pelo menos um lançamento."); return; }
-    const ok = await confirmStatement(selected);
+
+    // As contas do recibo, particionando o documento inteiro: o que entrou,
+    // o que ficou fora por já estar registrado, e o que a pessoa descartou na
+    // revisão. Os três somam `totalRows` — é o que permite auditar depois.
+    const duplicateRows = items.filter((_, i) => dup[i] && !checked[i]).length;
+    const rejectedRows = items.filter((_, i) => !checked[i] && !dup[i]).length;
+
+    const ok = await confirmStatement(selected, {
+      displayName: file?.name,
+      fileHash: file?.hash ?? null,
+      totalRows: items.length,
+      duplicateRows,
+      rejectedRows,
+    });
     if (ok) {
       setOpen(false);
       reset();
@@ -128,6 +158,14 @@ export default function ImportStatement({
               ? (<><Loader2 className="w-4 h-4 animate-spin mr-1.5" /> Lendo o documento...</>)
               : (<><FileUp className="w-4 h-4 mr-1.5" /> Escolher PDF ou foto</>)}
           </Button>
+        )}
+
+        {items && seenBefore && (
+          <p className="text-xs rounded-md border border-primary/30 bg-primary/5 p-2.5">
+            Você já importou este documento em{" "}
+            <strong>{formatSP(seenBefore, { day: "2-digit", month: "short", year: "numeric" })}</strong>.
+            Confirmar de novo não duplica o que já está gravado, e não rende XP outra vez.
+          </p>
         )}
 
         {items && (

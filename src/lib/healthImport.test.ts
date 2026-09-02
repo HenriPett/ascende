@@ -5,7 +5,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseHealthCsv, detectHealthCsv, detectDelimiter, parseCsv, parseStamp,
-  musclesForExercise, formatLabel, MAX_IMPORT_EVENTS,
+  musclesForExercise, formatLabel, MAX_IMPORT_EVENTS, PARSER_VERSION,
 } from "@/lib/healthImport";
 
 /* ── Amostras reais ───────────────────────────────────────────────────── */
@@ -269,5 +269,44 @@ describe("formatLabel", () => {
     expect(formatLabel("workout", 77)).toBe("77 treinos");
     expect(formatLabel("measurement", 1)).toBe("1 pesagem");
     expect(formatLabel("measurement", 20)).toBe("20 pesagens");
+  });
+});
+
+/* ── Chave de proveniência ────────────────────────────────────────────────
+   É ela que, junto com a fonte, faz reimportar o mesmo arquivo não duplicar
+   nada. Duas exigências: ser a MESMA a cada leitura do mesmo arquivo, e ser
+   única dentro do resultado. */
+
+describe("record_key", () => {
+  it("é a mesma a cada leitura do mesmo arquivo", () => {
+    const a = parseHealthCsv(SLEEP_CSV)!;
+    const b = parseHealthCsv(SLEEP_CSV)!;
+    expect(a.events.map((e) => e.record_key)).toEqual(b.events.map((e) => e.record_key));
+  });
+
+  it("usa a mesma regra da deduplicação: tipo e dia", () => {
+    const r = parseHealthCsv(SLEEP_CSV)!;
+    for (const ev of r.events) expect(ev.record_key).toBe(`${ev.kind}|${ev.day}`);
+  });
+
+  it("é única dentro do resultado, nos três formatos", () => {
+    for (const csv of [SLEEP_CSV, WORKOUT_CSV, MEASUREMENT_CSV]) {
+      const r = parseHealthCsv(csv)!;
+      const keys = r.events.map((e) => e.record_key);
+      expect(new Set(keys).size).toBe(keys.length);
+    }
+  });
+
+  it("não muda quando o arquivo GANHA linhas novas (importação incremental)", () => {
+    const antes = parseHealthCsv(MEASUREMENT_CSV)!;
+    const depois = parseHealthCsv(`${MEASUREMENT_CSV}\n"13 Set 2025, 00:00",116.1,,,,,,,,,,,,,,,`)!;
+    const novas = depois.events.map((e) => e.record_key);
+    for (const ev of antes.events) expect(novas).toContain(ev.record_key);
+  });
+});
+
+describe("PARSER_VERSION", () => {
+  it("identifica a regra que produziu os eventos", () => {
+    expect(PARSER_VERSION).toBe("health-csv/1");
   });
 });
