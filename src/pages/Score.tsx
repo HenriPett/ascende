@@ -14,6 +14,7 @@ import { daysAgoISOInSP } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import TrendInsights from "@/components/core/TrendInsights";
 import { Flame, TrendingUp, TrendingDown, Minus, CalendarCheck, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
 
 function clamp(n: number) { return Math.max(0, Math.min(100, Math.round(n))); }
@@ -383,6 +384,12 @@ export default function Score() {
         })}
       </div>
       )}
+
+      {/* Tendências: a leitura de segundo nível sobre os MESMOS registros que
+          alimentam os indicadores acima. Fica aqui, e não na Hoje, porque a
+          Hoje é para agir hoje — três meses de associação não competem com
+          "registre seu treino". */}
+      <TrendInsights />
 
       {/* Pilares pausados: uma linha discreta, não três cards apagados */}
       {pausedPillars.length > 0 && (
