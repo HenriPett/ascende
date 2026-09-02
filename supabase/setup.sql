@@ -1321,3 +1321,108 @@ create index if not exists transactions_data_source
 -- para não travar backfill futuro por engano.
 alter table public.profiles
   add column if not exists financial_cycle_day int;
+
+-- ─── 33. MEMÓRIA CONTROLÁVEL (Fase 2 do plano refinado) ─────────
+-- A memória deixa de ser uma lista plana que só a IA escreve e ganha ESTADO
+-- (ativa/confirmada/rejeitada/expirada), TEMPO (desde quando, até quando,
+-- quando foi verificada) e ORIGEM (de qual evento, mensagem ou arquivo
+-- nasceu). Motivo: memória errada sem como corrigir envenena todo turno
+-- seguinte do Conselheiro. Valores em português, como plans.status.
+alter table public.ai_memories
+  add column if not exists status text not null default 'ativa',
+  add column if not exists confidence numeric,
+  add column if not exists valid_from timestamptz,
+  add column if not exists valid_until timestamptz,
+  add column if not exists last_verified_at timestamptz,
+  add column if not exists sensitivity text not null default 'normal',
+  add column if not exists created_by text not null default 'ia';
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'ai_memories_status_valido') then
+    alter table public.ai_memories add constraint ai_memories_status_valido
+      check (status in ('ativa', 'confirmada', 'rejeitada', 'expirada'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'ai_memories_confidence_faixa') then
+    alter table public.ai_memories add constraint ai_memories_confidence_faixa
+      check (confidence is null or (confidence >= 0 and confidence <= 1));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'ai_memories_sensitivity_valida') then
+    alter table public.ai_memories add constraint ai_memories_sensitivity_valida
+      check (sensitivity in ('normal', 'sensivel'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'ai_memories_created_by_valido') then
+    alter table public.ai_memories add constraint ai_memories_created_by_valido
+      check (created_by in ('ia', 'usuario'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'ai_memories_validade_coerente') then
+    alter table public.ai_memories add constraint ai_memories_validade_coerente
+      check (valid_until is null or valid_from is null or valid_until > valid_from);
+  end if;
+end $$;
+
+-- Sem UPDATE, corrigir memória falha em SILÊNCIO (RLS casa zero linhas e
+-- devolve ok). A tela diria "salvo" sem ter salvado nada.
+drop policy if exists "memories_update_own" on public.ai_memories;
+create policy "memories_update_own" on public.ai_memories
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+-- A pessoa também pode ensinar algo direto; created_by travado em 'usuario'.
+drop policy if exists "memories_insert_own" on public.ai_memories;
+create policy "memories_insert_own" on public.ai_memories
+  for insert with check (auth.uid() = user_id and created_by = 'usuario');
+
+-- Origem da memória: "por que você acha isso sobre mim?" precisa ter
+-- resposta. ref_id é polimórfico (life_events, chat_messages, data_sources —
+-- as três chaves são uuid), por isso sem FK.
+create table if not exists public.memory_sources (
+  id uuid primary key default gen_random_uuid(),
+  memory_id uuid not null references public.ai_memories(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  -- life_event | chat_message | data_source
+  kind text not null,
+  ref_id uuid,
+  created_at timestamptz not null default now()
+);
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'memory_sources_kind_valido') then
+    alter table public.memory_sources add constraint memory_sources_kind_valido
+      check (kind in ('life_event', 'chat_message', 'data_source'));
+  end if;
+end $$;
+
+alter table public.memory_sources enable row level security;
+drop policy if exists "memory_sources_all_own" on public.memory_sources;
+create policy "memory_sources_all_own" on public.memory_sources
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create index if not exists memory_sources_memory
+  on public.memory_sources (memory_id);
+create index if not exists memory_sources_user_time
+  on public.memory_sources (user_id, created_at desc);
+create unique index if not exists memory_sources_unique
+  on public.memory_sources (memory_id, kind, ref_id) where ref_id is not null;
+
+-- Caminho quente: todo turno do Conselheiro lê as memórias vigentes.
+create index if not exists ai_memories_user_vigentes
+  on public.ai_memories (user_id, created_at desc)
+  where status <> 'rejeitada' and status <> 'expirada';
+create index if not exists ai_memories_valid_until
+  on public.ai_memories (valid_until) where valid_until is not null;
+
+-- A REGRA DE LEITURA em um lugar só (buildSnapshot, extração e Ajustes leem
+-- daqui). trust_rank = 0 para o que a pessoa confirmou, 1 para o resto:
+-- ordenar por (trust_rank, created_at desc) põe a palavra dela na frente.
+-- security_invoker mantém o RLS de ai_memories valendo dentro da view.
+create or replace view public.ai_memories_vigentes
+  with (security_invoker = true) as
+  select
+    m.*,
+    case when m.status = 'confirmada' then 0 else 1 end as trust_rank
+  from public.ai_memories m
+  where m.status <> 'rejeitada'
+    and m.status <> 'expirada'
+    and (m.valid_until is null or m.valid_until > now());
+
+grant select on public.ai_memories_vigentes to authenticated;

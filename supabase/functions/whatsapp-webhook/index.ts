@@ -24,6 +24,7 @@ import {
   serviceClient, assertRateLimit, isTrivialMessage, extractEventsAndMemories,
   buildSnapshot, MODEL_SMART, MODEL_FAST, SAFETY_RULES,
   CAPTURE_SYSTEM, CAPTURE_TOOL, STATEMENT_SYSTEM, STATEMENT_TOOL, normalizeStatementItems,
+  attachMemorySources,
 } from "../_shared/lib.ts";
 import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage } from "../_shared/usage.ts";
 import {
@@ -139,12 +140,14 @@ function captureOutcomeLine(outcome: "registrado" | "descartado" | "expirado", e
 async function pushHistory(
   // deno-lint-ignore no-explicit-any
   supabase: any, userId: string, role: "user" | "assistant", content: string,
-): Promise<void> {
+): Promise<string | null> {
   const body = String(content ?? "").trim();
-  if (!body) return; // chat_messages tem CHECK de conteúdo não vazio
-  const { error } = await supabase.from("chat_messages")
-    .insert({ user_id: userId, role, content: body.slice(0, 4000) });
-  if (error) console.error("wa histórico", error.message ?? error);
+  if (!body) return null; // chat_messages tem CHECK de conteúdo não vazio
+  const { data, error } = await supabase.from("chat_messages")
+    .insert({ user_id: userId, role, content: body.slice(0, 4000) })
+    .select("id").maybeSingle();
+  if (error) { console.error("wa histórico", error.message ?? error); return null; }
+  return data?.id ? String(data.id) : null;
 }
 
 /** O histórico deixou de vir sempre em pares (o relato entra na proposta, o
@@ -182,19 +185,20 @@ async function proposeEvents(
   /** A rota conversacional já gravou o turno em chat_messages antes de chegar
    *  aqui; sem isto a fala da pessoa entraria duas vezes no histórico. */
   skipHistory = false,
-): Promise<void> {
+): Promise<string | null> {
   await supabase.from("whatsapp_pending").upsert({
     user_id: userId, events, created_at: new Date().toISOString(),
   });
   // Só o relato da pessoa: o desfecho entra no wa_confirm/wa_discard, porque
   // é lá que se sabe o que de fato foi para o diário.
-  if (!skipHistory) await pushHistory(supabase, userId, "user", userText);
+  const userMsgId = skipHistory ? null : await pushHistory(supabase, userId, "user", userText);
   const lines = events.slice(0, WA_STATEMENT_MAX_ITEMS)
     // deno-lint-ignore no-explicit-any
     .map((e: any) => `• ${e.summary ?? e.kind} (+${xpForKind(String(e.kind))} XP)`).join("\n");
   await waSendButtons(from,
     `${preface ? preface + "\n\n" : ""}Entendi assim:\n\n${lines}${events.length > WA_STATEMENT_MAX_ITEMS ? `\n… e mais ${events.length - WA_STATEMENT_MAX_ITEMS}` : ""}\n\nConfirmo?  Para ajustar detalhes, revise no app: ${url}/app`,
     [{ id: "wa_confirm", title: "✓ Confirmar" }, { id: "wa_discard", title: "✗ Descartar" }]);
+  return userMsgId;
 }
 
 const HELP = (url: string) =>
@@ -361,11 +365,14 @@ async function counselorTurn(
 
   // Persistência ANTES do envio: é ela que conta a cota (mesma regra do app)
   // e que faz a conversa aparecer no app.
-  const { error: insertErr } = await supabase.from("chat_messages").insert([
+  const { data: insertedMsgs, error: insertErr } = await supabase.from("chat_messages").insert([
     { user_id: userId, role: "user", content: historyLabel ?? text },
     { user_id: userId, role: "assistant", content: reply },
-  ]);
+  ]).select("id,role");
   if (insertErr) console.error("wa chat_messages insert", insertErr.message);
+  // Origem das memórias deste turno (Fase 2): a fala da pessoa.
+  // deno-lint-ignore no-explicit-any
+  const userMsgId = (insertedMsgs ?? []).find((m: any) => m.role === "user")?.id ?? null;
 
   await waSendText(from, reply.slice(0, 3900));
 
@@ -394,9 +401,10 @@ async function counselorTurn(
       if (prev && prev !== text) forExtraction = `${prev}\n${text}`;
     }
 
-    const { ok, events } = await extractEventsAndMemories(
+    const { ok, events, learned } = await extractEventsAndMemories(
       supabase, userId, forExtraction, "chat-extracao", ent.limits.memory_cap,
     );
+    await attachMemorySources(supabase, userId, learned.map((m) => m.id), "chat_message", userMsgId);
 
     // Uma proposta pendente por vez: sobrescrever a que a pessoa ainda não
     // respondeu faria o botão "Confirmar" gravar outra coisa.
@@ -828,7 +836,7 @@ Deno.serve(async (req) => {
     }
 
     if (!captureExhausted) {
-      const { ok, events } = await extractEventsAndMemories(
+      const { ok, events, learned } = await extractEventsAndMemories(
         supabase, link.user_id, text, "capture", ent.limits.memory_cap, { reservationId },
       );
       if (!ok) {
@@ -836,8 +844,12 @@ Deno.serve(async (req) => {
         await waSendText(from, "Não consegui interpretar agora (a tentativa não contou no seu limite). Tenta de novo em instantes?");
         return new Response("ok", { status: 200 });
       }
+      const memoryIds = learned.map((m) => m.id);
       if (events.length) {
-        await proposeEvents(supabase, link.user_id, from, events, url, text, preface);
+        // proposeEvents grava a fala da pessoa e devolve o id: é a origem das
+        // memórias extraídas deste relato (Fase 2).
+        const msgId = await proposeEvents(supabase, link.user_id, from, events, url, text, preface);
+        await attachMemorySources(supabase, link.user_id, memoryIds, "chat_message", msgId);
         return new Response("ok", { status: 200 });
       }
       // Nada registrável: a tentativa NÃO consome o limite de captura —
