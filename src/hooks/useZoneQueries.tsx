@@ -36,10 +36,14 @@ export function useSleepTodayQuery(enabled: boolean) {
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
       const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-      const { count } = await supabase.from("life_events")
+      const { count, error } = await supabase.from("life_events")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user!.id).eq("kind", "sleep")
         .gte("occurred_at", dayStart.toISOString());
+      // Sem isto, a falha respondia "não dormiu" e o check-in matinal
+      // reaparecia para quem já tinha respondido. Com o throw, `data` fica
+      // undefined e quem consome compara com `=== false`: a zona some.
+      if (error) throw error;
       return (count ?? 0) > 0;
     },
   });
@@ -82,9 +86,12 @@ export function useWhatsappLinkQuery(pollingWhileCode: string | null) {
     refetchInterval: (q) =>
       pollingWhileCode && !(q.state.data as WhatsappLink | null)?.linked_at ? 4000 : false,
     queryFn: async (): Promise<WhatsappLink | null> => {
-      const { data } = await supabase.from("whatsapp_links")
+      const { data, error } = await supabase.from("whatsapp_links")
         .select("phone, linked_at, notify_retro, notify_briefing, notify_return")
         .maybeSingle();
+      // Falha virava "não vinculado" — e o app convidava a parear de novo
+      // um número que já está pareado.
+      if (error) throw error;
       return (data as WhatsappLink | null) ?? null;
     },
   });
@@ -99,8 +106,9 @@ export function useHasAnyEventQuery(enabled: boolean) {
     enabled: enabled && !!user,
     staleTime: 1000 * 60 * 10,
     queryFn: async () => {
-      const { count } = await supabase.from("life_events")
+      const { count, error } = await supabase.from("life_events")
         .select("id", { count: "exact", head: true }).eq("user_id", user!.id);
+      if (error) throw error;
       return (count ?? 0) > 0;
     },
   });

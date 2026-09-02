@@ -55,8 +55,3 @@ export default function ProfileCompleteness() {
     </Card>
   );
 }
-
-/* ── Seus planos ativos (análise UX item 2): o Blueprint é o clímax de um
-   onboarding de 9 blocos — e sumia atrás de dois toques (Pilares > Meus
-   planos). Aqui ele volta para a tela onde a pessoa vive, como atalho, sem
-   duplicar a gestão: ver, abrir e acompanhar continua em Meus planos. ── */

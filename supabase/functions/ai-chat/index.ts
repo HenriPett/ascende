@@ -41,17 +41,17 @@ function normalizeTurns(turns: { role: string; content: any }[]): { role: string
   return out;
 }
 
-const SYSTEM = `Você é o Conselheiro do Ascende, uma plataforma brasileira de qualidade de vida. Você é a única IA que enxerga TODAS as áreas da vida da pessoa ao mesmo tempo: finanças, corpo, alimentação, mente e espírito. Seu papel é ajudá-la a subir de nível na vida real.
+const SYSTEM = `Você é o Conselheiro do Ascende, uma plataforma brasileira de qualidade de vida. Você enxerga TODAS as áreas da vida da pessoa ao mesmo tempo: finanças, corpo, alimentação, mente e espírito. É isso que nenhum app de nicho consegue fazer, e é de onde vem todo o seu valor. Seu papel é ajudá-la a subir de nível na vida real.
 
 ━━━ COMO VOCÊ RESPONDE ━━━
-• Português do Brasil, tom caloroso e direto, sem jargão. Máximo 4 parágrafos curtos.
+• Português do Brasil, tom caloroso e direto, sem jargão. Máximo 4 parágrafos curtos quando a resposta é conversa. Entrega de plano definitivo é a exceção: ela segue o formato do protocolo de planos mais abaixo e não cabe neste limite.
 • SEMPRE cruze pilares quando fizer sentido: um plano alimentar deve caber no orçamento; uma meta financeira deve considerar o momento emocional; um plano de treino deve respeitar o sono. Esse cruzamento é o seu superpoder — use os dados do retrato abaixo.
 • Toda sugestão vem com o porquê nos dados ("sugiro X porque seu sono caiu e seu gasto com lazer está em 80% do planejado").
 • Quando montar planos (alimentar, financeiro, de treino), ofereça versões em faixas de custo quando houver orçamento envolvido, com valores estimados em reais.
 • Termine com UM próximo passo pequeno e concreto.
 • ENTREGA NO MESMO TURNO: você não tem "próxima mensagem" garantida — cada mensagem da pessoa consome o limite dela. NUNCA anuncie que "vai gerar", que está "gerando agora" ou que entrega "na próxima mensagem": se decidiu gerar algo (plano, análise, resposta), o resultado COMPLETO vem nesta mesma resposta. Anunciar sem entregar é uma falha grave.
 • Se faltar dado importante, diga o que registrar para você ajudar melhor.
-• ESTILO: escreva como uma pessoa escreve, não como IA. NUNCA use travessão ou meia-risca (— ou –) na resposta; no lugar, use vírgula, dois-pontos, parênteses ou comece outra frase. Evite também fórmulas prontas como "Vamos lá!", "Com certeza!" ou fechos genéricos.
+• ESTILO: escreva como uma pessoa escreve, não como IA. NUNCA use travessão ou meia-risca (— ou –) na resposta; no lugar, use vírgula, dois-pontos, parênteses ou comece outra frase. (Estas instruções usam travessão; a proibição vale para o que VOCÊ escreve, não para o que você lê aqui.) Evite também fórmulas prontas como "Vamos lá!", "Com certeza!" ou fechos genéricos.
 
 ━━━ SUA MEMÓRIA ━━━
 Você aprende sobre a pessoa a cada conversa: o retrato abaixo inclui memórias de conversas anteriores (preferências, rotina, contexto de vida, jeito de ser). Use-as ATIVAMENTE para personalizar respostas e planos: se ela não gosta de um exercício, não o sugira; se trabalha à noite, os horários sugeridos respeitam isso; se pediu respostas diretas, seja direto. Referencie o que já sabe com naturalidade, como um amigo que lembra ("como você prefere treinar de manhã..."), sem recitar listas, sem soar como vigilância e sem repetir na mesma conversa que "guardou" algo.
@@ -62,6 +62,7 @@ Você só pode afirmar que ela comeu, treinou, gastou, dormiu ou registrou algo 
 • Se ela disser que já te contou algo e você não encontrar, diga com honestidade que não localizou o registro e peça para ela confirmar em uma frase. "Não achei esse registro aqui, me confirma o que foi?" é uma resposta boa e esperada. Inventar um detalhe plausível para preencher a lacuna é uma falha grave.
 • Nunca cite alimento, exercício, valor, horário ou refeição específicos que você não leu no retrato ou no histórico.
 • O retrato é a fonte mais confiável sobre o que foi REGISTRADO; o histórico é a fonte sobre o que foi DITO. Quando os dois divergirem, diga o que você vê em vez de escolher a versão mais bonita.
+• DATA: a data de hoje em São Paulo é a PRIMEIRA linha do retrato. Use-a para entender "ontem", "na terça", "semana passada" — e nunca afirme a data de um registro que você não leu no retrato. Se a pessoa contar algo de um dia passado e a expressão não determinar UM único dia ("semana passada", "na segunda", "outro dia"), pergunte qual foi o dia em vez de escolher: o registro entra na data que você deixar passar, e no dia errado ela não o encontra mais.
 • Errar por perguntar custa uma frase. Errar por inventar custa a confiança dela em tudo que você diz, inclusive no que está correto.
 
 ━━━ ARQUIVOS ANEXADOS: DIGA O QUE ENTROU, NUNCA "ABSORVI" ━━━
@@ -86,6 +87,8 @@ DADOS OBRIGATÓRIOS por tipo (verifique no retrato e na conversa):
 • Plano financeiro/orçamento: renda mensal, teto de gastos desejado, objetivo.
 
 REGRAS:
+A. UM TURNO NÃO PEDE E NÃO ENTREGA AO MESMO TEMPO. Se você está pedindo dados, esta resposta NÃO traz plano e você NÃO chama registrar_plano. Se você está entregando o plano, o texto PARA de pedir: é proibido escrever "ainda preciso das suas respostas", "assim que você me responder eu monto" ou equivalente ao lado de um plano entregue. No lugar disso, o plano declara o que assumiu em "Premissas que assumi" e o texto convida a corrigir ("se algum desses pontos estiver diferente do seu caso, me diga e eu refaço"). Pedir e entregar na mesma mensagem se contradiz na cara da pessoa e joga fora a confiança na resposta inteira, inclusive na parte correta dela.
+B. SAÚDE NUNCA SE ASSUME. Lesão, dor, condição de saúde e medicamento entram no plano SOMENTE se estiverem no retrato ou se a pessoa tiver dito nesta conversa. É PROIBIDO escrever "sem lesões", "sem lesões conhecidas", "sem restrições" ou "nenhuma condição relatada" como premissa: ausência de dado não é ausência de lesão, e essa suposição é a única do protocolo que pode machucar alguém. Faltando esse dado: diga em UMA frase que você não sabe se existe lesão ou condição, entregue a versão conservadora do plano (carga moderada, progressão lenta, movimentos de baixo impacto, nada de exercício de risco para coluna, ombro ou joelho) e evite justamente o que dependeria do dado que falta. Idade, sexo, altura, dias disponíveis e nível de atividade podem virar premissa declarada; saúde, não.
 0. NUNCA afirme que a pessoa pulou, esqueceu ou deixou de preencher uma etapa, e nunca cite telas ou etapas que não estejam listadas no retrato: você não sabe o que o app perguntou a ela. Metas (calórica, proteína, treinos, sono, teto de gasto) não são perguntadas em formulário nenhum: elas nascem de um plano ativado. Peça dados de forma neutra, sem atribuir culpa ou causa.
 1. Se QUALQUER dado obrigatório estiver ausente, NÃO gere o plano completo. Responda curto, em UMA única mensagem de perguntas: diga em uma frase por que precisa dos dados e liste TUDO o que falta de uma vez (nunca em conta-gotas), indicando onde preencher (idade, sexo, altura, atividade e restrições em Ajustes na seção "Sobre você"; peso na aba Alimentação; condições e medicamentos na Vitalidade; renda e teto em Ajustes). A pessoa também pode responder direto na conversa: aceite e use.
 2. A lista de dados obrigatórios acima é FECHADA: você não pode inventar pré-requisitos novos. NÃO são pré-requisito de nenhum plano (nunca segure a entrega por eles): meta de peso, meta de sono, peso atual para plano de TREINO, metas calóricas para plano de treino, horários exatos da rotina, preferências de exercício. Se forem úteis e você não os tiver, assuma um padrão razoável, declare a premissa e siga; se a pessoa quiser ajustar depois, ela ajusta.
@@ -239,7 +242,7 @@ Deno.serve(async (req) => {
     await assertRateLimit(supabase, user.id, "ai-chat", 60, 5);
     const { message, attachments } = await req.json();
     if (!message || typeof message !== "string" || message.length > 4000) {
-      return json({ error: "Mensagem inválida." }, 400);
+      return json({ error: "Não consegui ler sua mensagem. Ela precisa ter texto e no máximo 4000 caracteres." }, 400);
     }
 
     // ── Anexos (fotos, PDFs e documentos de texto) ──
@@ -288,7 +291,7 @@ Deno.serve(async (req) => {
         );
         attNames.push(name);
       } else {
-        return json({ error: `Anexo inválido ou grande demais: ${name}.` }, 400);
+        return json({ error: `Não consegui usar o anexo "${name}". Aceito imagem (JPG, PNG ou WebP), PDF e arquivo de texto, e ele precisa ser mais leve. Tente enviar de novo.` }, 400);
       }
     }
     const attachmentText = attachmentChunks.join("\n\n");
@@ -315,16 +318,24 @@ Deno.serve(async (req) => {
       if (!premium) {
         return json({ error: `Você atingiu o limite de ${LEGACY_DAILY_LIMIT} mensagens por dia. Amanhã o Conselheiro estará aqui de novo.` }, 429);
       }
+      // O número entra na frase pelo MESMO valor que vai no cabeçalho do
+      // limite. Interpolar `L.chat_*` direto já escreveu "Você usou as
+      // undefined mensagens desta semana" quando a configuração não trazia a
+      // janela — e uma mensagem de limite é o pior lugar para um número
+      // fantasma: é ela que a pessoa lê para saber quanto pode usar.
       if (chatRes.window === "weekly") {
-        return limitResponse(req, "counselor", L.chat_weekly ?? 0, nextSpWeekStartUtc(),
-          `Você usou as ${L.chat_weekly} mensagens desta semana com o Conselheiro.`);
+        const cap = L.chat_weekly ?? 0;
+        return limitResponse(req, "counselor", cap, nextSpWeekStartUtc(),
+          `Você usou as ${cap} mensagens desta semana com o Conselheiro.`);
       }
       if (chatRes.window === "monthly") {
-        return limitResponse(req, "counselor", L.chat_monthly ?? 0, nextSpMonthStartUtc(),
-          `Você usou as ${L.chat_monthly} mensagens deste mês com o Conselheiro.`);
+        const cap = L.chat_monthly ?? 0;
+        return limitResponse(req, "counselor", cap, nextSpMonthStartUtc(),
+          `Você usou as ${cap} mensagens deste mês com o Conselheiro.`);
       }
-      return limitResponse(req, "counselor", L.chat_daily ?? LEGACY_DAILY_LIMIT, nextSpDayStartUtc(),
-        `Você usou as ${L.chat_daily} mensagens de hoje com o Conselheiro.`);
+      const cap = L.chat_daily ?? LEGACY_DAILY_LIMIT;
+      return limitResponse(req, "counselor", cap, nextSpDayStartUtc(),
+        `Você usou as ${cap} mensagens de hoje com o Conselheiro.`);
     }
     chatReservation = chatRes.id;
 
@@ -371,7 +382,10 @@ Deno.serve(async (req) => {
         "Você NÃO pode fazer novas perguntas sobre o mesmo pedido neste turno. " +
         "Se o pedido era um plano definitivo, ENTREGUE o plano completo AGORA e chame registrar_plano — " +
         "anunciar que vai gerar NÃO é entregar: a resposta sem a chamada de registrar_plano é uma falha; " +
-        "o que ainda faltar, assuma um padrão razoável e declare na seção \"Premissas que assumi\". " +
+        "o que ainda faltar, assuma um padrão razoável e declare na seção \"Premissas que assumi\" — " +
+        "com UMA exceção: dados de saúde (lesão, dor, condição, medicamento) nunca se assumem. " +
+        "Não escreva \"sem lesões\": diga que não sabe e entregue a versão conservadora do plano. " +
+        "E como você está entregando, o texto NÃO pode continuar pedindo os dados. " +
         "Se a resposta dela não respondeu suas perguntas (mudou de assunto, pediu outra coisa), " +
         "atenda ao novo assunto normalmente — mas não repita a rodada de perguntas antiga."
       : "";
@@ -440,7 +454,7 @@ Deno.serve(async (req) => {
           ? `Registros extraídos e PROPOSTOS no cartão de confirmação desta resposta: ${proposable.length}. A pessoa ainda precisa confirmar no cartão; nada foi gravado ainda.`
           : `Nenhum registro do dia de hoje foi extraído do arquivo, então NADA foi proposto para registro.`);
         if (historical > 0) {
-          partes.push(`O arquivo tem ${historical} linha(s) com data de dias anteriores. Elas NÃO foram propostas: o registro por conversa carimba a data de hoje, e importar histórico por aqui bagunçaria a linha do tempo dela. O caminho certo para histórico é "Importar dados de saúde", no app.`);
+          partes.push(`O arquivo tem ${historical} ${historical === 1 ? "linha" : "linhas"} com data de dias anteriores. ${historical === 1 ? "Ela NÃO foi proposta" : "Elas NÃO foram propostas"}: o registro por conversa carimba a data de hoje, e importar histórico por aqui bagunçaria a linha do tempo dela. O caminho certo para histórico é "Importar dados de saúde", no app.`);
         }
         if (attachmentTruncated || raw.capped) {
           partes.push(`ATENÇÃO: o arquivo tem MAIS dados do que coube nesta leitura (o limite é ${EXTRACTION_MAX_EVENTS} registros por conversa). Diga isso claramente e aponte "Importar dados de saúde", no app, para trazer o arquivo inteiro.`);
@@ -449,7 +463,7 @@ Deno.serve(async (req) => {
       ingestionFacts =
         `\n\n━━━ LEITURA DOS ARQUIVOS ANEXADOS (fatos apurados pelo sistema, não estimativa) ━━━\n` +
         partes.join("\n") +
-        `\nUse EXATAMENTE estes números ao falar do arquivo. É PROIBIDO dizer que absorveu, importou, salvou ou registrou os dados: o que existe é uma proposta de ${proposable.length} registro(s) aguardando a confirmação dela. Não invente quantidades e não prometa importar o resto sozinho.`;
+        `\nUse EXATAMENTE estes números ao falar do arquivo. É PROIBIDO dizer que absorveu, importou, salvou ou registrou os dados: o que existe é uma proposta de ${proposable.length} ${proposable.length === 1 ? "registro" : "registros"} aguardando a confirmação dela. Não invente quantidades e não prometa importar o resto sozinho.`;
     }
 
     const { res, data: mainData } = await anthropicCall(supabase, user.id, "chat-principal", {
@@ -614,7 +628,13 @@ Deno.serve(async (req) => {
     // promessa e força a geração AINDA NESTE request, com tool_choice
     // obrigatório em registrar_plano. Falha aqui não derruba a resposta:
     // no pior caso a promessa vira um aviso honesto de como obter o plano.
-    const promisedPlan = !plan && !reply.trim().endsWith("?") &&
+    /* Uma resposta que ainda pede dados não é uma promessa de plano não
+       entregue: é uma rodada de perguntas legítima. Forçar o plano aqui era a
+       origem da contradição do achado de QA nº 2. Só o "?" no fim não bastava:
+       no caso real a pergunta estava no meio do texto. */
+    const replyStillAsks = /\?/.test(reply) ||
+      /\b(preciso (de|das|dos|saber)|me (diz|diga|conta|informa)|ainda (preciso|falta|faltam)|assim que (você|vc) (me )?responder|aguardo (suas|as) respostas)\b/i.test(reply);
+    const promisedPlan = !plan && !replyStillAsks &&
       /\b(gerando( o plano)?( agora)?|vou (montar|gerar|criar)|montando (o |seu )?plano|(gero|monto|crio|entrego) [^.!?]{0,40}?(plano|treino|dieta|or[çc]amento)|pr[óo]xima mensagem)\b/i.test(reply);
     if (promisedPlan) {
       try {
@@ -632,7 +652,7 @@ Deno.serve(async (req) => {
             { role: "assistant", content: reply },
             {
               role: "user",
-              content: 'Gere AGORA o plano completo que você acabou de prometer, chamando registrar_plano com o content_markdown completo e autossuficiente, no formato obrigatório do app. Se algum dado secundário estiver faltando, comece com a seção "Premissas que assumi". Não faça nenhuma pergunta.',
+              content: 'Gere AGORA o plano completo que você acabou de prometer, chamando registrar_plano com o content_markdown completo e autossuficiente, no formato obrigatório do app. Se algum dado secundário estiver faltando, comece com a seção "Premissas que assumi". NUNCA suponha dados de saúde: é proibido escrever "sem lesões" ou "sem restrições" como premissa — se você não tem essa informação, diga no plano que não sabe e entregue a versão conservadora, evitando o que dependeria dela. Não faça nenhuma pergunta.',
             },
           ],
         });
@@ -654,6 +674,14 @@ Deno.serve(async (req) => {
         // histórico do que uma promessa vazia.
         reply = `${reply}\n\nNão consegui concluir a geração do plano agora. Me peça de novo com "gere o plano" que eu entrego direto, sem novas perguntas.`;
       }
+    }
+
+    /* Se o modelo desobedecer à regra A e devolver plano + texto pedindo
+       dados, a contradição fica de pé na tela. Não reescrevemos a resposta
+       dele; acrescentamos a frase que reconcilia as duas metades e mantém a
+       virtude do fluxo (as premissas ficam declaradas, não escondidas). */
+    if (plan && replyStillAsks) {
+      reply = `${reply}\n\nO plano no cartão abaixo já está montado com as premissas que declarei nele, então você não precisa responder nada antes de olhar. Se algum ponto estiver diferente do seu caso, me diga e eu refaço.`;
     }
 
     // Compromissos diários propostos: cartão de escolha no app, nada é
@@ -755,6 +783,6 @@ Deno.serve(async (req) => {
     await refundAll().catch((err) => console.error("refundAll", err));
     if (e instanceof Response) return e;
     console.error(e);
-    return json({ error: "Erro interno." }, 500);
+    return json({ error: "Algo falhou do nosso lado. Tente de novo em instantes; se continuar, mande um feedback pelos Ajustes." }, 500);
   }
 });

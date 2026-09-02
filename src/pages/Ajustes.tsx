@@ -23,6 +23,7 @@ import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
 import HealthImport from "@/components/core/HealthImport";
 import SourcesAndImports from "@/components/core/SourcesAndImports";
 import MemoryControl from "@/components/core/MemoryControl";
+import QueryError from "@/components/core/QueryError";
 import { useGuides } from "@/hooks/useGuides";
 import { useMokariPreference } from "@/hooks/useMokariPreference";
 import FeedbackDialog from "@/components/core/FeedbackDialog";
@@ -40,7 +41,7 @@ const THEMES: { id: Theme; label: string; icon: typeof Sun }[] = [
 export default function Ajustes() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { profile, refresh } = useProfile();
+  const { profile, refresh, isError: profileError, isFetching: profileFetching } = useProfile();
   const { theme, setTheme } = useTheme();
 
   const [name, setName] = useState("");
@@ -141,7 +142,7 @@ export default function Ajustes() {
       pillars,
     }).eq("user_id", user.id);
     setSaving(false);
-    if (error) { toast.error("Não consegui salvar."); return; }
+    if (error) { toast.error("Não consegui salvar seus ajustes. Tente de novo."); return; }
     toast.success("Ajustes salvos.");
     refresh();
   };
@@ -172,7 +173,7 @@ export default function Ajustes() {
     const next = { ...scopes, [id]: on };
     setScopes(next);
     const { error } = await supabase.from("profiles").update({ ai_scopes: next }).eq("user_id", user.id);
-    if (error) { toast.error("Não consegui salvar a preferência."); setScopes(scopes); return; }
+    if (error) { toast.error("Não consegui salvar a preferência. Tente de novo."); setScopes(scopes); return; }
     toast.success(on ? "O Conselheiro voltará a considerar essa área." : "O Conselheiro deixará essa área de fora das análises.");
   };
 
@@ -189,7 +190,7 @@ export default function Ajustes() {
     if (on) delete next[id]; else next[id] = false;
     setTrackingPrefs(next);
     const { error } = await supabase.from("profiles").update({ tracking_prefs: next }).eq("user_id", user.id);
-    if (error) { toast.error("Não consegui salvar a preferência."); setTrackingPrefs(trackingPrefs); return; }
+    if (error) { toast.error("Não consegui salvar a preferência. Tente de novo."); setTrackingPrefs(trackingPrefs); return; }
     toast.success(on
       ? "Reativado — tudo volta, com o histórico intacto."
       : "Desligado. Isso some das telas e das análises; nada foi apagado.");
@@ -281,7 +282,7 @@ export default function Ajustes() {
   const [clearingMemories, setClearingMemories] = useState(false);
   const clearMemories = async () => {
     if (!user) return;
-    if (!window.confirm("Apagar TUDO que o Conselheiro aprendeu sobre você em conversas? Isso não apaga seus registros (gastos, treinos, refeições...), só as memórias da IA.")) return;
+    if (!window.confirm("Apagar TUDO que o Conselheiro aprendeu sobre você em conversas? Isso não apaga seus registros (gastos, treinos, refeições) — só as memórias dele.")) return;
     setClearingMemories(true);
     const { error } = await supabase.from("ai_memories").delete().eq("user_id", user.id);
     setClearingMemories(false);
@@ -293,6 +294,19 @@ export default function Ajustes() {
   return (
     <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
       <h1 className="font-display text-2xl font-semibold">Ajustes</h1>
+
+      {/* Sem isto, a falha de leitura deixava todos os campos em branco e a
+          página parecia um perfil vazio. Salvar já está protegido (o botão
+          exige `dirty`, que exige perfil carregado), mas a pessoa merece saber
+          por que a tela está assim. */}
+      {profileError && (
+        <QueryError
+          title="Não consegui carregar o seu perfil."
+          detail="Pode ser a conexão — nada foi alterado, e os campos abaixo voltam assim que a leitura funcionar."
+          onRetry={refresh}
+          retrying={profileFetching}
+        />
+      )}
 
       {/* Aparência */}
       <Card className="p-4 space-y-3">
@@ -329,7 +343,7 @@ export default function Ajustes() {
           <Input id="name" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="goal">Seu objetivo (a bússola da IA)</Label>
+          <Label htmlFor="goal">Seu objetivo (a bússola do Conselheiro)</Label>
           <Input id="goal" maxLength={200} value={goal} onChange={(e) => setGoal(e.target.value)}
             placeholder='Ex.: "Ganhar massa sem estourar o orçamento"' />
         </div>
@@ -467,8 +481,8 @@ export default function Ajustes() {
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Restrições, perfil e pilares entram junto no botão Salvar — o aviso aparece
-            embaixo enquanto houver algo pendente.
+            Restrições, perfil e pilares só valem depois de tocar em Salvar. Enquanto houver
+            algo pendente, o aviso acompanha você no rodapé da tela.
           </p>
         </div>
       </Card>
@@ -477,7 +491,8 @@ export default function Ajustes() {
         <div>
           <h2 className="font-display font-semibold">Pilares ativos</h2>
           <p className="text-xs text-muted-foreground">
-            Ative quando estiver pronto — os inativos continuam acessíveis, só saem do foco.
+            Ative quando estiver pronto. Os pausados saem do app e voltam em 1 toque, sem
+            perder nada do histórico.
           </p>
         </div>
         {PILLARS.map((p) => (
@@ -501,7 +516,7 @@ export default function Ajustes() {
           <h2 className="font-display font-semibold">O que você acompanha</h2>
           <p className="text-xs text-muted-foreground">
             Não quer acompanhar água? Desligue — o anel, os botões de 1 toque e a
-            cobrança do briefing somem na hora. Desligar esconde, não apaga: seu
+            lembrança no briefing somem na hora. Desligar esconde, não apaga: seu
             histórico continua seu, e religa em 1 toque.
           </p>
         </div>
@@ -576,7 +591,7 @@ export default function Ajustes() {
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => {
             resetGuides();
-            toast.success("Prontinho: as dicas vão aparecer de novo em cada área.");
+            toast.success("Pronto: as dicas vão aparecer de novo em cada área.");
           }}>
             Ver as dicas de novo
           </Button>
@@ -756,10 +771,19 @@ export default function Ajustes() {
           </p>
           <p className="text-xs text-muted-foreground">
             Apaga definitivamente sua conta e TODOS os dados (registros, conversas, memórias,
-            planos, XP). Não tem volta. Se tiver assinatura ativa, cancele antes pelo portal
-            na página Assinatura. Dica: exporte seus dados acima antes de excluir.
+            planos, XP). Não tem volta. Se tiver assinatura ativa, cancele antes na página
+            Assinatura. Dica: exporte seus dados acima antes de excluir.
           </p>
-          <Button variant="destructive" size="sm" onClick={() => { setDeleteText(""); setDeleteOpen(true); }}>
+          {/* O token --destructive (4 72% 52/58%) com a tinta clara dá 4,34:1
+              no claro e 3,56:1 no escuro — abaixo do mínimo AA de 4,5:1 para
+              texto normal (QA visual, M2). Mesma matiz e saturação da casa, só
+              mais profunda: 5,62:1 no claro e 5,38:1 no escuro. O certo seria
+              escurecer o token em index.css, que não é meu nesta rodada. */}
+          <Button
+            variant="destructive" size="sm"
+            className="bg-[hsl(4_72%_44%)] hover:bg-[hsl(4_72%_38%)]"
+            onClick={() => { setDeleteText(""); setDeleteOpen(true); }}
+          >
             Excluir conta e dados
           </Button>
         </div>

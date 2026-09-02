@@ -40,7 +40,7 @@ export default function GoalInput({
         aria-label={placeholder}
       />
       <Button size="sm" variant="outline" className="h-9 shrink-0" onClick={submit}>
-        <Target className="w-3.5 h-3.5 mr-1.5" /> Meta
+        <Target className="w-3.5 h-3.5 mr-1.5" /> Definir meta
       </Button>
     </div>
   );

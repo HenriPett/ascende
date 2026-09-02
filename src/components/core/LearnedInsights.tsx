@@ -22,7 +22,7 @@ export default function LearnedInsights({
         </p>
         <Button
           variant="ghost" size="icon" className="h-6 w-6 -mt-0.5 -mr-1 text-muted-foreground"
-          onClick={onDismiss} aria-label="Dispensar"
+          onClick={onDismiss} aria-label="Dispensar o que o Conselheiro aprendeu"
         >
           <X className="w-3.5 h-3.5" />
         </Button>

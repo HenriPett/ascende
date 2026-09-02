@@ -16,10 +16,14 @@ import { ALL_GUIDE_IDS, type GuideId } from "@/lib/guides";
  */
 export function useGuides() {
   const { user } = useAuth();
-  const { profile } = useProfile();
+  const { profile, isError } = useProfile();
   const qc = useQueryClient();
 
   const seen = new Set(profile?.guides_seen ?? []);
+  // `ready` exige perfil CARREGADO, e é isso que faz a falha errar para o lado
+  // certo: sem saber o que já foi visto, não mostramos dica nenhuma. Trocar
+  // isto por `guides_seen ?? []` sem o `ready` faria toda dica reaparecer para
+  // quem já dispensou — falha de rede virando enxurrada de dica.
   const ready = !!profile;
 
   const persist = async (next: string[]) => {
@@ -42,6 +46,8 @@ export function useGuides() {
 
   return {
     ready,
+    /** A lista de dicas vistas não pôde ser lida (nenhuma dica é mostrada). */
+    isError,
     shouldShow: (id: GuideId) => ready && !seen.has(id),
     markSeen,
     disableAll: () => markSeen(ALL_GUIDE_IDS),

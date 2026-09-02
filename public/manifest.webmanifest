@@ -2,7 +2,7 @@
   "id": "/app",
   "name": "Ascende — O app que vê a sua vida inteira",
   "short_name": "Ascende",
-  "description": "O único app que vê a sua vida inteira: corpo, dinheiro, alimentação e mente no mesmo lugar, com uma IA que conecta os pontos.",
+  "description": "Corpo, dinheiro, alimentação e mente no mesmo lugar. Você conta o dia numa frase e a IA registra o resto.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",

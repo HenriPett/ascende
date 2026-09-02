@@ -7,9 +7,9 @@ export default function SiteFooter() {
     <footer className="border-t">
       <div className="container py-8 text-center">
         <p className="text-xs text-muted-foreground max-w-2xl mx-auto">
-          O Ascende não substitui médicos, nutricionistas, psicólogos ou consultores de investimento,
+          O Ascende não substitui médicos, nutricionistas, psicólogos ou consultores de investimento
           e não faz recomendações de produtos financeiros. Se você estiver passando por um momento
-          difícil, o CVV atende 24h pelo telefone 188.
+          difícil, o CVV atende de graça, 24 horas por dia, no telefone 188.
         </p>
         <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-4 text-xs">
           <Link to="/recusas" className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">O que o Ascende recusa</Link>

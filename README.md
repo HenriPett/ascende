@@ -2,6 +2,8 @@
 
 Você conta seu dia numa frase ("gastei 47 no mercado, treinei pernas e dormi 6h") e o Ascende registra tudo nos lugares certos. Corpo, dinheiro, alimentação e mente no mesmo lugar, com um Conselheiro que monta, por exemplo, o plano alimentar que cabe no seu orçamento — porque é o único que conhece os dois lados.
 
+E o que você já registrou em outros aplicativos vem junto: o export do app Saúde do iPhone entra inteiro, e há leitura de CSV de apps de sono, treino, peso e alimentação (veja [Importar histórico de outros aplicativos](#importar-histórico-de-outros-aplicativos)).
+
 Este guia leva você do zero ao app no ar, **mesmo que você nunca tenha feito isso antes**. São 5 passos. Reserve ~30 minutos.
 
 ---
@@ -41,13 +43,18 @@ Este guia leva você do zero ao app no ar, **mesmo que você nunca tenha feito i
 
    Se você usa o Supabase CLI, os dois passos viram um: `npx supabase db push`.
 
+6. **Por último, rode `supabase/whatsapp_e_metas.sql`** do mesmo jeito (copiar,
+   colar no SQL Editor, **Run**). Ele cria as tabelas do canal de WhatsApp e das
+   metas. Ele fica fora de `migrations/`, então nem o passo 5 nem o `db push` o
+   executam — se você pular, o app sobe, mas o WhatsApp não funciona.
+
 Pronto — banco criado, com segurança (RLS) já configurada.
 
 > 💡 **Opcional, recomendado para testar sem fricção:** em **Authentication → Sign In / Providers → Email**, desative **"Confirm email"**. Assim, quem criar conta entra na hora, sem precisar confirmar e-mail. Você pode reativar depois.
 
 ## Passo 3 — Pegar as chaves do seu projeto
 
-1. No painel do Supabase, vá em **Settings → API Keys**.
+1. No painel do Supabase, vá em **Settings → API Keys** (em projetos mais antigos o menu se chama **Settings → API**).
 2. Anote dois valores:
    - **Project URL** (algo como `https://abcdefgh.supabase.co`)
    - **anon / public key** (um texto longo começando com `eyJ...`)
@@ -55,7 +62,7 @@ Pronto — banco criado, com segurança (RLS) já configurada.
 
 ## Passo 4 — Publicar as funções de IA
 
-As funções de IA (Conselheiro, Captura, Briefing, Foto da Refeição e Importação de Fatura) rodam dentro do Supabase. Para publicá-las:
+As funções de servidor (Conselheiro, Captura, Briefing, Foto da Refeição, Importação de Fatura, Blueprint do onboarding, assinatura e exclusão de conta) rodam dentro do Supabase. Para publicá-las:
 
 1. Crie sua chave da Anthropic em [console.anthropic.com](https://console.anthropic.com) → **API Keys** → **Create Key** (adicione créditos em Billing, US$ 5 já dá para muito uso).
 2. Abra o **terminal** (Prompt de Comando no Windows) **dentro desta pasta** e rode, um por vez:
@@ -67,8 +74,15 @@ npx supabase login
 (vai abrir o navegador para você autorizar)
 
 ```bash
-npx supabase functions deploy ai-chat capture briefing analyze-meal analyze-body import-statement onboarding-blueprint --project-ref SEU_REFERENCE_ID
+npx supabase functions deploy ai-chat capture briefing analyze-meal import-statement onboarding-blueprint get-subscription delete-account create-checkout customer-portal --project-ref SEU_REFERENCE_ID
 ```
+
+Essas dez são exatamente as que o app chama — publique todas. Se aparecer
+"Deployed Functions", funcionou.
+
+_(As demais são opcionais e só valem a pena depois: `whatsapp-webhook` e
+`whatsapp-notify` para o canal de WhatsApp, `billing-webhook` para a cobrança
+pelo Stripe, e `analyze-body`, hoje suspensa por decisão de produto.)_
 
 ### Login com Google (opcional, recomendado)
 
@@ -92,15 +106,14 @@ _(Apple Sign-In fica para uma fase futura: exige Apple Developer Program — US$
 > desative "Confirm email" — trade-off explícito: menos atrito × mais contas com e-mail
 > falso/spam. O funil de ativação foi desenhado para funcionar bem nos dois modos.
 
-```bash
-
-```
+Depois do deploy, guarde a chave da Anthropic nos segredos do projeto:
 
 ```bash
 npx supabase secrets set ANTHROPIC_API_KEY=sua-chave-da-anthropic --project-ref SEU_REFERENCE_ID
 ```
 
-Troque `SEU_REFERENCE_ID` pelo Reference ID do Passo 3 e `sua-chave-da-anthropic` pela chave criada. Se aparecer "Deployed Functions", funcionou.
+Nos dois comandos, troque `SEU_REFERENCE_ID` pelo Reference ID do Passo 3 e
+`sua-chave-da-anthropic` pela chave criada no item 1.
 
 ## Passo 5 — Publicar o site no Netlify
 
@@ -110,14 +123,22 @@ Troque `SEU_REFERENCE_ID` pelo Reference ID do Passo 3 e `sua-chave-da-anthropic
    ```
    VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
    VITE_SUPABASE_ANON_KEY=sua-anon-key
+   # opcional — só se você fez o "Login com Google" do Passo 4:
+   VITE_GOOGLE_CLIENT_ID=seu-client-id.apps.googleusercontent.com
    ```
+
+   > Estas variáveis são lidas **durante o `npm run build`**. Se você mudar
+   > alguma depois, refaça o build — o site já publicado não a enxerga.
 2. No terminal, dentro desta pasta:
    ```bash
    npm install
    npm run build
    ```
-3. Acesse [app.netlify.com/drop](https://app.netlify.com/drop) e **arraste a pasta `dist`** (criada pelo comando acima) para a página.
-4. Pronto — o Netlify te dá um link. Seu Ascende está no ar. 🎉
+3. Quer conferir antes de publicar? Rode `npm run dev` e abra
+   [localhost:5173](http://localhost:5173) — é o mesmo app, na sua máquina.
+   Encerre com `Ctrl+C` quando terminar.
+4. Acesse [app.netlify.com/drop](https://app.netlify.com/drop) e **arraste a pasta `dist`** (criada pelo comando acima) para a página.
+5. Pronto — o Netlify te dá um link. Seu Ascende está no ar. 🎉
 
 **Jeito recomendado para o longo prazo (via Git):** suba esta pasta para um repositório no GitHub, conecte-o no Netlify (**Add new site → Import from Git**) e, em **Site settings → Environment variables**, cadastre `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. Assim cada atualização futura publica sozinha.
 
@@ -129,8 +150,49 @@ Troque `SEU_REFERENCE_ID` pelo Reference ID do Passo 3 e `sua-chave-da-anthropic
 2. Na tela **Hoje**, escreva na caixa de captura: `gastei 47 no mercado, treinei pernas e dormi 6h` → devem aparecer 3 registros para confirmar.
 3. O **briefing** do topo deve carregar um texto personalizado.
 4. Abra o **Conselheiro** e pergunte: "como está minha vida?".
+5. Opcional, se você tem iPhone: em **Ajustes**, na seção de importação, traga o `.zip`
+   do app Saúde e confira se aparecem sono, treino e peso com as datas antigas.
 
 Se a captura/briefing/chat falharem mas o resto funcionar, o problema está no Passo 4 (funções ou chave da Anthropic). Veja os logs em **Supabase → Edge Functions → Logs**.
+
+## Importar histórico de outros aplicativos
+
+A tela fica em **Ajustes**, na seção de importação.
+
+Quem já registra a vida em outro app não precisa começar do zero. **Nada aqui exige
+deploy ou configuração extra**: a leitura acontece no navegador de quem usa, sem
+chamar as funções do Passo 4 e sem gastar um centavo de IA. As tabelas de que ela
+depende (`data_sources` e os recibos de importação) nascem nas migrações do Passo 2.
+
+**Do iPhone, tudo de uma vez.** No iPhone: app **Saúde** → toque na sua foto de
+perfil → **Exportar todos os dados de saúde**. Sai um `.zip` — traga o zip inteiro,
+sem descompactar. Ele costuma passar de 500 MB descompactado (o export de teste tem
+39 MB de zip que viram 876 MB de XML) e por isso é lido **em streaming, no próprio
+aparelho**, em poucos segundos. Vêm sono, treino, peso e água, cada registro com a
+data original.
+
+**De outros aplicativos, por CSV.** Exporte o CSV no app de origem e traga para a
+mesma tela. O reconhecimento é pelo **formato das colunas, não pela marca**, então a
+lista abaixo são exemplos do que costuma cair em cada conceito — um app não citado
+funciona se o CSV tiver as colunas equivalentes:
+
+| O que entra    | Exemplos de origem                                                         |
+| -------------- | -------------------------------------------------------------------------- |
+| Sono           | Sleep Cycle, AutoSleep, Oura, Whoop, Garmin, Fitbit, Samsung Health, Pillow |
+| Treino         | Hevy, Strong, FitNotes, Garmin, Strava, Nike Run Club                       |
+| Peso           | Withings, Renpho, Zepp Life, Garmin, Fitbit, Samsung Health, Hevy           |
+| Alimentação    | MyFitnessPal, Cronometer                                                    |
+
+A lista canônica é a constante `SUPPORTED_SOURCES`, no topo de
+`src/lib/healthImport.ts` — a tela lê de lá, e esta tabela deve ser atualizada junto.
+
+**O que o código garante** (e o que o texto do app pode afirmar): o arquivo é lido no
+aparelho e **não é enviado para servidor nenhum**; **não passa por IA** — CSV e XML são
+dados estruturados, parseados direto, sem resumo e sem alucinação; o conteúdo **não é
+armazenado** (guarda-se só uma impressão digital do arquivo, para reconhecer uma
+reimportação); cada registro entra com a **data original**; e a pessoa **revisa a lista
+antes de qualquer gravação**. Não há sincronização automática nem integração ao vivo
+com esses aplicativos: é sempre um arquivo, trazido à mão.
 
 ## Problemas comuns
 
@@ -140,17 +202,27 @@ Se a captura/briefing/chat falharem mas o resto funcionar, o problema está no P
 | "O Conselheiro está indisponível"                    | Chave da Anthropic errada ou sem créditos | Refaça o `secrets set` do Passo 4                      |
 | Criou conta mas não entra                            | Confirmação de e-mail ativa               | Confirme o e-mail recebido, ou desative no Passo 2     |
 | Captura não encontra nada                            | Normal se o texto não tem eventos         | Descreva ações: gastos, sono, treino, refeições, humor |
+| "Não reconheci este arquivo" na importação           | CSV sem as colunas de sono/treino/peso/alimentação, ou zip que não é o export do Saúde | Confira as colunas na tabela de [importação](#importar-histórico-de-outros-aplicativos); do iPhone, traga o `.zip` como ele saiu |
+| Importação abre mas não grava nada                   | Migrações do Passo 2 não rodadas (falta `data_sources`) | Rode os arquivos de `supabase/migrations/` em ordem |
 
 ## Custos de IA (referência)
 
-O app usa **Claude Haiku** para a captura (baratíssimo) e **Claude Sonnet** para o Conselheiro e o briefing. O briefing é gerado **1x por dia por usuário** (com cache) e o chat tem limite de **40 mensagens/dia por usuário** — ambos já embutidos no código para proteger seu bolso.
+O app usa **Claude Haiku** (`claude-haiku-4-5`) para a captura, que é baratíssima, e **Claude Sonnet** (`claude-sonnet-4-6`) para o Conselheiro e o briefing.
+
+Os tetos por usuário já vêm embutidos no código para proteger seu bolso — no plano gratuito, **15 mensagens de Conselheiro por semana**, **3 capturas inteligentes por dia** (10 por dia nas duas primeiras semanas de conta) e **4 análises de refeição por mês**; no Ascende+, 15 mensagens por dia (300/mês) e 30 capturas por dia. O briefing diário é gerado **1x por dia por usuário**, com cache.
+
+Os valores vivem em `supabase/functions/_shared/entitlements.ts` (`DEFAULT_LIMITS`) e podem ser ajustados sem novo deploy pela chave `plan_limits` da tabela `app_settings`.
 
 ## Estrutura do projeto
 
 ```
 ├── src/                    # aplicativo (React + Vite + Tailwind)
+│   ├── lib/healthImport.ts     # CSV de apps de saúde: SUPPORTED_SOURCES e parsers
+│   ├── lib/appleHealth.ts      # export do app Saúde: leitura do XML em pedaços
+│   └── lib/appleHealthZip.ts   # export do app Saúde: streaming do .zip (fflate)
 ├── supabase/setup.sql      # linha de base do banco (Passo 2)
 ├── supabase/migrations/    # tudo que veio depois — roda em ordem (Passo 2)
+├── supabase/whatsapp_e_metas.sql  # tabelas de WhatsApp e metas (Passo 2, item 6)
 ├── supabase/functions/     # as funções de IA (Passo 4)
 ├── netlify.toml            # configuração do Netlify (já pronta)
 └── .env.example            # modelo das variáveis (Passo 5)

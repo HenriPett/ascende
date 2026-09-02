@@ -291,14 +291,27 @@ function toFeedback(row: Row): InsightFeedback {
   };
 }
 
-/** O que já foi perguntado a esta pessoa. A tela mostra a pergunta apenas
- *  para os `kind` que NÃO aparecem aqui — é isso que garante que ninguém é
- *  perguntado duas vezes, tenha respondido ou não. */
+/**
+ * O que já foi perguntado a esta pessoa. A tela mostra a pergunta apenas
+ * para os `kind` que NÃO aparecem aqui — é isso que garante que ninguém é
+ * perguntado duas vezes, tenha respondido ou não.
+ *
+ * LANÇA em falha, e isso é o ponto. Antes esta função devolvia `[]` no erro,
+ * e a consequência não era perder um dado: era a query RESOLVER com sucesso e
+ * lista vazia, o chamador concluir "nunca perguntamos nada a esta pessoa" e a
+ * pergunta reaparecer para quem já tinha respondido. Uma falha de rede
+ * apagava a única garantia que a Fase 6 dá sobre a pergunta — pedir UMA vez.
+ *
+ * "Não sei o que já foi perguntado" e "nada foi perguntado" são respostas
+ * opostas, e o chamador precisa poder distinguir para escolher o silêncio
+ * (ver TrendInsights). É o mesmo erro que `Score.tsx` documenta como já
+ * corrigido lá: `error` descartado virando lista vazia.
+ */
 export async function listInsightFeedback(userId: string): Promise<InsightFeedback[]> {
   if (!userId) return [];
   const { data, error } = await supabase.from("insight_feedback")
     .select(FEEDBACK_COLS).eq("user_id", userId);
-  if (error) { console.error("listInsightFeedback", error.message); return []; }
+  if (error) { console.error("listInsightFeedback", error.message); throw error; }
   return (data ?? []).map((r) => toFeedback(r as unknown as Row));
 }
 
@@ -328,6 +341,20 @@ export async function recordInsightAsked(
  * Guarda a resposta. Atualiza a linha da pergunta (preservando `asked_at`,
  * que é quando perguntamos); se por algum motivo a linha não existir — a
  * pessoa respondeu antes de a anotação da pergunta ter ido ao banco —, cria.
+ *
+ * A PRIMEIRA RESPOSTA É A QUE VALE (`.is("answer", null)` no UPDATE).
+ *
+ * Sem essa condição o UPDATE reescrevia a resposta anterior e movia
+ * `answered_at`. Sozinho isso parecia inofensivo — a pergunta é feita uma vez
+ * só, então quem responderia duas? — mas bastava a lista de perguntadas
+ * chegar vazia (o bug de `listInsightFeedback` acima) para a pergunta voltar,
+ * e aí a segunda resposta apagava a primeira. A medida 4 da Fase 6 perdia o
+ * dado ORIGINAL, que é o único que vale: foi o que a pessoa achou do card
+ * quando o viu pela primeira vez, sem ter sido cobrada.
+ *
+ * Guardar a primeira também é a leitura honesta de uma pergunta que só
+ * deveria existir uma vez: se ela reaparecer por defeito nosso, o defeito não
+ * pode reescrever o que já estava respondido.
  */
 export async function answerInsight(
   userId: string, kind: InsightKind, answer: InsightAnswer,
@@ -335,13 +362,26 @@ export async function answerInsight(
   const answered_at = new Date().toISOString();
   const { data, error } = await supabase.from("insight_feedback")
     .update({ answer, answered_at })
-    .eq("user_id", userId).eq("kind", kind)
+    .eq("user_id", userId).eq("kind", kind).is("answer", null)
     .select(FEEDBACK_COLS).maybeSingle();
   if (error) { console.error("answerInsight", error.message); return null; }
   if (data) return toFeedback(data as unknown as Row);
 
+  /* Nada atualizado tem DUAS causas opostas, e o índice único (user_id, kind)
+     não perdoa confundi-las: ou já havia resposta (e ela é a que vale), ou não
+     existe linha (e aí sim criamos). Tentar inserir no primeiro caso levaria
+     23505 e viraria "não consegui gravar" na cara de quem já respondeu. */
+  const { data: existing } = await supabase.from("insight_feedback")
+    .select(FEEDBACK_COLS).eq("user_id", userId).eq("kind", kind).maybeSingle();
+  if (existing) return toFeedback(existing as unknown as Row);
+
+  /* `asked_status` vai preenchido: sem ele a linha nasce fora do numerador E
+     do denominador da medida 4 (a view filtra `asked_status = 'tendencia'`),
+     ou seja, a resposta ficaria guardada e invisível para a única medida que
+     ela existe para alimentar. É sempre 'tendencia' porque é o único estado
+     em que a pergunta aparece (ver canAskFeedback em lib/insightFeedback). */
   const { data: created, error: insErr } = await supabase.from("insight_feedback")
-    .insert({ user_id: userId, kind, answer, answered_at })
+    .insert({ user_id: userId, kind, answer, answered_at, asked_status: "tendencia" })
     .select(FEEDBACK_COLS).maybeSingle();
   if (insErr) { console.error("answerInsight insert", insErr.message); return null; }
   return created ? toFeedback(created as unknown as Row) : null;

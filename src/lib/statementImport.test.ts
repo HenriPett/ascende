@@ -4,14 +4,39 @@
 // lançamento em dobro — e, no outro extremo, é o que não pode colapsar duas
 // compras iguais de verdade. Errar para qualquer lado mexe no dinheiro que a
 // pessoa acha que tem.
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// O módulo cria o cliente do Supabase no topo (localStorage, .env); nada
-// disso interessa para a função pura testada aqui.
-vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
+/* O módulo cria o cliente do Supabase no topo (localStorage, .env). O dublê
+   abaixo devolve o que o teste mandar — inclusive ERRO, que é o cenário do
+   achado: a conferência de duplicatas falhando em silêncio. */
+const db = vi.hoisted(() => ({
+  rows: [] as Record<string, unknown>[],
+  error: null as { message: string } | null,
+  consultas: 0,
+}));
 
-import { statementRecordKeys, PARSER_VERSION } from "@/lib/statementImport";
+vi.mock("@/integrations/supabase/client", () => {
+  const result = () => {
+    db.consultas++;
+    return Promise.resolve(db.error ? { data: null, error: db.error } : { data: db.rows, error: null });
+  };
+  const chain = () => {
+    const self = {
+      select: () => self, eq: () => self, gte: () => self, lte: () => self,
+      limit: () => result(),
+    };
+    return self;
+  };
+  return { supabase: { from: () => chain() } };
+});
+
+import {
+  statementRecordKeys, findStatementDuplicates,
+  StatementDuplicateCheckError, PARSER_VERSION,
+} from "@/lib/statementImport";
 import type { ProposedStatementTx } from "@/lib/prosperidade";
+
+beforeEach(() => { db.rows = []; db.error = null; db.consultas = 0; });
 
 const tx = (
   description: string, amount: number, occurred_at: string,
@@ -90,3 +115,35 @@ describe("PARSER_VERSION", () => {
     expect(PARSER_VERSION).toBe("statement/1");
   });
 });
+
+
+describe("findStatementDuplicates", () => {
+  const fatura: ProposedStatementTx[] = [
+    { kind: "expense", amount: 120.5, category: "Mercado", description: "Mercado", occurred_at: "2026-08-03" },
+    { kind: "expense", amount: 23, category: "Transporte", description: "Uber", occurred_at: "2026-08-04" },
+  ];
+
+  it("marca como duplicata o que já está registrado", async () => {
+    db.rows = [{ kind: "expense", amount: 120.5, description: "Mercado", occurred_at: "2026-08-03" }];
+    expect(await findStatementDuplicates("u1", fatura)).toEqual([true, false]);
+  });
+
+  it("ERRO DE CONSULTA LANÇA em vez de dizer 'nada duplicado'", async () => {
+    // O cenário do achado: a consulta falha (rede instável, RLS, timeout) e a
+    // versão antiga devolvia [false, false]. A tela lia isso como "pode marcar
+    // tudo", a pessoa confirmava, e a fatura inteira entrava DE NOVO.
+    db.error = { message: "network error" };
+    await expect(findStatementDuplicates("u1", fatura)).rejects.toBeInstanceOf(StatementDuplicateCheckError);
+    // E a mensagem é para a pessoa, não para o log.
+    await expect(findStatementDuplicates("u1", fatura)).rejects.toThrow(/Tente de novo/);
+  });
+
+  it("lista vazia não consulta o banco", async () => {
+    expect(await findStatementDuplicates("u1", [])).toEqual([]);
+    expect(db.consultas).toBe(0);
+  });
+});
+
+/* A partição do recibo (importOutcome) é a MESMA para fatura e arquivo de
+   saúde, então os testes dela vivem em dataSources.test.ts, junto do resto
+   da camada de proveniência. */

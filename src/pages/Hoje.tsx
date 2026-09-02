@@ -192,14 +192,14 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
 
   const save = async () => {
     const value = Number(String(amount).replace(",", "."));
-    if (!user || !value || value <= 0) { toast.error("Informe um valor válido."); return; }
+    if (!user || !value || value <= 0) { toast.error("Informe um valor válido em reais, como 30."); return; }
     setSaving(true);
     const { error } = await supabase.from("transactions").insert({
       user_id: user.id, kind: "expense", amount: value,
       category, occurred_at: todayISO(), source: "manual",
     });
     setSaving(false);
-    if (error) { toast.error("Não consegui registrar o gasto."); return; }
+    if (error) { toast.error("Não consegui registrar o gasto. Tente de novo."); return; }
     toast.success(`Gasto de R$ ${value.toFixed(2).replace(".", ",")} · ${category} registrado. +2 XP${xpToastSuffix()}`);
     setAmount(""); setOpen(false);
     invalidateKeys(qc, FINANCE_KEYS);
@@ -260,6 +260,19 @@ const QUICK_MOODS = [
   { score: 5, emoji: "😄", label: "ótimo" },
 ];
 
+/* O sinal de que a lista rola para o lado.
+ *
+ * O último chip era cortado na borda seca: um corte assim lê como "acabou
+ * mal desenhado", não como "tem mais coisa aqui". Um degradê que apaga o
+ * conteúdo na borda direita é o sinal — e como é MÁSCARA, não um retângulo
+ * colorido por cima, funciona sobre qualquer fundo (o `bg-ether` tem auras,
+ * um gradiente de cor fixa denunciaria a emenda). Onde `mask-image` não
+ * existe, simplesmente não há fade: nada quebra.
+ *
+ * Ele some ao chegar no fim e nunca aparece quando não há o que rolar —
+ * um fade permanente prometeria conteúdo que não existe. */
+const FADE_ROLAGEM = "linear-gradient(to right, #000 calc(100% - 2rem), transparent)";
+
 function QuickActions() {
   const { user } = useAuth();
   const { profile } = useProfile();
@@ -281,7 +294,7 @@ function QuickActions() {
     setSavingKey(key);
     const { error } = await supabase.from("life_events").insert({ user_id: user.id, source: "form", ...row });
     setSavingKey(null);
-    if (error) { toast.error("Não consegui registrar."); return; }
+    if (error) { toast.error("Não consegui registrar. Tente de novo."); return; }
     toast.success(okMsg + xpToastSuffix());
     invalidateKeys(qc, LIFE_DATA_KEYS);
   };
@@ -294,12 +307,36 @@ function QuickActions() {
     insert(`m${score}`, { pillar: "mente", kind: "mood", payload: { score, label, summary: `Humor: ${label}` } },
       `Humor ${emoji} registrado. +5 XP`);
 
+  // Quais chips existem decide se sobra o que rolar — por isso entram nas
+  // dependências da medição, e não só o tamanho da janela.
+  const trilho = useRef<HTMLDivElement>(null);
+  const [rolaMais, setRolaMais] = useState(false);
+  const medir = useCallback(() => {
+    const el = trilho.current;
+    if (!el) return;
+    // -1px de folga: navegadores devolvem scrollLeft fracionário no fim.
+    setRolaMais(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+  useEffect(() => {
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, [medir, showWater, showMood, showMeal, showExpense, showWorkout, bottles]);
+
   if (!showWater && !showMood && !showMeal && !showExpense && !showWorkout) return null;
 
   return (
     <div className="space-y-1.5">
       <p className="text-[11px] font-medium text-muted-foreground px-0.5">Registro em 1 toque</p>
-      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
+      <div
+        ref={trilho}
+        onScroll={medir}
+        className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1"
+        style={{
+          scrollbarWidth: "none",
+          ...(rolaMais ? { maskImage: FADE_ROLAGEM, WebkitMaskImage: FADE_ROLAGEM } : {}),
+        }}
+      >
         {showWater && bottles.slice(0, 3).map((b) => (
           <button
             key={`${b.ml}-${b.label}`}
@@ -493,7 +530,7 @@ function FirstSteps() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold">Base montada — primeiros passos concluídos (+20 XP)</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Você já viveu o essencial: contar, mapear e planejar. Domingo chega a sua
+              Você já viveu o essencial: contar, mapear e planejar. No domingo chega a sua
               primeira retrospectiva da semana — quanto mais dias registrados, melhor ela fica.
             </p>
           </div>
@@ -596,7 +633,7 @@ function RetroCountdown() {
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {data.weekEvents > 0
-              ? `A IA vai cruzar os ${data.weekEvents} registro${data.weekEvents > 1 ? "s" : ""} da sua semana e contar a história dela. Cada dia registrado deixa a leitura mais nítida.`
+              ? `O Conselheiro vai cruzar ${data.weekEvents === 1 ? "o seu registro" : `os seus ${data.weekEvents} registros`} da semana e contar a história dela. Cada dia registrado deixa a leitura mais nítida.`
               : "Ela nasce do que você registrar até lá — uma frase por dia já rende uma boa história."}
           </p>
         </div>
@@ -866,7 +903,7 @@ function DayProgress() {
           <p className="text-[11px] text-muted-foreground">
             {workoutsWeek >= workoutsGoal
               ? "Meta da semana batida. 💪"
-              : `Faltam ${workoutsGoal - workoutsWeek} treino(s) até domingo.`}
+              : `${workoutsGoal - workoutsWeek === 1 ? "Falta 1 treino" : `Faltam ${workoutsGoal - workoutsWeek} treinos`} até domingo.`}
           </p>
         </div>
       )}
@@ -989,8 +1026,8 @@ function Briefing() {
         <p className="text-sm leading-relaxed whitespace-pre-line">{data.briefing}</p>
         {data.courtesy && (
           <p className="text-[11px] opacity-70">
-            Seus primeiros briefings são por nossa conta ✨ — depois, ele chega todo dia
-            no Ascende+ e toda semana na sua retrospectiva gratuita de domingo.
+            Seus primeiros briefings são por nossa conta ✨ — depois, o briefing chega todo
+            dia no Ascende+, e a retrospectiva de domingo continua gratuita para sempre.
           </p>
         )}
       </div>
@@ -1023,7 +1060,7 @@ function BriefingLocked() {
           o que merece atenção e o próximo degrau.
         </p>
         <p className="text-[11px] opacity-70 pt-1">
-          {data?.reason ?? "O briefing diário com IA vive no Ascende+."}{" "}
+          {data?.reason ?? "O briefing diário do Conselheiro faz parte do Ascende+."}{" "}
           <Link to={appPath("assinatura")} className="underline underline-offset-2">Conhecer</Link>
         </p>
       </div>
@@ -1332,7 +1369,7 @@ export default function Hoje() {
           <p className="text-sm text-muted-foreground">{DAILY_FOCUS[new Date().getDay()]}</p>
           {streak === 2 && (
             <p className="text-[11px] text-gold-ink mt-0.5">
-              Sua primeira sequência começou — e um dia de descanso por semana não quebra.
+              Sua primeira sequência começou — e um dia de descanso por semana não a quebra.
             </p>
           )}
         </div>

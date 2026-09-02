@@ -11,6 +11,7 @@ import { activeTrackerSet } from "@/lib/trackers";
 import { levelTitle, nextTitle, xpReasonLabel } from "@/lib/xp";
 import { monthStartISO } from "@/lib/format";
 import { daysAgoISOInSP } from "@/lib/dates";
+import { distinctLocalDays } from "@/lib/localDays";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +19,15 @@ import TrendInsights from "@/components/core/TrendInsights";
 import { Flame, TrendingUp, TrendingDown, Minus, CalendarCheck, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
 
 function clamp(n: number) { return Math.max(0, Math.min(100, Math.round(n))); }
+
+/** Cola a frase com espaço INQUEBRÁVEL (U+00A0), escrito como escape para o
+ *  próximo leitor VER que não é espaço comum.
+ *
+ *  Vale só para as unidades que perdem sentido partidas em duas linhas: o NOME
+ *  do título ("Ritmo de Trilha" virava "Ritmo de / Trilha") e o par de XP
+ *  ("254 / 350"). A frase inteira continua podendo quebrar ENTRE as unidades —
+ *  colar tudo faria o texto transbordar a coluna em vez de acomodar. */
+const nbsp = (s: string) => s.replace(/ /g, "\u00A0");
 
 /** Anel grande do nível, com brilho dourado. */
 function LevelRing({ level, progress }: { level: number; progress: number }) {
@@ -83,7 +93,17 @@ export default function Score() {
   });
 
   const xpWeek = (data?.weekXp ?? []).reduce((s, r) => s + r.points, 0);
-  const activeDays = new Set((data?.weekXp ?? []).map((r) => String(r.created_at).slice(0, 10))).size;
+  /* DIA DISTINTO NO FUSO DO APP, não o dia UTC do carimbo.
+     Os três contadores de dias desta tela (aqui, `mealDays` e `practices`)
+     usavam `slice(0, 10)` sobre um timestamptz, que é o dia UTC. Com SP em
+     UTC-3, tudo registrado das 21:00 em diante caía no dia seguinte e dias
+     vizinhos COLAPSAVAM num só — ver lib/localDays.ts para o mecanismo.
+
+     EFEITO COLATERAL ESPERADO: os indicadores de quem registra à noite VÃO
+     SUBIR com esta correção, e é para subir — o número antigo estava baixo
+     porque perdia dias reais, não porque a pessoa tivesse feito menos. Se
+     alguém comparar com um print antigo e achar que "inflou", é isto. */
+  const activeDays = distinctLocalDays((data?.weekXp ?? []).map((r) => String(r.created_at)));
 
   // Feed: de onde veio o XP
   const xpFeed = (data?.weekXp ?? []).slice(0, 8);
@@ -91,17 +111,17 @@ export default function Score() {
     const mins = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
     if (mins < 60) return `há ${mins} min`;
     const h = Math.round(mins / 60);
-    if (h < 24) return `há ${h}h`;
+    if (h < 24) return `há ${h} h`;
     const d = Math.round(h / 24);
     return d === 1 ? "ontem" : `há ${d} dias`;
   };
 
   // ─── Cálculo do score por pilar (0–100, transparente) ───
   const scores: Record<string, { value: number | null; why: string }> = {
-    prosperidade: { value: null, why: "Registre entradas e gastos para medir." },
-    vitalidade: { value: null, why: "Crie hábitos e registre sono para medir." },
-    alimentacao: { value: null, why: "Registre refeições para medir." },
-    mente: { value: null, why: "Registre humor e prática para medir." },
+    prosperidade: { value: null, why: "Registre entradas e gastos e este indicador aparece." },
+    vitalidade: { value: null, why: "Crie hábitos e registre seu sono e este indicador aparece." },
+    alimentacao: { value: null, why: "Registre refeições e este indicador aparece." },
+    mente: { value: null, why: "Registre humor e prática e este indicador aparece." },
   };
 
   if (data) {
@@ -142,7 +162,12 @@ export default function Score() {
     // Alimentação: dias com refeição registrada nos últimos 14 (só se a
     // pessoa acompanha refeições — tracker).
     if (trackers.has("meals")) {
-      const mealDays = new Set(events.filter((e) => e.kind === "meal").map((e) => e.occurred_at.slice(0, 10))).size;
+      // Dias distintos no fuso do app (ver o comentário de `activeDays`): com
+      // `slice(0, 10)` o jantar de terça 22h e o almoço de quarta 12h viravam
+      // o mesmo dia, e este score ficava na metade para quem janta tarde.
+      const mealDays = distinctLocalDays(
+        events.filter((e) => e.kind === "meal").map((e) => e.occurred_at),
+      );
       if (mealDays > 0) {
         scores.alimentacao = { value: clamp((mealDays / 14) * 100), why: "Baseado em quantos dos últimos 14 dias tiveram refeições registradas." };
       }
@@ -163,9 +188,10 @@ export default function Score() {
       ...(trackers.has("journal") ? ["journal"] : []),
     ];
     if (practiceKinds.length) {
-      const practices = new Set(
-        events.filter((e) => practiceKinds.includes(e.kind)).map((e) => e.occurred_at.slice(0, 10))
-      ).size;
+      // Dias distintos no fuso do app (ver o comentário de `activeDays`).
+      const practices = distinctLocalDays(
+        events.filter((e) => practiceKinds.includes(e.kind)).map((e) => e.occurred_at)
+      );
       if (practices > 0) { mparts.push(clamp((practices / 14) * 100)); mwhy.push("frequência de prática e diário"); }
     }
     if (mparts.length) {
@@ -209,19 +235,39 @@ export default function Score() {
       {/* ── Herói do nível ───────────────────────────────────── */}
       <Card className="level-hero border-0 text-white overflow-hidden">
         <div className="p-5 sm:p-6">
-          <div className="flex items-center gap-5">
+          {/* No CELULAR o anel vai PARA CIMA e o texto ocupa a largura toda.
+              Lado a lado, a coluna do texto sobrava ~163px ao lado do anel de
+              132px, e nessa largura toda frase daqui quebrava no lugar errado:
+              "Ritmo de / Trilha", "254 / 350 XP para o nível / 5",
+              "Trilheiro no / nível 5".
+
+              Por que empilhar em vez de só estreitar a fonte ou apertar o
+              anel: o título é dado variável, não texto fixo. Os nomes vão até
+              "Horizonte Infinito" e "Domador de Picos" (lib/xp), e qualquer
+              largura que eu escolhesse para caber "Trilheiro" voltaria a
+              quebrar no título mais longo — o sintoma da rodada 1, que só
+              parou de aparecer porque o título da vez tem uma palavra. Com a
+              largura inteira (~350px em 390px de tela) o nome mais longo cabe
+              em uma linha, e o `sm:` preserva o lado a lado onde há espaço.
+
+              O `nbsp` abaixo é o cinto de segurança: mesmo que um título novo
+              não caiba, ele não se parte no meio do nome nem separa "nível" do
+              seu número — a frase transborda ou empurra, mas não mente sobre
+              onde termina o nome. */}
+          <div className="flex flex-col items-center text-center gap-4 sm:flex-row sm:items-center sm:text-left sm:gap-5">
             <LevelRing level={level} progress={progress} />
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 w-full sm:flex-1">
               <p className="text-[11px] uppercase tracking-widest text-white/55">Título da subida</p>
               <p className="font-display text-2xl sm:text-3xl font-semibold" style={{ color: "hsl(var(--gold))" }}>
-                {title}
+                {nbsp(title)}
               </p>
               <p className="text-sm text-white/75 mt-1">
-                {xp - currentFloor} / {nextFloor - currentFloor} XP para o nível {level + 1}
+                {nbsp(`${xp - currentFloor} / ${nextFloor - currentFloor}`)} XP para o {nbsp(`nível ${level + 1}`)}
               </p>
               {upcoming && (
                 <p className="text-xs text-white/55 mt-0.5">
-                  Próximo título: <span className="text-white/80">{upcoming.title}</span> no nível {upcoming.atLevel}
+                  Próximo título: <span className="text-white/80">{nbsp(upcoming.title)}</span>
+                  {" "}no {nbsp(`nível ${upcoming.atLevel}`)}
                 </p>
               )}
             </div>
@@ -259,7 +305,7 @@ export default function Score() {
               <p className="text-sm font-semibold">{data ? xpWeek : "—"}</p>
             </div>
             <div className="rounded-lg border border-white/10 px-3 py-2" style={{ background: "hsl(0 0% 100% / 0.07)" }}>
-              <p className="text-[11px] text-white/55 flex items-center gap-1"><CalendarCheck className="w-3 h-3" /> Dias ativos (7d)</p>
+              <p className="text-[11px] text-white/55 flex items-center gap-1"><CalendarCheck className="w-3 h-3" /> Dias ativos (7 dias)</p>
               <p className="text-sm font-semibold">{data ? `${activeDays}/7` : "—"}</p>
             </div>
           </div>
@@ -312,8 +358,8 @@ export default function Score() {
           <div className="flex-1 min-w-0 space-y-2">
             <p className="text-sm font-medium">Não consegui carregar seus indicadores.</p>
             <p className="text-xs text-muted-foreground">
-              Isto é uma falha de conexão — não um retrato do seu mês. Seus registros
-              continuam salvos, e o XP acima não depende desta consulta.
+              Parece falha de conexão — não um retrato do seu mês. Seus registros
+              continuam salvos, e o XP acima não depende desta leitura.
             </p>
             <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
               {isFetching
@@ -401,8 +447,8 @@ export default function Score() {
 
       <p className="text-xs text-muted-foreground">
         Semana ruim não apaga a subida: os indicadores olham 14 dias, e o XP nunca diminui.
-        A metodologia dos indicadores está em revisão (beta) — hoje eles medem sobretudo a
-        frequência de registro, não a qualidade do que foi registrado.
+        Por enquanto eles medem sobretudo a frequência de registro, não a qualidade do que
+        foi registrado.
       </p>
     </div>
   );

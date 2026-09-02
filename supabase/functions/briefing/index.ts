@@ -12,7 +12,7 @@ import {
 } from "../_shared/entitlements.ts";
 
 const RETRO_SYSTEM = `Você escreve a retrospectiva de domingo do Ascende — plataforma brasileira de qualidade de vida.
-ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –); prefira vírgula, dois-pontos ou frases separadas.
+ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –) no texto que você escreve para a pessoa; prefira vírgula, dois-pontos ou frases separadas. (Estas instruções usam travessão; a proibição vale para a sua saída, não para o que você lê aqui.)
 Com base no retrato da pessoa (dados reais), escreva de 4 a 6 frases curtas em português do Brasil olhando para a SEMANA que passou:
 1. O resumo honesto da semana, cruzando pilares quando os dados permitirem (o que andou, o que travou).
 2. UMA vitória concreta da semana para reconhecer (meta batida, sequência, bom padrão), com o dado.
@@ -26,7 +26,7 @@ CRUZAMENTO DESDE O DIA 1: se houver ESTIMATIVAS declaradas (financeiras ou de vi
 ${SAFETY_RULES}`;
 
 const SYSTEM = `Você escreve o briefing matinal do Ascende — plataforma brasileira de qualidade de vida.
-ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –); prefira vírgula, dois-pontos ou frases separadas.
+ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –) no texto que você escreve para a pessoa; prefira vírgula, dois-pontos ou frases separadas. (Estas instruções usam travessão; a proibição vale para a sua saída, não para o que você lê aqui.)
 Com base no retrato da pessoa (dados reais), escreva de 3 a 5 frases curtas em português do Brasil:
 1. Como a vida dela está neste momento, cruzando pilares (finanças × sono × hábitos × humor) quando os dados permitirem.
 2. UMA coisa que merece atenção hoje, com o porquê nos dados.
@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
     if (freeWeekday && !firstDawn) {
       return json({
         briefing: null, locked: true, feature: "briefing",
-        reason: "Foi bom te acompanhar de manhã nos seus primeiros dias. O briefing diário vive no Ascende+ — e a sua retrospectiva gratuita continua chegando todo domingo.",
+        reason: "Foi bom te acompanhar de manhã nos seus primeiros dias. O briefing diário faz parte do Ascende+, e a sua retrospectiva gratuita continua chegando todo domingo.",
         reset_at: nextSpDayStartUtc(), upgrade_available: true,
       });
     }
@@ -93,9 +93,15 @@ Deno.serve(async (req) => {
         { type: "text", text: sunday ? RETRO_SYSTEM : SYSTEM, cache_control: { type: "ephemeral" } },
         { type: "text", text: `━━━ RETRATO ATUAL DA PESSOA ━━━\n${snapshot}` },
       ],
-      messages: [{ role: "user", content: `Escreva o ${sunday ? "retrospectiva da semana" : "briefing"} de hoje (${today}).` }],
+      messages: [{ role: "user", content: `Escreva ${sunday ? "a retrospectiva da semana" : "o briefing"} de hoje (${today}).` }],
     });
-    if (!res.ok || !data) return json({ error: "Briefing indisponível agora." }, 502);
+    if (!res.ok || !data) {
+      return json({
+        error: sunday
+          ? "Não consegui escrever sua retrospectiva agora. Tente de novo em instantes."
+          : "Não consegui escrever seu briefing agora. Tente de novo em instantes.",
+      }, 502);
+    }
 
     // deno-lint-ignore no-explicit-any
     const briefing = ((data as any).content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
@@ -108,6 +114,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);
-    return json({ error: "Erro interno." }, 500);
+    return json({ error: "Algo falhou do nosso lado. Tente de novo em instantes; se continuar, mande um feedback pelos Ajustes." }, 500);
   }
 });

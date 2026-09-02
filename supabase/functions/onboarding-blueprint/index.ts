@@ -104,7 +104,7 @@ const BLUEPRINT_TOOL = {
 
 const SYSTEM = `Você monta o Blueprint da Subida do Ascende, plataforma brasileira de qualidade de vida ("o único app que vê a sua vida inteira").
 A pessoa ACABOU de responder o onboarding: o retrato abaixo é tudo que ela declarou. Sua tarefa é transformar essas respostas no primeiro plano composto dela, entregue no minuto 1 — a prova de que cada resposta valeu a pena.
-ESTILO: escreva como uma pessoa escreve, em português do Brasil. NUNCA use travessão ou meia-risca (— ou –); prefira vírgula, dois-pontos ou frases separadas. Tom caloroso e direto, sem falso entusiasmo.
+ESTILO: escreva como uma pessoa escreve, em português do Brasil. NUNCA use travessão ou meia-risca (— ou –) no texto que você escreve para a pessoa; prefira vírgula, dois-pontos ou frases separadas. (Estas instruções usam travessão; a proibição vale para a sua saída, não para o que você lê aqui.) Tom caloroso e direto, sem falso entusiasmo.
 REGRAS:
 • PLANOS SEPARADOS: gere de 2 a 4 planos, UM POR ÁREA (alimentar, treino, rotina, financeiro). Cada plano é autossuficiente e vive sozinho na tela "Meus planos" da pessoa. NUNCA entregue um único plano de "rotina" com alimentação e treino dentro dele: para a pessoa, isso parece que os outros planos não existem.
 • NÃO gere plano de uma área que os dados não sustentam (sem nenhum dado financeiro, não invente plano financeiro). Melhor 2 planos honestos que 4 genéricos.
@@ -114,7 +114,7 @@ REGRAS:
 • O treino deve ser realista para o nível de atividade declarado: quem está sedentário começa pequeno (caminhada, 2x/semana), não com 5 treinos.
 • Se houver rotina de sono declarada, sleep_hours_target é a duração DELA e a seção de sono ancora nos horários dela.
 • Compromissos diários: 2 a 3, pequenos demais para falhar, derivados da META declarada, cada um com o porquê. Nunca lista genérica ("beba água, durma bem").
-• Números redondos e honestos. Metas de kcal entre 1200 e 4500 salvo caso claro.
+• Números redondos e honestos. Metas de kcal entre 1200 e 4500, salvo caso claramente justificado pelos dados declarados.
 • Tudo aqui é PROPOSTA: o app mostra para a pessoa escolher o que ativar. Escreva sabendo disso.
 • Responda SEMPRE usando a ferramenta gerar_blueprint.
 ${SAFETY_RULES}`;
@@ -132,13 +132,13 @@ Deno.serve(async (req) => {
 
     const flags = await getFlags(supabase);
     if (!flags.onboarding_blueprint_enabled) {
-      return json({ error: "O Blueprint com IA está temporariamente indisponível.", disabled: true }, 503);
+      return json({ error: "O Blueprint de boas-vindas está indisponível agora. Você já pode registrar seu dia, e o seu primeiro plano você pede ao Conselheiro quando quiser.", disabled: true }, 503);
     }
 
     // Cortesia ÚNICA por conta, reivindicada atomicamente ANTES da chamada
     // (duas requisições simultâneas não geram dois blueprints).
     const { data: claimed, error: claimErr } = await supabase.rpc("claim_blueprint", { uid: user.id });
-    if (claimErr) { console.error("claim_blueprint", claimErr); return json({ error: "Erro interno." }, 500); }
+    if (claimErr) { console.error("claim_blueprint", claimErr); return json({ error: "Algo falhou do nosso lado. Tente de novo em instantes; se continuar, mande um feedback pelos Ajustes." }, 500); }
     if (!claimed) {
       return json({ error: "Seu Blueprint de boas-vindas já foi gerado. Para novos planos, converse com o Conselheiro.", already: true }, 409);
     }
@@ -243,6 +243,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);
-    return json({ error: "Erro interno." }, 500);
+    return json({ error: "Algo falhou do nosso lado. Tente de novo em instantes; se continuar, mande um feedback pelos Ajustes." }, 500);
   }
 });

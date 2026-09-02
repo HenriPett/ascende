@@ -134,9 +134,10 @@ export default function Jornada() {
   const top = PILLARS.filter((p) => active.has(p.id))
     .map((p) => ({ name: p.name, n: counts[p.id] ?? 0 }))
     .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name))[0];
+  const pilarLabel = `${activeCount} ${activeCount === 1 ? "pilar ativo" : "pilares ativos"}`;
   const pillarState = top && top.n > 0
-    ? `${activeCount} pilares ativos · mais movimento em ${top.name} (${top.n} registros em 14 dias)`
-    : `${activeCount} pilares ativos · nenhum registro nos últimos 14 dias`;
+    ? `${pilarLabel} · mais movimento em ${top.name} (${top.n} ${top.n === 1 ? "registro" : "registros"} nos últimos 14 dias)`
+    : `${pilarLabel} · nenhum registro nos últimos 14 dias`;
 
   /* ── Indicadores: a linha mais valiosa do hub — diz se vale entrar ── */
   const insights = trends.data?.insights ?? [];
@@ -150,7 +151,7 @@ export default function Jornada() {
     : anyNoTrend
       ? "nenhum padrão encontrado ainda"
       : bestSample > 0
-        ? `${bestSample} de ${MIN_OVERLAP_DAYS} dias para a primeira tendência`
+        ? `${bestSample} de ${MIN_OVERLAP_DAYS} dias registrados para a primeira tendência`
         : `sua primeira tendência aparece com ${MIN_OVERLAP_DAYS} dias de registro`;
   const scoreState = `Nível ${level} · ${levelTitle(level)} · ${trendPart}`;
 
@@ -227,8 +228,8 @@ export default function Jornada() {
           <div className="flex-1 min-w-0 space-y-2">
             <p className="text-sm font-medium">Não consegui ler parte da sua jornada.</p>
             <p className="text-xs text-muted-foreground">
-              É falha de conexão. Seus planos, batalhas e registros continuam salvos — o que
-              faltou foi a leitura, não o dado.
+              Parece falha de conexão. Seus planos, batalhas e registros continuam salvos —
+              o que falhou foi carregar a tela, não os seus dados.
             </p>
             <Button variant="outline" size="sm" onClick={recarregar} disabled={recarregando}>
               {recarregando

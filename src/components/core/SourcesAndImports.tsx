@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
-  FileSpreadsheet, Receipt, MessageSquare, PenLine, Trash2, ScrollText,
+  FileSpreadsheet, Smartphone, Receipt, MessageSquare, PenLine, Trash2, ScrollText,
   AlertTriangle, RefreshCw, Loader2, Inbox,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -40,6 +40,9 @@ import {
 
 const KIND_ICON: Record<DataSourceKind, LucideIcon> = {
   health_csv: FileSpreadsheet,
+  // O export do App Saúde vem do aparelho, não de um arquivo de planilha —
+  // o ícone diz de onde veio, que é o que a pessoa reconhece na lista.
+  health_export: Smartphone,
   financial_statement: Receipt,
   chat_attachment: MessageSquare,
   manual: PenLine,
@@ -47,6 +50,7 @@ const KIND_ICON: Record<DataSourceKind, LucideIcon> = {
 
 const KIND_COLOR: Record<DataSourceKind, string> = {
   health_csv: "--vitalidade",
+  health_export: "--vitalidade",
   financial_statement: "--prosperidade",
   chat_attachment: "--mente",
   manual: "--muted-foreground",
@@ -59,8 +63,12 @@ const STATUS_BADGE: Partial<Record<DataSourceStatus, { label: string; hint: stri
     hint: "Este arquivo foi lido, mas você não confirmou a importação — nada dele foi gravado.",
   },
   partial: {
-    label: "parcial",
-    hint: "Parte das linhas entrou; o resto foi recusado. Os detalhes estão no recibo.",
+    label: "com linha ilegível",
+    // O texto anterior ("parte das linhas entrou; o resto foi recusado")
+    // aparecia ao lado de "Entraram 0 · Não entraram 0" e se contradizia. Este
+    // status quer dizer UMA coisa: o arquivo tinha linha que não deu para ler.
+    // O que foi reconhecido entrou normalmente.
+    hint: "O arquivo tinha linhas que não deram para ler. O que deu, entrou — os avisos do recibo dizem quantas foram.",
   },
   failed: {
     label: "falhou",
@@ -326,20 +334,38 @@ export default function SourcesAndImports() {
 
             {badge && <p className="text-xs text-muted-foreground">{badge.hint}</p>}
 
+            {/* Três estados, e confundir os dois últimos seria negar a
+                promessa da Fase 1: o recibo existe, a fonte não tem recibo, e
+                "não consegui carregar agora". Dizer "sem recibo" quando a
+                consulta falhou é afirmar que a trilha nunca existiu — sobre
+                doze recibos que estão no banco, inteiros. */}
             {source.receipt
               ? <ReceiptCounts receipt={source.receipt} storedCount={storedCounts?.[source.id]} />
-              : (
-                <p className="text-xs text-muted-foreground">
-                  Sem recibo para esta fonte — ela entrou antes de o recibo existir, então não
-                  tenho como afirmar quanto foi gravado.
-                </p>
-              )}
+              : source.receiptUnavailable
+                ? (
+                  <p className="text-xs rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5">
+                    Não consegui carregar os recibos agora. Isso é um problema meu, de
+                    conexão — <strong>não quer dizer que esta importação ficou sem recibo</strong>.
+                    Recarregue a página em instantes.
+                  </p>
+                )
+                : (
+                  <p className="text-xs text-muted-foreground">
+                    Sem recibo para esta fonte — ela entrou antes de o recibo existir, então não
+                    tenho como afirmar quanto foi gravado.
+                  </p>
+                )}
 
             <div className="flex flex-wrap gap-2 pt-0.5">
               <Button
                 variant="outline" size="sm"
                 onClick={() => openReceiptFor(source)}
+                // Desabilitado nos DOIS casos sem recibo em mãos, mas por
+                // motivos diferentes — e é o texto acima que diz qual é.
                 disabled={!source.receipt}
+                title={source.receiptUnavailable
+                  ? "Não consegui carregar os recibos agora"
+                  : undefined}
               >
                 <ScrollText className="w-3.5 h-3.5 mr-1.5" /> Ver recibo
               </Button>
@@ -385,7 +411,10 @@ export default function SourcesAndImports() {
               <p className="text-xs font-semibold text-muted-foreground">Conferência</p>
               <dl className="grid grid-cols-2 gap-2 text-sm">
                 {[
-                  { label: "Linhas no arquivo", value: receipt.total_rows },
+                  // "Registros", não "linhas": o arquivo do App Saúde tem
+                  // 51.046 linhas e 1.998 registros reconhecidos. O rótulo
+                  // antigo fazia o recibo mentir sobre a própria unidade.
+                  { label: "Registros reconhecidos", value: receipt.total_rows },
                   { label: "Entraram", value: receipt.accepted_rows },
                   { label: "Já estavam registradas", value: receipt.duplicate_rows },
                   { label: "Não entraram", value: receipt.rejected_rows },
@@ -409,6 +438,11 @@ export default function SourcesAndImports() {
                         />
                         <span className="min-w-0 break-words">
                           {w.message}
+                          {/* O "(N×)" só faz sentido para aviso que ACONTECEU N
+                              vezes. Quem emite um aviso de resumo não manda
+                              `count` — mandava, e a tela exibia "51.046 linhas
+                              viraram 1.998 registros. (51046×)", que lê como
+                              contagem por linha vazando na interface. */}
                           {w.count !== undefined && w.count > 1 && (
                             <span className="text-muted-foreground"> ({w.count}×)</span>
                           )}
@@ -419,11 +453,20 @@ export default function SourcesAndImports() {
                 </div>
               )}
 
+              {/* Este parágrafo é lido meses depois, e por isso ele não pode
+                  descrever uma conta que não é a que está na tela. Antes dizia
+                  "somam o total de LINHAS do arquivo" e que "não entraram"
+                  incluía linha ilegível — mas a partição é de REGISTROS
+                  (1.500 linhas de exercício viram 40 treinos), e linha
+                  ilegível nunca virou registro: ela sai nos avisos acima. */}
               <p className="text-[11px] text-muted-foreground">
-                As três últimas somam o total de linhas do arquivo — é o que permite conferir
-                que nada se perdeu no caminho. "Não entraram" reúne três coisas: linha ilegível
-                no arquivo, parcela futura e o que você desmarcou na revisão — o recibo não
-                tenta adivinhar qual foi.
+                Os três números acima somam o total de <strong>registros</strong> reconhecidos
+                no arquivo — é o que permite conferir que nada se perdeu no caminho. Um arquivo
+                pode ter mais linhas que registros (1.500 linhas de exercício viram um treino
+                por dia, por exemplo); quando isso acontece, está dito nos avisos.
+                "Não entraram" é o que você <strong>desmarcou</strong> na revisão — parcela
+                futura, noite que não quis trazer. Linha que não deu para ler aparece à parte,
+                nos avisos, porque ela nunca chegou a virar registro.
                 Recibo emitido em {shortDate(receipt.created_at)}
                 {openReceipt?.parser_version && <> · regra de leitura {openReceipt.parser_version}</>}.
                 Este recibo fica guardado: você pode reabrir quando quiser.

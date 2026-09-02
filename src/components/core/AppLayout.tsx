@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, useEffect } from "react";
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import {
   Sun, Moon, Monitor, MessageCircle, Mountain, Plus, Settings, CreditCard,
-  LogOut, ChevronRight, UserRound,
+  LogOut, ChevronRight, UserRound, MessageSquarePlus,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -140,7 +140,32 @@ function AccountSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-2xl max-h-[85dvh] overflow-y-auto safe-bottom">
+      {/* Duas correções de toque nesta folha, ambas medidas em QA:
+       *
+       * N5 — o "Fechar" do SheetContent é 16x16 (um ícone de 16px num botão
+       * sem tamanho). Escape resolve no teclado; no celular não existe
+       * Escape. Aqui ele vira 44x44 SEM mudar de lugar: o botão é
+       * `absolute right-4 top-4`, então o ícone estava centrado a 24px de
+       * cada borda (16 + 16/2). Com a caixa em 44px, `right-0.5 top-0.5`
+       * recoloca esse centro exatamente em 24px (2 + 44/2) — cresce a área,
+       * o desenho fica onde estava.
+       *
+       * N6 — `safe-bottom` sozinho ZERAVA o respiro: ele declara
+       * `padding-bottom: env(safe-area-inset-bottom)`, que num aparelho sem
+       * recorte vale 0 e, sendo uma utility mais específica, apagava o `p-6`
+       * do próprio SheetContent. A última linha ("Sair da conta", feedback)
+       * terminava colada no rodapé do viewport — em iPhone, dentro dos ~34px
+       * do indicador de home, onde o toque vira gesto do sistema. O `calc`
+       * SOMA o recorte ao padding em vez de substituí-lo: 24px sempre, mais
+       * o que o aparelho pedir. */}
+      <SheetContent
+        side="bottom"
+        className={cn(
+          "rounded-t-2xl max-h-[85dvh] overflow-y-auto",
+          "pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
+          "[&>button]:h-11 [&>button]:w-11 [&>button]:grid [&>button]:place-items-center [&>button]:right-0.5 [&>button]:top-0.5",
+        )}
+      >
         <SheetHeader className="text-left">
           <SheetTitle className="font-display">
             {profile?.name ? String(profile.name).split(" ")[0] : "Sua conta"}
@@ -190,7 +215,25 @@ function AccountSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
         </div>
 
         <div className="flex items-center justify-between gap-2 pt-1">
-          <FeedbackDialog />
+          {/* O gatilho padrão do FeedbackDialog é 36x36. Ele aceita um
+              `trigger` próprio, então o alvo cresce aqui — sem tocar no
+              componente, que tem outro dono, e sem inchar o ícone: a caixa vai
+              a 44x44 e o MessageSquarePlus continua com 16px. */}
+          <FeedbackDialog
+            trigger={
+              <button
+                type="button"
+                className={cn(
+                  "w-11 h-11 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
+                  FOCUS_RING,
+                )}
+                aria-label="Enviar feedback sobre a plataforma"
+                title="Enviar feedback"
+              >
+                <MessageSquarePlus className="w-4 h-4" />
+              </button>
+            }
+          />
           <Button
             variant="ghost" size="sm" className="text-muted-foreground"
             onClick={async () => { close(); await supabase.auth.signOut(); }}
@@ -208,7 +251,16 @@ function AccountSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
 function CaptureSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-2xl max-h-[85dvh] overflow-y-auto safe-bottom">
+      {/* Mesmo alvo de fechar e mesmo respiro de rodapé da folha da conta —
+          o motivo está comentado lá. */}
+      <SheetContent
+        side="bottom"
+        className={cn(
+          "rounded-t-2xl max-h-[85dvh] overflow-y-auto",
+          "pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
+          "[&>button]:h-11 [&>button]:w-11 [&>button]:grid [&>button]:place-items-center [&>button]:right-0.5 [&>button]:top-0.5",
+        )}
+      >
         <SheetHeader className="text-left">
           <SheetTitle className="font-display">Registrar</SheetTitle>
         </SheetHeader>
@@ -245,6 +297,27 @@ export default function AppLayout() {
   const [focus, setFocus] = useState<(() => void) | null>(null);
   const register = useCallback((fn: (() => void) | null) => setFocus(() => fn), []);
   const captureCtx = useMemo(() => ({ register, focus }), [register, focus]);
+
+  /* A REGRA, escrita como estado impossível em vez de como lembrete.
+   *
+   * O efeito acima fecha as folhas quando a ROTA muda, e isso funciona — o
+   * passo a passo do QA (Jornada → REGISTRAR → voltar) foi remedido e não
+   * reproduz mais. Mas "fechar na troca de rota" é um PROXY da regra; a regra
+   * mesma, escrita em useCaptureFocus.tsx, é outra: uma ação por tela — a
+   * folha de captura nunca pode coexistir com a caixa que a tela já embute.
+   *
+   * Enquanto a garantia depender de alguém lembrar de fechar no evento certo,
+   * ela vale só para os eventos que alguém lembrou. Aqui a folha passa a ser
+   * DERIVADA: se existe captura embutida registrada (`focus` não é nulo),
+   * a folha não abre, ponto — não importa como a pessoa chegou nesse estado,
+   * se por voltar no navegador, por link, por restauração de sessão ou por um
+   * caminho que ninguém mapeou ainda. Duas caixas idênticas deixam de ser um
+   * estado que o componente consegue representar.
+   *
+   * Isto não substitui o efeito de cima, complementa: o efeito zera
+   * `captureOpen` a cada navegação, e por isso uma folha suprimida aqui nunca
+   * reaparece sozinha ao chegar numa tela sem captura embutida. */
+  const captureSheetOpen = captureOpen && !focus;
 
   return (
     <CaptureFocusContext.Provider value={captureCtx}>
@@ -325,7 +398,7 @@ export default function AppLayout() {
         </nav>
 
         <AccountSheet open={accountOpen} onOpenChange={setAccountOpen} />
-        <CaptureSheet open={captureOpen} onOpenChange={setCaptureOpen} />
+        <CaptureSheet open={captureSheetOpen} onOpenChange={setCaptureOpen} />
       </div>
     </CaptureFocusContext.Provider>
   );

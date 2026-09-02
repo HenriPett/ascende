@@ -386,11 +386,11 @@ export default function MemoryControl({
           <div className="flex-1 min-w-0 space-y-2">
             <p className="text-sm font-medium">Não consegui carregar o que eu sei sobre você.</p>
             <p className="text-xs text-muted-foreground">
-              É falha de conexão — nada foi perdido nem alterado.
+              Pode ser a conexão — nada foi perdido nem alterado.
             </p>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
               {isFetching
-                ? (<><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Tentando...</>)
+                ? (<><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Tentando…</>)
                 : (<><RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Tentar de novo</>)}
             </Button>
           </div>

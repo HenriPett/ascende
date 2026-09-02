@@ -54,11 +54,11 @@ const TOOL = {
   },
 };
 
-const SYSTEM = `Você é um assistente de estimativa nutricional do Ascende, plataforma brasileira de qualidade de vida.
+const SYSTEM = `Você faz a estimativa nutricional do Ascende, plataforma brasileira de qualidade de vida.
 Você recebe UMA foto de refeição e/ou uma descrição em texto, e estima calorias e macronutrientes da porção.
 
 REGRAS:
-• A estimativa é uma APROXIMAÇÃO informativa para ajudar a pessoa a ter noção — nunca um número clínico exato. Prefira faixas mentais e um valor central razoável; não invente precisão que a foto não permite (por isso existe o campo confidence).
+• A estimativa é uma APROXIMAÇÃO informativa para ajudar a pessoa a ter noção — nunca um número clínico exato. Raciocine em faixas e devolva um valor central razoável; não invente precisão que a foto não permite (por isso existe o campo confidence).
 • Considere porções típicas do Brasil (prato feito, marmita, pão francês, etc.).
 • Se a imagem NÃO for comida/bebida (ou, sem imagem, se a descrição não for de comida/bebida), retorne is_food:false e calories:0, sem inventar.
 • Sem foto, estime pela descrição assumindo porções típicas brasileiras; a confiança tende a ser "baixa" ou "media".
@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     }
     if (hasImage && image.length > MAX_B64) {
       await releaseUsage(supabase, reservationId);
-      return json({ error: "Imagem muito grande. Tire a foto novamente." }, 413);
+      return json({ error: "A imagem é grande demais. Tente de novo com uma foto de resolução menor." }, 413);
     }
     const mediaType = ALLOWED_MEDIA.includes(media_type) ? media_type : "image/jpeg";
 
@@ -167,6 +167,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);
-    return json({ error: "Erro interno." }, 500);
+    return json({ error: "Algo falhou do nosso lado. Tente de novo em instantes; se continuar, mande um feedback pelos Ajustes." }, 500);
   }
 });

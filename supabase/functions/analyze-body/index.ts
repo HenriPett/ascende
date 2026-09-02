@@ -101,10 +101,10 @@ Deno.serve(async (req) => {
 
     const { image, media_type, weight_kg } = await req.json();
     if (!image || typeof image !== "string" || image.length > MAX_B64) {
-      return json({ error: "Imagem inválida ou grande demais." }, 400);
+      return json({ error: "A imagem é inválida ou grande demais. Envie uma foto mais leve, em JPG, PNG ou WebP." }, 400);
     }
     if (!ALLOWED_MEDIA.includes(media_type)) {
-      return json({ error: "Formato de imagem não suportado." }, 400);
+      return json({ error: "Formato de imagem não suportado. Envie JPG, PNG ou WebP." }, 400);
     }
     const weightKg = typeof weight_kg === "number" && weight_kg > 20 && weight_kg < 400 ? weight_kg : undefined;
 
@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
     } | undefined;
 
     if (!input?.valid || input.body_fat_low == null || input.body_fat_high == null) {
-      return json({ valid: false, reason: input?.reason ?? "Não consegui analisar essa foto." });
+      return json({ valid: false, reason: input?.reason ?? "Não consegui analisar essa foto. Tente uma de corpo inteiro, com boa iluminação." });
     }
 
     const low = Math.max(3, Math.round(input.body_fat_low));
@@ -154,6 +154,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     if (e instanceof Response) return e;
     console.error(e);
-    return json({ error: "Erro interno." }, 500);
+    return json({ error: "Algo falhou do nosso lado. Tente de novo em instantes; se continuar, mande um feedback pelos Ajustes." }, 500);
   }
 });

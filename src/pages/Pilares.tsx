@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { PILLARS, activePillarSet, type PillarId } from "@/lib/pillars";
 import { ChevronRight, Swords, ClipboardList, Plus, Loader2, Layers } from "lucide-react";
 import FirstTimeTip from "@/components/core/FirstTimeTip";
+import QueryError from "@/components/core/QueryError";
 
 /* Modularidade REAL (plano de feedbacks, Sugestão 1): antes, um pilar
    "inativo" era só um card esmaecido — e continuava clicável. Agora a
@@ -22,7 +23,7 @@ export default function Pilares() {
   const { profile, refresh } = useProfile();
   const [activating, setActivating] = useState<PillarId | null>(null);
 
-  const { data: counts } = usePillarActivityQuery();
+  const { data: counts, isError, refetch, isFetching } = usePillarActivityQuery();
 
   const active = activePillarSet(profile?.pillars);
   const activeList = PILLARS.filter((p) => active.has(p.id));
@@ -37,7 +38,7 @@ export default function Pilares() {
     const { error } = await supabase.from("profiles").update({ pillars: next }).eq("user_id", user.id);
     setActivating(null);
     if (error) { toast.error("Não consegui ativar agora. Tente de novo."); return; }
-    toast.success(`${PILLARS.find((p) => p.id === id)?.name} ativado. O app inteiro passa a considerá-lo.`);
+    toast.success(`Pronto: ${PILLARS.find((p) => p.id === id)?.name} agora faz parte do seu Ascende.`);
     refresh();
   };
 
@@ -52,6 +53,15 @@ export default function Pilares() {
       </div>
 
       <FirstTimeTip id="pilares" />
+
+      {isError && (
+        <QueryError
+          title="Não consegui carregar a atividade dos seus pilares."
+          detail="Pode ser a conexão — os pilares abrem normalmente, só a contagem de registros não veio."
+          onRetry={() => refetch()}
+          retrying={isFetching}
+        />
+      )}
 
       {/* Pilares = áreas da vida; Ferramentas = recursos transversais (plano §5.4) */}
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pt-1">
@@ -72,7 +82,7 @@ export default function Pilares() {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold">{p.name}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {n > 0 ? `${n} registros nos últimos 14 dias` : p.desc}
+                    {n > 0 ? `${n} ${n === 1 ? "registro" : "registros"} nos últimos 14 dias` : p.desc}
                   </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
@@ -116,7 +126,7 @@ export default function Pilares() {
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-muted-foreground">{p.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {n > 0 ? `${n} registros nos últimos 14 dias — parece que já é seu` : p.desc}
+                        {n > 0 ? `${n} ${n === 1 ? "registro" : "registros"} nos últimos 14 dias — parece que já é seu` : p.desc}
                       </p>
                     </div>
                     <button

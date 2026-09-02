@@ -15,6 +15,10 @@ export default function NotFound() {
       <div>
         <p className="font-display text-6xl font-semibold text-gold">404</p>
         <p className="mt-2 text-muted-foreground">Esse degrau não existe.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          O endereço que você abriu não foi encontrado — ele pode ter mudado de lugar
+          ou ter sido digitado com algum erro.
+        </p>
         {/* Enquanto a sessão carrega, o botão fica inerte e sem destino: é
             melhor esperar um instante do que oferecer o caminho errado. */}
         {loading ? (

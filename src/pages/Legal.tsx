@@ -51,8 +51,10 @@ export default function Legal({ doc }: { doc: string }) {
         </article>
 
         <p className="text-xs text-muted-foreground mt-6 text-center">
-          Dúvidas sobre estes documentos ou sobre seus dados? Fale com a gente pelo canal de
-          atendimento da plataforma.
+          Dúvidas sobre estes documentos ou sobre seus dados? Se você já tem conta, use
+          <strong className="text-foreground"> Ajustes → Enviar feedback</strong> dentro do app —
+          é o canal de atendimento do Ascende, e por ele você também exerce os direitos previstos
+          na Política de Privacidade.
         </p>
       </main>
     </div>

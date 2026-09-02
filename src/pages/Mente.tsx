@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useProfile, JOURNAL_COLORS, journalColorHsl } from "@/hooks/useProfile";
+import { useProfile, JOURNAL_COLORS, journalColorHsl, journalInkHsl } from "@/hooks/useProfile";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { HeartHandshake, Send, BookOpen, Loader2, Trash2, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
+import QueryError from "@/components/core/QueryError";
 import { eventLabel } from "@/lib/eventLabels";
 import { todayISOInSP, dateISOInSP } from "@/lib/dates";
 import { activeTrackerSet } from "@/lib/trackers";
@@ -46,16 +47,20 @@ export default function Mente() {
     : "Meditação, respiração, leitura, silêncio — qualquer pausa que treine sua mente conta.";
 
   const journalHsl = journalColorHsl(profile?.journal_color);
+  const journalInk = journalInkHsl(profile?.journal_color);
 
-  const { data: events } = useQuery({
+  const { data: events, isError, refetch, isFetching } = useQuery({
     queryKey: ["mind-events", user?.id],
     enabled: !!user,
     queryFn: async () => {
       const since = new Date(Date.now() - 14 * 864e5).toISOString();
-      const { data } = await supabase.from("life_events")
+      const { data, error } = await supabase.from("life_events")
         .select("id,kind,occurred_at,payload")
         .eq("user_id", user!.id).eq("pillar", "mente").gte("occurred_at", since)
         .order("occurred_at", { ascending: false }).limit(80);
+      // Sem isto, a falha apaga humor, prática e diário dos últimos 14 dias e
+      // a tela volta a oferecer tudo como se o dia não tivesse acontecido.
+      if (error) throw error;
       return (data ?? []) as MindEvent[];
     },
   });
@@ -74,7 +79,7 @@ export default function Mente() {
       user_id: user.id, pillar: "mente", kind: "mood",
       payload: { score, label, summary: `Humor: ${label}` }, source: "form",
     });
-    if (error) { toast.error("Não consegui salvar."); return; }
+    if (error) { toast.error("Não consegui salvar o humor. Tente de novo."); return; }
     toast.success("Humor registrado. Obrigado pela honestidade. +5 XP");
     qc.invalidateQueries();
   };
@@ -85,7 +90,7 @@ export default function Mente() {
       user_id: user.id, pillar: "mente", kind: "practice",
       payload: { description: practiceLabel, summary: practiceLabel }, source: "form",
     });
-    if (error) { toast.error("Não consegui salvar."); return; }
+    if (error) { toast.error("Não consegui salvar a prática. Tente de novo."); return; }
     toast.success("Prática registrada. +8 XP");
     qc.invalidateQueries();
   };
@@ -97,8 +102,8 @@ export default function Mente() {
       user_id: user.id, pillar: "mente", kind: "gratitude",
       payload: { text: gratitude.trim(), summary: "Gratidão registrada" }, source: "form",
     });
-    if (error) { toast.error("Não consegui salvar."); return; }
-    toast.success("Guardado. +5 XP");
+    if (error) { toast.error("Não consegui guardar a gratidão. Tente de novo."); return; }
+    toast.success("Gratidão guardada. +5 XP");
     setGratitude("");
     qc.invalidateQueries();
   };
@@ -117,7 +122,7 @@ export default function Mente() {
       source: "form",
     });
     setSavingJournal(false);
-    if (error) { toast.error("Não consegui guardar a entrada."); return; }
+    if (error) { toast.error("Não consegui guardar a entrada. Tente de novo."); return; }
     toast.success("Guardado no seu diário. +6 XP");
     setJournalText("");
     qc.invalidateQueries();
@@ -132,7 +137,7 @@ export default function Mente() {
     if (!user) return;
     const { error } = await supabase.from("profiles")
       .update({ journal_color: colorId }).eq("user_id", user.id);
-    if (error) { toast.error("Não consegui trocar a cor."); return; }
+    if (error) { toast.error("Não consegui trocar a cor. Tente de novo."); return; }
     refreshProfile();
   };
 
@@ -151,13 +156,22 @@ export default function Mente() {
         </p>
       </div>
 
+      {isError && (
+        <QueryError
+          title="Não consegui carregar seus registros de mente."
+          detail="Pode ser a conexão — humor, práticas e diário continuam salvos."
+          onRetry={() => refetch()}
+          retrying={isFetching}
+        />
+      )}
+
       {/* Humor (tracker Humor) */}
       {trackers.has("mood") && (
       <Card className="p-4">
         <h2 className="font-display font-semibold mb-1">Como você está agora?</h2>
         {moodToday && (
           <p className="text-xs text-muted-foreground mb-2">
-            Você já registrou "{moodToday.payload?.label}" hoje — pode registrar de novo se mudou.
+            Você já registrou "{moodToday.payload?.label}" hoje — se algo mudou, registre de novo.
           </p>
         )}
         <div className="grid grid-cols-5 gap-1.5 mt-2">
@@ -227,8 +241,10 @@ export default function Mente() {
             style={{ borderColor: `hsl(${journalHsl} / 0.4)` }}
           />
           <div className="flex justify-end">
+            {/* A tinta acompanha a cor escolhida: sobre violeta o padrão
+                escuro dava 3,36:1. Ver journalInkHsl. */}
             <Button onClick={saveJournal} disabled={savingJournal || !journalText.trim()}
-              style={{ background: `hsl(${journalHsl})` }}>
+              style={{ background: `hsl(${journalHsl})`, color: `hsl(${journalInk})` }}>
               {savingJournal ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar no diário"}
             </Button>
           </div>
@@ -280,7 +296,7 @@ export default function Mente() {
       {trackers.has("gratitude") && (
       <Card className="p-4">
         <h2 className="font-display font-semibold mb-1 flex items-center gap-1.5">
-          <HeartHandshake className="w-4 h-4" /> Pelo que você é grato(a) hoje?
+          <HeartHandshake className="w-4 h-4" /> O que você agradece hoje?
         </h2>
         <form onSubmit={logGratitude} className="flex gap-2 mt-2">
           <Input maxLength={200} placeholder="Uma coisa pequena já conta"

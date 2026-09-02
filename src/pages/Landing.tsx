@@ -211,8 +211,8 @@ function TryItDemo() {
             </>
           ) : (
             <p className="text-sm text-muted-foreground rounded-md border p-2.5">
-              Essa frase a prévia local não pegou — mas a IA completa entende. Conte ações do dia
-              (gastos, treino, sono, refeições, humor) ou{" "}
+              A prévia local não reconheceu nada nessa frase — mas a IA completa entende muito
+              mais. Conte ações do dia (gastos, treino, sono, refeições, humor) ou{" "}
               <Link to="/auth?intent=signup" className="underline underline-offset-2 text-foreground">crie a conta grátis</Link>{" "}
               e teste com a frase que quiser.
             </p>
@@ -253,15 +253,17 @@ export default function Landing() {
           <p className="text-xs font-semibold tracking-[0.28em] uppercase text-gold-ink mb-5 animate-fade-up">
             O único app que vê a sua vida inteira
           </p>
-          <h1 className="font-display text-[2.6rem] leading-[1.05] md:text-7xl font-semibold tracking-tight max-w-4xl mx-auto animate-fade-up">
-            A vida não é dividida
-            <br />
-            em aplicativos.
+          {/* [B3] Sem <br /> fixo: em 390px ele forçava uma terceira linha e
+              deixava "dividida" sozinha no meio do bloco. `text-balance` deixa o
+              navegador distribuir as linhas — duas no celular, duas no desktop. */}
+          <h1 className="font-display text-[2.6rem] leading-[1.05] md:text-7xl font-semibold tracking-tight text-balance max-w-4xl mx-auto animate-fade-up">
+            A vida não é dividida em aplicativos.
           </h1>
           <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto animate-fade-up">
             Sua dieta depende do seu salário. Seu gasto por impulso depende do seu sono.
-            O Ascende monta o plano do seu corpo dentro do seu orçamento — porque é o
-            único app que vê a sua vida inteira.
+            O Ascende junta corpo, dinheiro, alimentação e mente num lugar só — e a IA
+            monta o plano do seu corpo dentro do orçamento que você tem de verdade.
+            Você conta o dia numa frase; ela registra o resto.
           </p>
           <div className="mt-7 flex justify-center animate-fade-up">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3.5 py-1.5 text-xs font-medium">
@@ -273,7 +275,7 @@ export default function Landing() {
             <Button asChild size="lg" className="px-9 h-12 text-base">
               <Link to="/auth?intent=signup">Começar minha subida <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
             </Button>
-            <span className="text-xs text-muted-foreground">Grátis para começar · 2 minutos · sem cartão</span>
+            <span className="text-xs text-muted-foreground">Conta grátis em 2 minutos · sem cartão de crédito</span>
           </div>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground animate-fade-up">
@@ -350,7 +352,7 @@ export default function Landing() {
               {
                 n: "2",
                 title: "A IA conecta os pontos",
-                desc: "Uma retrospectiva toda semana cruzando finanças, corpo, alimentação e mente (no Ascende+, um briefing todo dia) — e um Conselheiro que responde com os seus dados, não com conselhos genéricos. Quando ficar pronta, o Ascende te avisa no WhatsApp.",
+                desc: "Uma retrospectiva toda semana cruzando finanças, corpo, alimentação e mente (no Ascende+, um briefing todo dia) — e um Conselheiro que responde com os seus dados, não com conselhos genéricos. Quando ela ficar pronta, o Ascende avisa você no WhatsApp.",
               },
               {
                 n: "3",
@@ -379,8 +381,8 @@ export default function Landing() {
         </h2>
         <p className="mt-5 text-muted-foreground max-w-2xl mx-auto">
           Todo app quer mais do seu tempo. O Ascende foi desenhado para o contrário:
-          briefing 1 vez por dia, sequência com dia de descanso embutido, XP que premia
-          constância e não perfeição. A gente ganha quando a sua vida melhora — nunca
+          briefing no máximo uma vez por dia, sequência com dia de descanso embutido,
+          XP que premia constância e não perfeição. A gente ganha quando a sua vida melhora — nunca
           quando você fica mais tempo na tela.
         </p>
       </section>
@@ -452,10 +454,10 @@ export default function Landing() {
                 Uma IA que conhece a sua vida — não a média das vidas.
               </h2>
               <p className="mt-4 text-white/75">
-                Peça "monte um plano alimentar para ganho de massa que caiba no meu orçamento"
-                e a resposta vem dos seus números: sua meta, seus gastos com comida, sua renda.
-                Nenhum nutricionista de app e nenhum app de finanças faz isso sozinho — porque
-                nenhum deles vê os dois lados. Fale por voz, anexe fotos e PDFs; se você contar
+                Peça “monte um plano alimentar para ganho de massa que caiba no meu
+                orçamento” e a resposta vem dos seus números: sua meta, seus gastos com
+                comida, sua renda. Nenhum app de dieta e nenhum app de finanças conseguem
+                fazer isso sozinhos: cada um enxerga só metade da conta. Fale por voz, anexe fotos e PDFs; se você contar
                 que treinou costas ou gastou 30 no almoço, ele já separa os registros para você
                 confirmar. E com limites que são princípio, não letra miúda: o Conselheiro não
                 diagnostica, não prescreve e não recomenda investimentos — ele organiza, conecta
@@ -499,7 +501,8 @@ export default function Landing() {
           Registrar não pode ser um segundo emprego.
         </h2>
         <p className="text-center text-muted-foreground mt-3 mb-10 max-w-xl mx-auto">
-          Por isso o Ascende faz o trabalho chato por você — de foto, de voz ou de conversa.
+          Por isso o Ascende faz o trabalho chato por você — de foto, de voz, de conversa
+          ou do arquivo que outro aplicativo já guarda.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
@@ -515,13 +518,13 @@ export default function Landing() {
             },
             {
               icon: ScanLine,
-              title: "Composição corporal por foto",
-              desc: "Uma foto de corpo inteiro gera uma estimativa honesta (em faixa) de gordura e massa magra. A foto não fica salva.",
+              title: "Fatura do cartão → lançamentos",
+              desc: "Importe o PDF ou a planilha da fatura e a IA separa os lançamentos por categoria para você confirmar — em vez de digitar um a um. (Ascende+)",
             },
             {
-              icon: Mic,
-              title: "Fale, anexe, pergunte",
-              desc: "O Conselheiro aceita voz, fotos, PDFs e documentos. Mande a fatura do cartão e pergunte: \u201Conde meu plano alimentar pode ficar mais barato?\u201D",
+              icon: Paperclip,
+              title: "Seu histórico dos outros apps",
+              desc: "Traga o export do App Saúde do iPhone (o .zip inteiro, com anos de sono, treino, peso e água) ou um CSV do seu app de sono, treino, peso ou alimentação. Cada registro entra com a data original — e você revisa tudo antes de gravar.",
             },
           ].map((c) => (
             <div key={c.title} className="rounded-xl border bg-card p-5">
@@ -545,16 +548,19 @@ export default function Landing() {
           Dinheiro, corpo, fé e emoções no mesmo lugar exigem um compromisso à altura:
           seus dados nunca viram produto, nunca são vendidos, cada conta só enxerga o que
           é dela — e você pode apagar tudo, de verdade, quando quiser. Fotos enviadas para
-          análise são processadas e descartadas, não armazenadas.
+          análise são processadas e descartadas, não armazenadas. E o arquivo que você importa
+          de outro aplicativo é lido dentro do seu aparelho: ele não sobe para servidor nenhum
+          e não passa por IA — do arquivo em si guardamos apenas uma impressão digital, para
+          reconhecer se um dia você reimportar o mesmo.
         </p>
         <div className="mt-8 rounded-xl border bg-card p-5 text-left max-w-xl mx-auto">
           <p className="flex items-center gap-2 text-sm font-semibold">
-            <ShieldCheck className="w-4 h-4 text-gold" /> Três "nãos" que assinamos em público
+            <ShieldCheck className="w-4 h-4 text-gold" /> Três “nãos” que assinamos em público
           </p>
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-            <li className="flex gap-2"><Check className="w-4 h-4 text-success shrink-0 mt-0.5" /><span>Nunca venderemos seus dados — nem "anonimizados".</span></li>
+            <li className="flex gap-2"><Check className="w-4 h-4 text-success shrink-0 mt-0.5" /><span>Nunca venderemos seus dados — nem “anonimizados”.</span></li>
             <li className="flex gap-2"><Check className="w-4 h-4 text-success shrink-0 mt-0.5" /><span>Nunca aceitaremos anúncios. De ninguém. Muito menos de bets.</span></li>
-            <li className="flex gap-2"><Check className="w-4 h-4 text-success shrink-0 mt-0.5" /><span>Nunca usaremos notificação de culpa nem streak que pune sua semana ruim.</span></li>
+            <li className="flex gap-2"><Check className="w-4 h-4 text-success shrink-0 mt-0.5" /><span>Nunca usaremos notificação de culpa nem sequência que pune sua semana ruim.</span></li>
           </ul>
           <p className="mt-3 text-xs text-muted-foreground">
             A lista completa, com o porquê de cada um, está em{" "}
@@ -584,10 +590,11 @@ export default function Landing() {
                 "Registros manuais, hábitos e batalhas sem limite",
                 "Registro e Conselheiro pelo WhatsApp — texto, áudio e foto",
                 "Diário, hidratação, XP, níveis e gráficos básicos",
-                "Captura inteligente: 3 por dia (10/dia nas 2 primeiras semanas)",
+                "Importar o export do App Saúde do iPhone e CSV de outros apps",
+                "Captura inteligente por IA: 3 por dia (10 por dia nas 2 primeiras semanas)",
                 "Conselheiro: 15 mensagens por semana",
-                "4 análises de refeição por mês (1 por semana)",
-                "Retrospectiva da semana todo domingo",
+                "4 análises de refeição por foto, por mês",
+                "Retrospectiva da semana, todo domingo",
                 "1 plano ativo · 20 memórias do Conselheiro",
                 "Exportação de dados e privacidade — sempre grátis",
               ].map((f) => (
@@ -605,7 +612,7 @@ export default function Landing() {
             <p className="text-2xl font-bold mt-1">
               R$ 29,90<span className="text-sm font-normal text-muted-foreground">/mês</span>
             </p>
-            <p className="text-xs text-muted-foreground">ou R$ 239,90/ano (2 meses grátis)</p>
+            <p className="text-xs text-muted-foreground">ou R$ 239,90/ano — economia de R$ 118,90</p>
             <ul className="mt-4 space-y-2 text-sm">
               {[
                 "Tudo do plano gratuito",
@@ -654,7 +661,8 @@ export default function Landing() {
               <li>• Captura por frase, voz e foto — no app e pelo WhatsApp (áudio transcrito na hora, foto de prato e print de Pix viram registro)</li>
               <li>• Conselheiro que vê os 4 pilares, no app e pelo WhatsApp (a conversa continua nos dois)</li>
               <li>• Retrospectiva semanal, briefing diário (Ascende+) e avisos no WhatsApp</li>
-              <li>• Raio-X financeiro de 60s, importação de fatura, batalhas contra vícios</li>
+              <li>• Raio-X de 60 segundos das finanças, importação de fatura e batalhas contra vícios</li>
+              <li>• Importação do histórico que já existe em outros apps: o export do App Saúde do iPhone e CSV de sono, treino, peso e alimentação — lido no próprio aparelho</li>
               <li>• Planos que viram metas vivas na sua tela Hoje</li>
             </ul>
           </div>
@@ -665,6 +673,7 @@ export default function Landing() {
             <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
               <li>• Conexão bancária via Open Finance: sua fatura entrando sozinha, sem digitar nada</li>
               <li>• Aplicativo nativo com integração de saúde (sono e treinos entrando automaticamente)</li>
+              <li>• Composição corporal por foto: suspensa enquanto refazemos a metodologia — só volta com faixas honestas, nunca com um número de aparência clínica</li>
             </ul>
             <p className="mt-4 text-xs text-muted-foreground">
               Quando existirem de verdade, sobem para a coluna de cá — antes disso, não
@@ -713,6 +722,22 @@ export default function Landing() {
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="q5">
+              <AccordionTrigger className="text-left">
+                Dá para trazer o que eu já registrei em outros aplicativos?
+              </AccordionTrigger>
+              <AccordionContent className="text-muted-foreground">
+                Dá. Do iPhone, o export do app Saúde entra inteiro — é aquele{" "}
+                <code className="rounded bg-muted px-1 text-xs">.zip</code> que sai em Ajustes do
+                Saúde → sua foto de perfil → Exportar todos os dados de saúde, e ele traz anos de
+                sono, treino, peso e água de uma vez. De outros aplicativos, entra o CSV de sono,
+                treino, peso ou alimentação: o Ascende reconhece pelo formato das colunas, e não
+                pela marca, então funciona com Sleep Cycle, Oura, Whoop, Garmin, Fitbit, Hevy,
+                Strava, Withings, MyFitnessPal e outros. O arquivo é lido dentro do seu aparelho,
+                sem passar por IA e sem subir para servidor nenhum; cada registro entra com a data
+                original, e você revisa a lista antes de qualquer coisa ser gravada.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="q6">
               <AccordionTrigger className="text-left">Meus dados estão seguros?</AccordionTrigger>
               <AccordionContent className="text-muted-foreground">
                 Seus registros são seus. Cada conta só acessa os próprios dados, nada é vendido ou usado para
@@ -778,6 +803,14 @@ export default function Landing() {
               acceptedAnswer: {
                 "@type": "Answer",
                 text: "Do seu jeito, nos dois casos. Quem tem uma prática define o nome dela — oração, meditação, culto, silêncio. Quem não tem religião ativa o modo \"Mente & Foco\" nos ajustes, sem nenhum vocabulário espiritual.",
+              },
+            },
+            {
+              "@type": "Question",
+              name: "Dá para trazer o que eu já registrei em outros aplicativos?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "Dá. Do iPhone, o export do app Saúde entra inteiro (o .zip de Ajustes do Saúde → sua foto de perfil → Exportar todos os dados de saúde), com anos de sono, treino, peso e água. De outros aplicativos, entra o CSV de sono, treino, peso ou alimentação: o reconhecimento é pelo formato das colunas, não pela marca, então funciona com Sleep Cycle, Oura, Whoop, Garmin, Fitbit, Hevy, Strava, Withings, MyFitnessPal e outros. O arquivo é lido dentro do seu aparelho, sem passar por IA e sem subir para servidor nenhum; cada registro entra com a data original e você revisa tudo antes de gravar.",
               },
             },
             {

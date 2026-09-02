@@ -191,6 +191,31 @@ async function selectMemories(
 
 const BRL = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+/* ─── O relógio do modelo ──────────────────────────────────────────────
+   Sem esta linha, "ontem", "na segunda" e "semana passada" são CHUTE: o
+   modelo não tem relógio nem fuso. Caso reproduzido em produção: "ontem
+   gastei 22 no posto" devolvia data errada, o app dizia ter salvo, creditava
+   XP e nada era gravado. A guarda de janela no app é remendo; a raiz é o
+   modelo saber que dia é hoje ao interpretar a referência relativa.
+
+   Uma função só, usada pela captura E pelo retrato, para as duas superfícies
+   dizerem a MESMA coisa no mesmo formato. O cálculo de fuso continua todo em
+   spParts() (_shared/entitlements.ts): aqui não há aritmética de data nova.
+   spParts devolve weekday em inglês (Sun..Sat) e o prompt é em português, por
+   isso a tradução — "na segunda" precisa casar com "segunda-feira". */
+const WEEKDAY_PT: Record<string, string> = {
+  Sun: "domingo", Mon: "segunda-feira", Tue: "terça-feira", Wed: "quarta-feira",
+  Thu: "quinta-feira", Fri: "sexta-feira", Sat: "sábado",
+};
+
+/** Data e hora de AGORA em São Paulo, escritas para o modelo ler. */
+export function nowInSpForPrompt(): string {
+  const n = spParts();
+  const dia = WEEKDAY_PT[n.weekday] ?? n.weekday;
+  return `AGORA (fuso do app, America/Sao_Paulo): hoje é ${dia}, ${n.dateIso}, e são ${n.timeHm}.`;
+}
+
+
 /**
  * Monta um retrato compacto do usuário cruzando todos os pilares.
  * É este texto que dá ao Conselheiro a visão completa da vida da pessoa.
@@ -226,6 +251,10 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     ]);
 
   const lines: string[] = [];
+  // PRIMEIRA linha do retrato, de propósito: tudo que vem depois ("hoje",
+  // "esta semana", "no mês") só faz sentido ancorado numa data, e sem ela o
+  // modelo não sabia interpretar "ontem" no relato da pessoa.
+  lines.push(`${nowInSpForPrompt()} Use esta data como referência para qualquer expressão de tempo, sua ou da pessoa.`);
   const p = profile ?? {};
   // Escopos de privacidade: quais áreas a pessoa autorizou o Conselheiro a analisar.
   const rawScopes = (p.ai_scopes ?? {}) as Record<string, unknown>;
@@ -622,7 +651,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       // (UTC no Deno), então a semana começava domingo às 21h.
       const weekStart = new Date(spWeekStartUtc());
       const workoutsWeek = (kinds["workout"] ?? []).filter((e) => new Date(e.occurred_at) >= weekStart).length;
-      lines.push(`META DE TREINOS: ${wwGoal}/semana. Esta semana (desde segunda): ${workoutsWeek} treino(s)` +
+      lines.push(`META DE TREINOS: ${wwGoal} por semana. Esta semana (desde segunda): ${workoutsWeek} ${workoutsWeek === 1 ? "treino" : "treinos"}` +
         (workoutsWeek >= wwGoal ? " — meta da semana batida." : ` — faltam ${wwGoal - workoutsWeek}.`));
     }
     const sleepGoal = Number(p.sleep_goal_h) || 0;
@@ -754,7 +783,14 @@ export const SAFETY_RULES = `
 ━━━ BATALHAS (lutas pessoais: pornografia, redes sociais, cigarro, apostas etc.) ━━━
 • Recaída se acolhe, nunca se julga. O dado importante da recaída é o gatilho — ajude a pessoa a enxergar o padrão (ex.: recaídas em noites de sono ruim, em dias de humor baixo, em madrugadas). Reforce que os dias limpos acumulados não se perdem.
 • Ao notar padrão severo em batalhas de álcool, drogas ou apostas (recaídas quase diárias, sinais de abstinência física, dívidas ou perdas relevantes), diga com clareza e carinho que isso merece acompanhamento profissional e aponte caminhos concretos no Brasil: CAPS (unidades públicas de saúde mental), Alcoólicos Anônimos, Narcóticos Anônimos, Jogadores Anônimos. O Ascende é apoio, não tratamento.
-• NUNCA trate comida como inimigo nem incentive "batalha contra comer". Se a pessoa enquadrar alimentação como guerra/restrição, redirecione com gentileza para hábitos positivos no pilar Alimentação (ex.: "fazer uma refeição de verdade") — guerra contra comida alimenta compulsão. Sinais de transtorno alimentar merecem indicação de profissional.`;
+• NUNCA trate comida como inimigo nem incentive "batalha contra comer". Se a pessoa enquadrar alimentação como guerra/restrição, redirecione com gentileza para hábitos positivos no pilar Alimentação (ex.: "fazer uma refeição de verdade") — guerra contra comida alimenta compulsão. Sinais de transtorno alimentar merecem indicação de profissional.
+━━━ COMO VOCÊ ESCREVE ━━━
+• Português do Brasil, direto e sem rodeio. Frase que a pessoa precisa reler duas vezes é frase para reescrever. Corte palavra que não faz trabalho.
+• NÚMEROS EM FORMATO BRASILEIRO, sempre: vírgula decimal e espaço antes da unidade — "1,5 L", "7,5 h", "6,5 kg", "R$ 47,90". Os dados que você recebe podem vir com ponto decimal e unidade colada ("1.5L", "7.5h"): traduza antes de escrever. Datas em dia/mês ("12/03", "12 de março"), nunca no formato americano.
+• Nunca use vocabulário interno do sistema com a pessoa: nada de "evento", "payload", "registro bruto", "snapshot", "escopo", "tracker", "flag". Diga a coisa: "o gasto que você contou", "seu treino de ontem", "o que você acompanha".
+• Chame as coisas pelo nome que a pessoa vê na tela: você é o Conselheiro (nunca "a IA", nunca "o assistente", nunca "o bot"); o produto é o Ascende; o plano pago é o Ascende+.
+• Não use "(s)" nem "(a)" para resolver plural ou gênero — escolha a forma certa ("1 treino", "3 treinos") ou uma construção neutra.
+• Nunca cobre. Você é espelho, não cobrador: sem "você deveria", sem "você falhou", sem ponto de exclamação para animar quem não pediu ânimo.`;
 /* ─── Captura conversacional (compartilhada entre `capture` e `ai-chat`) ───
    Texto livre → eventos estruturados PROPOSTOS. O app sempre pede confirmação
    do usuário antes de gravar — a IA nunca grava sozinha. */
@@ -789,9 +825,13 @@ export const CAPTURE_TOOL = {
             occurred_at: {
               type: "string",
               description:
-                "Data do evento em YYYY-MM-DD, APENAS quando o relato ou o arquivo disserem explicitamente " +
-                "a data ('ontem', 'dia 12', uma coluna de data no CSV). OMITA quando for do dia de hoje ou " +
-                "quando não houver data explícita: o app usa o momento do registro. NUNCA invente a data.",
+                "Data do evento em YYYY-MM-DD, no fuso America/Sao_Paulo. Preencha SOMENTE quando o relato " +
+                "ou o arquivo apontarem um dia diferente de hoje ('ontem', 'anteontem', 'na sexta', 'dia 12', " +
+                "uma coluna de data no CSV), convertendo a referência a partir da data de AGORA informada no " +
+                "início da mensagem. OMITA quando for de hoje, quando não houver data, ou quando a referência " +
+                "não determinar UM único dia: omitido, o app usa o momento do registro, que a pessoa vê na tela " +
+                "e corrige. NUNCA invente a data e NUNCA devolva data no futuro — todo relato aqui é de algo " +
+                "que já aconteceu, e data futura vira registro invisível.",
             },
             pillar: {
               type: "string",
@@ -812,7 +852,13 @@ export const CAPTURE_TOOL = {
             fat_g: { type: "number", description: "APENAS para meal: gorduras estimadas em gramas, quando possível." },
             meal_type: {
               type: "string", enum: ["cafe_da_manha", "almoco", "jantar", "lanche"],
-              description: "APENAS para meal: tipo da refeição, inferido do que a pessoa disse ('no almoço...', 'de manhã comi...', 'beliscei...'). Omita se não der para saber.",
+              description:
+                "APENAS para meal: qual refeição foi. Decida NESTA ordem. " +
+                "1) O que a pessoa disse manda: 'no almoço...', 'de manhã comi...', 'beliscei...'. " +
+                "2) Bebida ou belisco sozinho (um café, uma fruta, um biscoito, um suco) é sempre lanche, em QUALQUER hora: não é a refeição principal daquele horário. " +
+                "3) Sem essas pistas, e só para relato do DIA DE HOJE, use a hora informada no início da mensagem: até 10h30 cafe_da_manha; 11h00 as 15h00 almoco; 18h00 as 22h00 jantar; qualquer outra hora (meio da tarde, madrugada) lanche. " +
+                "4) OMITA o campo quando a hora cair fora dessas faixas sem belisco claro, quando o relato for de outro dia, ou quando nada distinga a refeição. " +
+                "Nao afirmar o tipo e melhor do que afirmar o tipo errado.",
             },
             duration_min: { type: "number", description: "APENAS para workout: duração em minutos, se mencionada ('corri 40 min' → 40)." },
             description: { type: "string", description: "Descrição livre (refeição, treino, nota...)." },
@@ -849,6 +895,16 @@ Exemplos (a pergunta em si nunca vira evento; o relato ao lado dela SEMPRE vira)
 • "Por que eu acordo cansado? Dormi 5 horas essa noite" → 1 evento sleep (as 5 horas).
 Só devolva events vazio quando a mensagem for SÓ pergunta/conversa, sem absolutamente nenhum relato do que aconteceu.
 
+━━━ DATAS RELATIVAS: O RELÓGIO ESTÁ NA PRIMEIRA LINHA DESTA MENSAGEM ━━━
+A data e a hora de AGORA em São Paulo vêm no começo da mensagem do usuário. Use-as para converter referência relativa em data absoluta e preencher occurred_at (YYYY-MM-DD). Nunca calcule "de cabeça" sem olhar essa linha.
+• "hoje", "agora", "hoje de manhã", "no almoço", "acabei de" → é hoje: OMITA occurred_at (o app usa o momento do registro).
+• "ontem" → hoje menos 1 dia. "anteontem" → hoje menos 2.
+• "na segunda", "no sábado", "quinta passada" → conte para TRÁS a partir de hoje até aquele dia da semana, porque todo relato aqui é de algo que JÁ aconteceu. Se hoje for esse mesmo dia da semana, é hoje (omita).
+• "dia 15", "no dia 3" → esse dia do mês corrente, se já passou; se ainda não chegou neste mês, é o mesmo dia do mês anterior.
+• AMBIGUIDADE — a regra que importa: quando a referência NÃO determinar um único dia ("semana passada", "no mês passado", "uns dias atrás", "outro dia", ou um dia da semana que possa ser tanto o passado quanto o próximo), NÃO escolha por conta própria. OMITA occurred_at e registre no summary a expressão que a pessoa usou: "Gasto de R$ 22 · Posto (a pessoa disse 'semana passada')". Data omitida vira hoje, que a pessoa VÊ na tela e corrige; data chutada vira registro no dia errado, que ela não encontra.
+• NUNCA devolva data no FUTURO. Se a sua conta cair depois de hoje, ela está errada: recue uma semana (dia da semana) ou um mês (dia do mês). Se ainda assim não fechar, OMITA. Data futura produz registro invisível para a pessoa.
+• Nunca invente o ano. Sem ano no relato, é o ano corrente — a não ser que recuar o mês atravesse o Ano-Novo.
+
 Demais regras:
 • Extraia TODOS os eventos presentes no texto — um relato pode alimentar vários pilares de uma vez.
 • Valores em reais: "47", "R$47", "quarenta e sete" → amount 47. Gastos são expense; salário/recebimentos são income.
@@ -857,7 +913,7 @@ Demais regras:
 • Se a duração do treino for mencionada, preencha duration_min.
 • Água bebida ("tomei 2L de água", "bebi 500ml") vira water com ml.
 • Peso corporal ("me pesei, 78kg", "tô pesando 82") vira weight com kg.
-• Refeições viram meal e SEMPRE recebem calories estimadas a partir da descrição (porções típicas brasileiras; melhor uma estimativa honesta do que nenhuma), preenchendo também protein_g/carbs_g/fat_g quando possível. Inclua as kcal no summary: "Almoço: arroz, feijão e frango (~650 kcal)". Quando o contexto disser qual refeição é (café da manhã, almoço, jantar, lanche/belisco), preencha meal_type e inclua no summary. Oração/meditação/culto/leitura espiritual viram practice.
+• Refeições viram meal e SEMPRE recebem calories estimadas a partir da descrição (porções típicas brasileiras; melhor uma estimativa honesta do que nenhuma), preenchendo também protein_g/carbs_g/fat_g quando possível. Inclua as kcal no summary: "Almoço: arroz, feijão e frango (~650 kcal)". Quando der para saber qual refeição é, preencha meal_type e inclua no summary — a ordem de decisão está na descrição do campo: o que a pessoa disse vem primeiro; bebida ou belisco sozinho (um café, uma fruta) é lanche em qualquer hora; só depois vale a hora de AGORA informada no início da mensagem; e na dúvida OMITA o campo em vez de chutar. Oração/meditação/culto/leitura espiritual viram practice.
 • Estados emocionais ("tô ansioso", "dia ótimo") viram mood, usando a palavra do próprio usuário em mood_label.
 • Se algo não se encaixar em nenhum tipo, use note.
 • Só extraia o que a pessoa RELATOU ter acontecido. Planos e intenções ("vou treinar amanhã") não são eventos. Nunca invente eventos.
@@ -1216,7 +1272,12 @@ export async function extractEventsAndMemories(
     // Com arquivo, o texto é maior e a saída também: 25 eventos estruturados
     // não cabem nos 1800 tokens que bastam para uma frase falada.
     const inputCap = bulk ? 4000 + ATTACHMENT_EXTRACT_MAX_CHARS : 4000;
+    /* A hora de São Paulo entra na mensagem porque sem ela o modelo não tem
+       como escolher o tipo de refeição: um café às 12h20 era rotulado "café da
+       manhã" (achado de QA nº 9) simplesmente porque nada na entrada dizia que
+       horas eram. spParts() já dá a hora local; era só passá-la adiante. */
     const userText =
+      `${nowInSpForPrompt()}\n` +
       `${memoriesBlock(known)}\n\nRELATO DO USUÁRIO (se houver pergunta junto, ignore-a e extraia só o que foi relatado como já acontecido):\n${t.slice(0, inputCap)}`;
 
     const { res, data } = await anthropicCall(supabase, userId, feature, {

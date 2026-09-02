@@ -409,11 +409,11 @@ export default function Mokari() {
             Não consegui desenhar seu Mokari agora.
           </p>
           <p className="text-xs text-muted-foreground">
-            É falha de conexão — nada do que você construiu mudou.
+            Pode ser a conexão — nada do que você construiu mudou.
           </p>
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
             {isFetching
-              ? (<><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Tentando...</>)
+              ? (<><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Tentando…</>)
               : (<><RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Tentar de novo</>)}
           </Button>
         </div>

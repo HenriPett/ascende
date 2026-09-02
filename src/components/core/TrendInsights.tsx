@@ -341,7 +341,7 @@ export default function TrendInsights() {
 
   /* Quais análises JÁ receberam a pergunta — tenha a pessoa respondido ou
      ignorado. É esta lista que garante que ninguém é perguntado duas vezes. */
-  const { data: feedback, isLoading: feedbackLoading } = useQuery({
+  const { data: feedback, isLoading: feedbackLoading, isError: feedbackError } = useQuery({
     queryKey: ["insight-feedback", user?.id],
     enabled: !!user,
     staleTime: 1000 * 60 * 30,
@@ -350,15 +350,25 @@ export default function TrendInsights() {
 
   /* O alvo é TRAVADO na primeira vez que dá para escolher, e não recalculado.
      Sem a trava, responder a pergunta de um card faria a próxima aparecer em
-     outro no mesmo instante — uma pergunta por vez deixaria de valer. */
+     outro no mesmo instante — uma pergunta por vez deixaria de valer.
+
+     NA DÚVIDA, NÃO PERGUNTA. `feedbackLoading` sozinho não bastava: quando a
+     consulta FALHA ele volta a false com `feedback` undefined, e o
+     `feedback ?? []` que existia aqui virava "nunca perguntamos nada" — a
+     pergunta reaparecia para quem já tinha respondido, que é exatamente a
+     cobrança que a regra de "uma vez só" existe para impedir. Agora o efeito
+     sai sem travar `escolhido`: se a lista voltar depois, ele reavalia; se
+     nunca voltar, ninguém é perguntado nesta visita. Perder uma resposta é
+     barato, insistir com quem já respondeu não é. */
   const [target, setTarget] = useState<InsightKind | null>(null);
   const escolhido = useRef(false);
   useEffect(() => {
     if (escolhido.current || !data || feedbackLoading) return;
+    if (feedbackError || !feedback) return;
     escolhido.current = true;
-    const asked = new Set((feedback ?? []).map((f) => f.kind as string));
+    const asked = new Set(feedback.map((f) => f.kind as string));
     setTarget(pickFeedbackTarget(data.insights, asked));
-  }, [data, feedback, feedbackLoading]);
+  }, [data, feedback, feedbackLoading, feedbackError]);
 
   return (
     <section className="space-y-2.5" aria-label="Tendências">
@@ -392,11 +402,11 @@ export default function TrendInsights() {
           <div className="flex-1 min-w-0 space-y-2">
             <p className="text-sm font-medium">Não consegui calcular suas tendências agora.</p>
             <p className="text-xs text-muted-foreground">
-              É falha de conexão — seus registros continuam salvos, e nenhuma leitura foi perdida.
+              Pode ser a conexão — seus registros continuam salvos, e nenhuma leitura foi perdida.
             </p>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
               {isFetching
-                ? (<><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Tentando...</>)
+                ? (<><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Tentando…</>)
                 : (<><RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Tentar de novo</>)}
             </Button>
           </div>

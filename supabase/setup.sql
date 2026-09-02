@@ -686,7 +686,7 @@ insert into public.app_settings (key, value) values
   }'::jsonb),
   ('pricing', '{
     "monthly_label": "R$ 29,90/mês",
-    "annual_label": "R$ 239,90/ano (2 meses grátis)"
+    "annual_label": "R$ 239,90/ano — economia de R$ 118,90"
   }'::jsonb),
   ('billing_entity', '{
     "name": "", "document": "", "note": "Dados da entidade de cobrança ficam AQUI (configuração), nunca no código."
@@ -746,7 +746,7 @@ alter table public.profiles add column if not exists ai_scopes jsonb not null de
 -- assinatura lê SEMPRE daqui — e este valor deve corresponder EXATAMENTE
 -- aos produtos configurados no Stripe (STRIPE_PRICE_MONTHLY_ID / ANNUAL_ID).
 update public.app_settings
-   set value = '{"monthly_label": "R$ 29,90/mês", "annual_label": "R$ 239,90/ano (2 meses grátis)"}'::jsonb,
+   set value = '{"monthly_label": "R$ 29,90/mês", "annual_label": "R$ 239,90/ano — economia de R$ 118,90"}'::jsonb,
        updated_at = now()
  where key = 'pricing'
    and (value->>'monthly_label') like '%19,90%';
@@ -1399,6 +1399,24 @@ end $$;
 drop policy if exists "memories_update_own" on public.ai_memories;
 create policy "memories_update_own" on public.ai_memories
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+-- A autoria só é definida no INSERT. `with check` não enxerga a linha antiga,
+-- então quem congela a coluna é o gatilho: editar o texto de uma memória da
+-- IA não transfere a autoria para a pessoa (a medida 3 das decisões conta
+-- "memórias da IA que a pessoa julgou", e a conta desandaria).
+create or replace function public.ai_memories_freeze_created_by()
+returns trigger language plpgsql as $$
+begin
+  if new.created_by is distinct from old.created_by then
+    new.created_by := old.created_by;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists ai_memories_created_by_imutavel on public.ai_memories;
+create trigger ai_memories_created_by_imutavel
+  before update on public.ai_memories
+  for each row execute function public.ai_memories_freeze_created_by();
+
 -- A pessoa também pode ensinar algo direto; created_by travado em 'usuario'.
 drop policy if exists "memories_insert_own" on public.ai_memories;
 create policy "memories_insert_own" on public.ai_memories

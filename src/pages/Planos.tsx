@@ -14,6 +14,7 @@ import {
   Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription,
 } from "@/components/ui/drawer";
 import { Markdown } from "@/components/core/Markdown";
+import QueryError from "@/components/core/QueryError";
 import PlanSections from "@/components/core/PlanSections";
 import { isSectionedKind } from "@/lib/planSections";
 import { toast } from "sonner";
@@ -64,7 +65,7 @@ const GROUPS: { id: string; label: string; hint: string; match: (kind: string) =
   {
     id: "outros",
     label: "Outros planos",
-    hint: "financeiro, rotina e demais",
+    hint: "financeiro, rotina e outros",
     match: (k) => k !== "alimentar" && k !== "treino",
   },
 ];
@@ -86,12 +87,15 @@ export default function Planos() {
   // congelado no estado, a tela continuaria exibindo a versão anterior.
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const { data: plans, isLoading } = useQuery({
+  const { data: plans, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["plans", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase.from("plans").select("*")
+      const { data, error } = await supabase.from("plans").select("*")
         .eq("user_id", user!.id).order("created_at", { ascending: false }).limit(50);
+      // Lista vazia aqui vira o convite de "peça o primeiro plano" — errado
+      // para quem já tem cinco.
+      if (error) throw error;
       return (data ?? []) as Plan[];
     },
   });
@@ -100,7 +104,7 @@ export default function Planos() {
 
   const setStatus = async (plan: Plan, status: "ativo" | "arquivado") => {
     const { error } = await supabase.from("plans").update({ status }).eq("id", plan.id);
-    if (error) { toast.error("Não consegui atualizar."); return; }
+    if (error) { toast.error("Não consegui atualizar o plano. Tente de novo."); return; }
     toast.success(status === "arquivado" ? "Plano arquivado." : "Plano reativado.");
     setOpenId(null);
     qc.invalidateQueries({ queryKey: ["plans"] });
@@ -108,7 +112,7 @@ export default function Planos() {
 
   const remove = async (plan: Plan) => {
     const { error } = await supabase.from("plans").delete().eq("id", plan.id);
-    if (error) { toast.error("Não consegui excluir."); return; }
+    if (error) { toast.error("Não consegui excluir o plano. Tente de novo."); return; }
     toast.success("Plano excluído.");
     setOpenId(null);
     qc.invalidateQueries({ queryKey: ["plans"] });
@@ -219,13 +223,23 @@ export default function Planos() {
       <div>
         <h1 className="font-display text-2xl font-semibold">Meus planos</h1>
         <p className="text-sm text-muted-foreground">
-          Os planos que o Conselheiro montou para você, guardados fora do chat. Ele acompanha os ativos.
+          Os planos que o Conselheiro montou para você, guardados aqui fora da conversa.
+          Ele consulta os planos ativos sempre que responde.
         </p>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
 
-      {!isLoading && !all.length && (
+      {isError && (
+        <QueryError
+          title="Não consegui carregar seus planos."
+          detail="Pode ser a conexão — nenhum plano foi perdido nem arquivado."
+          onRetry={() => refetch()}
+          retrying={isFetching}
+        />
+      )}
+
+      {!isLoading && !isError && !all.length && (
         <Card className="p-6 text-center space-y-3">
           <ClipboardList className="w-8 h-8 mx-auto text-muted-foreground" />
           <div>
