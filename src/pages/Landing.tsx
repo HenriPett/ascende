@@ -268,7 +268,12 @@ export default function Landing() {
           <div className="mt-7 flex justify-center animate-fade-up">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3.5 py-1.5 text-xs font-medium">
               <MessageCircle className="w-3.5 h-3.5 text-gold" />
-              Novo: registre o dia e fale com o Conselheiro direto pelo WhatsApp
+              {/* Este selo ocupa a última linha antes do CTA — o lugar de maior
+                  valor da página. "Novo:" é vocabulário de release: para quem
+                  chega pela primeira vez nada é novo, e a palavra gastava esse
+                  lugar anunciando uma feature em vez de derrubar a objeção nº 1
+                  do público ("vou ter que aprender mais um aplicativo?"). */}
+              Nem precisa abrir o app: dá para registrar o dia pelo WhatsApp
             </span>
           </div>
           <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up">

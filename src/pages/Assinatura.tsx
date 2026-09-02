@@ -122,14 +122,26 @@ export default function Assinatura() {
                 </span>
               )}
             </p>
+            {/* A frase mandava "atualizar a forma de pagamento" e o botão logo
+                abaixo se chamava "Gerenciar assinatura": a pessoa procurava um
+                botão que não existia com esse nome e fechava a tela. Agora a
+                instrução e o rótulo dizem a MESMA palavra, e o texto tira o
+                susto — pagamento recusado costuma ser limite ou cartão vencido,
+                não inadimplência, e ninguém precisa cancelar por vergonha. */}
             {ent?.subscription?.status === "past_due" && (
               <p className="text-sm text-destructive">
-                O último pagamento falhou. Atualize a forma de pagamento no botão abaixo para não perder o Ascende+.
+                O pagamento deste mês não passou — costuma ser limite ou cartão vencido, e não
+                tem multa. Toque em "Trocar meu cartão" abaixo. Seu Ascende+ segue ativo até lá.
               </p>
             )}
             {ent?.subscription && ent.subscription.provider === "stripe" && (
               <Button variant="outline" size="sm" onClick={openPortal} disabled={openingPortal}>
-                {openingPortal ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Gerenciar assinatura</>)}
+                {openingPortal ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                  <>
+                    <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                    {ent.subscription.status === "past_due" ? "Trocar meu cartão" : "Gerenciar assinatura"}
+                  </>
+                )}
               </Button>
             )}
           </>
@@ -162,14 +174,28 @@ export default function Assinatura() {
               <li key={f} className="flex gap-2"><Check className="w-4 h-4 text-gold shrink-0 mt-0.5" /><span>{f}</span></li>
             ))}
           </ul>
+          {/* O preço estava no cartão acima, mas o olho não volta: a decisão
+              acontece no botão, e estes dois abrem uma página EXTERNA, de
+              outra marca, com campo de cartão. Para quem tem orçamento
+              apertado, tocar num botão que não repete o valor é assinar sem
+              olhar. O rótulo agora carrega o número, e a linha abaixo diz
+              para onde leva e que dá para conferir antes de confirmar. */}
           {canOfferUpgrade && (checkoutEnabled ? (
             <div className="flex flex-col gap-2 pt-1">
               <Button onClick={() => startCheckout("monthly")} disabled={starting !== null}>
-                {starting === "monthly" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assinar mensal"}
+                {starting === "monthly"
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : `Assinar por ${ent?.pricing?.monthly_label ?? "R$ 29,90/mês"}`}
               </Button>
               <Button variant="outline" onClick={() => startCheckout("annual")} disabled={starting !== null}>
-                {starting === "annual" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assinar anual"}
+                {starting === "annual"
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : `Assinar por ${ent?.pricing?.annual_label ?? "R$ 239,90/ano — economia de R$ 118,90"}`}
               </Button>
+              <p className="text-xs text-muted-foreground">
+                O pagamento é feito numa página segura do Stripe. Você confere tudo antes de
+                confirmar, e pode cancelar quando quiser.
+              </p>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground pt-1">

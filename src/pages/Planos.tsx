@@ -34,6 +34,13 @@ interface Plan {
   created_at: string;
 }
 
+/* A pergunta que o estado vazio já entrega escrita. É a mesma da Jornada
+   (SIGNATURE_QUESTION, Jornada.tsx:40) de propósito: é a prova nº 1 do
+   POSICIONAMENTO — o plano alimentar que cabe no bolso — e é o que
+   transforma "não sei o que pedir" em plano salvo. */
+const EMPTY_STATE_QUESTION =
+  "Monte um plano alimentar para o meu objetivo que caiba no meu orçamento";
+
 const KIND_LABEL: Record<string, string> = {
   alimentar: "Alimentar", treino: "Treino", financeiro: "Financeiro", rotina: "Rotina", outro: "Plano",
 };
@@ -243,15 +250,28 @@ export default function Planos() {
         <Card className="p-6 text-center space-y-3">
           <ClipboardList className="w-8 h-8 mx-auto text-muted-foreground" />
           <div>
-            <p className="font-semibold">Nenhum plano ainda</p>
+            {/* O título nomeava a ausência e o botão abria uma caixa de texto
+                em branco para quem acabou de provar que não sabe o que pedir.
+                A Jornada já resolveu isto melhor (Jornada.tsx:169): manda a
+                pergunta pronta pelo gancho ?q=. Esta tela ficou com a versão
+                fraca — agora usa o mesmo padrão, e a pergunta que ela carrega
+                é a Porta do POSICIONAMENTO (corpo + dinheiro no orçamento). */}
+            <p className="font-semibold">Seu primeiro plano nasce de uma pergunta</p>
+            {/* Modo condicional de propósito. A primeira redação afirmava que
+                "o Conselheiro já sabe quanto você ganha, o que você gasta com
+                comida e como anda seu corpo" — falso para quem pulou os blocos
+                de renda e de corpo no onboarding, e falso na voz dele,
+                afirmando um conhecimento que ele não tem. É o mesmo defeito
+                que semOrigemTexto (memories.ts:203) já existe para combater. */}
             <p className="text-sm text-muted-foreground mt-1">
-              Peça ao Conselheiro um plano alimentar, de treino ou financeiro. Quando ele montar
-              um plano completo, você poderá salvá-lo aqui com um toque.
+              Com o que você já contou, o Conselheiro monta: um plano alimentar dentro do seu
+              orçamento, um treino que caiba na sua rotina ou um teto de gasto. O que faltar,
+              ele pergunta — e você guarda o plano aqui.
             </p>
           </div>
           <Button asChild variant="secondary">
-            <Link to="/app/conselheiro">
-              <MessageCircle className="w-4 h-4 mr-1.5" /> Falar com o Conselheiro
+            <Link to={`/app/conselheiro?q=${encodeURIComponent(EMPTY_STATE_QUESTION)}`}>
+              <MessageCircle className="w-4 h-4 mr-1.5" /> Pedir um plano que cabe no meu bolso
             </Link>
           </Button>
         </Card>

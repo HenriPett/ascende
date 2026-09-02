@@ -214,10 +214,23 @@ export function memorySourceLine(
  * pessoa não tem como saber que a frase é falsa, e passa a confiar menos em
  * tudo que está do lado dela.
  */
-export function semOrigemTexto(createdAt: string): string {
+export function semOrigemTexto(createdAt: string, now: Date = new Date()): string {
   const nascida = new Date(createdAt).getTime();
-  // Data ilegível cai no texto genérico: na dúvida, não afirme a explicação.
-  const anterior = Number.isFinite(nascida) && nascida < ORIGEM_DESDE.getTime();
+  /* Data ilegível cai no texto genérico: na dúvida, não afirme a explicação.
+   *
+   * E a segunda condição não é preciosismo: ORIGEM_DESDE é a data da migração
+   * que criou `memory_sources`, e as migrações deste repositório são nomeadas
+   * ADIANTADAS em relação ao calendário. Enquanto essa data ainda não chegou,
+   * `nascida < ORIGEM_DESDE` é verdade para TODA memória — inclusive uma
+   * criada há segundos, que passava a ser explicada como "anterior ao momento
+   * em que passei a guardar de onde cada coisa veio". Falso, e falso na única
+   * tela cujo propósito é a pessoa poder CONFERIR o que dizemos sobre ela.
+   *
+   * Só afirmamos que a memória é anterior ao registro de origem se o registro
+   * de origem já existir de fato. Antes disso, o texto genérico — que admite
+   * a falha em vez de inventar uma explicação para ela — é o verdadeiro. */
+  const origemJaExistia = ORIGEM_DESDE.getTime() <= now.getTime();
+  const anterior = Number.isFinite(nascida) && origemJaExistia && nascida < ORIGEM_DESDE.getTime();
   return anterior
     ? "Esta memória não tem origem registrada — ela é anterior ao momento em que passei "
       + "a guardar de onde cada coisa veio. Se não fizer sentido, é só recusar."

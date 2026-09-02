@@ -24,9 +24,16 @@ import { useGuides } from "@/hooks/useGuides";
 import { cn } from "@/lib/utils";
 
 /* ─── Criação ─── */
-function CreateBattle({ onCreated }: { onCreated: () => void }) {
+/* `open` é CONTROLADO pela página porque existe um segundo ponto de entrada: o
+   estado vazio, que precisava abrir este mesmo diálogo sem duplicá-lo. Antes o
+   cartão vazio apenas DESCREVIA o botão ("Toque em 'Nova batalha'"), e o botão
+   descrito vive no topo da tela, fora do campo de visão de quem está lendo o
+   cartão — mandar procurar um botão é fricção sem retorno. */
+function CreateBattle({
+  onCreated, open, onOpenChange,
+}: { onCreated: () => void; open: boolean; onOpenChange: (v: boolean) => void }) {
   const { user } = useAuth();
-  const [open, setOpen] = useState(false);
+  const setOpen = onOpenChange;
   const [name, setName] = useState("");
   const [discreet, setDiscreet] = useState("");
   const [triggers, setTriggers] = useState<string[]>([]);
@@ -252,6 +259,9 @@ export default function Batalhas() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const { markSeen } = useGuides();
+  /* Um diálogo, dois pontos de entrada: o botão do topo e o cartão do estado
+     vazio. Ver o comentário em CreateBattle. */
+  const [newBattleOpen, setNewBattleOpen] = useState(false);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["battles", user?.id],
@@ -302,7 +312,11 @@ export default function Batalhas() {
           </p>
         </div>
         <div className="w-full sm:w-auto [&_button]:w-full sm:[&_button]:w-auto">
-          <CreateBattle onCreated={() => { markSeen("batalhas"); qc.invalidateQueries(); }} />
+          <CreateBattle
+            open={newBattleOpen}
+            onOpenChange={setNewBattleOpen}
+            onCreated={() => { markSeen("batalhas"); qc.invalidateQueries(); }}
+          />
         </div>
       </div>
 
@@ -322,12 +336,22 @@ export default function Batalhas() {
       {!isLoading && !isError && !(data?.battles ?? []).length && (
         <Card className="p-8 text-center">
           <Swords className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-          <p className="font-display font-semibold">Nenhuma batalha ativa</p>
+          {/* O tom baixo deste cartão é DELIBERADO e continua: aqui um "Comece
+              agora!" seria invasivo. O que muda é (a) o título, que abria a
+              tela com uma contabilidade de ausência num assunto que é vergonha
+              — ler "nenhuma" primeiro soa como cobrança mesmo sem querer — e
+              (b) a última frase, que mandava procurar um botão em vez de
+              oferecer um. O rótulo condicional ("se fizer sentido") preserva o
+              tom, e a linha do nome discreto responde o medo real desta tela. */}
+          <p className="font-display font-semibold">Aqui é onde as suas ficam</p>
           <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
             Redes sociais, pornografia, cigarro, apostas, compras por impulso. Se existe algo
             que você enfrenta em silêncio, este é o lugar para enfrentar com método — e sem
-            julgamento. Toque em "Nova batalha" quando fizer sentido.
+            julgamento. O nome pode ser discreto: só você sabe o que ele quer dizer.
           </p>
+          <Button variant="outline" className="mt-3" onClick={() => setNewBattleOpen(true)}>
+            Declarar uma batalha, se fizer sentido
+          </Button>
         </Card>
       )}
 
@@ -357,26 +381,58 @@ export default function Batalhas() {
                 <p className="font-display text-2xl font-semibold">{stats.record}</p>
                 <p className="text-[11px] text-muted-foreground leading-tight">recorde<br />pessoal</p>
               </div>
+              {/* Este quadro mostrava `currentStreak`, que voltava a zero em
+                  qualquer dia sem check-in — inclusive sem recaída nenhuma.
+                  Agora mostra os dias desde a última recaída, que é o que
+                  /recusas promete e o que nenhuma ausência derruba.
+                  Ver a nota longa em lib/battles.ts. */}
               <div className="rounded-lg border p-3">
-                <p className="font-display text-2xl font-semibold">{stats.currentStreak}</p>
-                <p className="text-[11px] text-muted-foreground leading-tight">sequência<br />atual</p>
+                <p className="font-display text-2xl font-semibold">{stats.daysSinceRelapse ?? 0}</p>
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  {stats.cleanSince === "relapse"
+                    ? (<>dias desde<br />a última recaída</>)
+                    : (<>dias desde<br />o começo</>)}
+                </p>
               </div>
             </div>
+
+            {/* Honestidade sem punição: a contagem acima não depende de
+                check-in, então a tela tem que DIZER quando não sabe. Sem esta
+                linha, o número inflaria em silêncio — e num tema como apostas
+                ou álcool o autoengano é dano real, não gentileza. */}
+            {stats.checkinGapDays >= 2 && (
+              <p className="text-[11px] text-muted-foreground">
+                {stats.checkinGapDays} dias sem check-in. O número acima conta desde a última
+                recaída, não desde o último registro.
+              </p>
+            )}
 
             {stats.nextMilestone && (
               <div>
                 <div className="flex justify-between text-xs text-muted-foreground mb-1">
                   <span>Próximo marco: {stats.nextMilestone} dias</span>
-                  <span>{stats.currentStreak}/{stats.nextMilestone}</span>
+                  <span>{stats.daysSinceRelapse ?? 0}/{stats.nextMilestone}</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-muted">
                   <div className="h-1.5 rounded-full bg-gold transition-all"
-                    style={{ width: `${Math.min((stats.currentStreak / stats.nextMilestone) * 100, 100)}%` }} />
+                    style={{ width: `${Math.min(((stats.daysSinceRelapse ?? 0) / stats.nextMilestone) * 100, 100)}%` }} />
                 </div>
               </div>
             )}
-            {!stats.nextMilestone && stats.currentStreak >= MILESTONES[MILESTONES.length - 1] && (
+            {!stats.nextMilestone && (stats.daysSinceRelapse ?? 0) >= MILESTONES[MILESTONES.length - 1] && (
               <p className="text-xs text-gold-ink">✦ Você passou dos 90 dias. Isso já é outra vida.</p>
+            )}
+
+            {/* "Resisti à vontade" era calculado em battles.ts e não aparecia
+                em tela nenhuma, enquanto o total de recaídas era exibido como
+                contador vitalício. O produto contava as derrotas em público e
+                jogava fora a vitória mais difícil do pilar. */}
+            {stats.resisted > 0 && (
+              <p className="text-xs text-gold-ink">
+                {stats.resisted === 1
+                  ? "1 vez a vontade bateu e você não cedeu."
+                  : `${stats.resisted} vezes a vontade bateu e você não cedeu.`}
+              </p>
             )}
 
             {stats.relapses > 0 && (
