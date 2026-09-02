@@ -9,6 +9,9 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  useWhatsappLinkQuery, useHasAnyEventQuery, type WhatsappLink as WaLink,
+} from "@/hooks/useZoneQueries";
 import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,35 +22,8 @@ import { MessageCircle, Loader2, Copy, ExternalLink, Unlink, X } from "lucide-re
 
 const WA_NUMBER: string = (import.meta.env.VITE_WHATSAPP_NUMBER as string | undefined) ?? "";
 
-interface WaLink {
-  phone: string | null;
-  linked_at: string | null;
-  notify_retro: boolean;
-  notify_briefing: boolean;
-  notify_return: boolean;
-}
-
 const maskPhone = (p: string) =>
   p.length > 6 ? `+${p.slice(0, 4)} ••••• ${p.slice(-4)}` : `+${p}`;
-
-/* ── Hook compartilhado do vínculo (usado pelo card de Ajustes e pelo
-   convite compacto da tela Hoje) ── */
-function useWhatsappLink(pollingWhileCode: string | null) {
-  const { user } = useAuth();
-  return useQuery({
-    queryKey: ["whatsapp-link", user?.id],
-    enabled: !!user,
-    // Enquanto o código está na tela, revalida rápido para detectar o vínculo
-    refetchInterval: (q) =>
-      pollingWhileCode && !(q.state.data as WaLink | null)?.linked_at ? 4000 : false,
-    queryFn: async (): Promise<WaLink | null> => {
-      const { data } = await supabase.from("whatsapp_links")
-        .select("phone, linked_at, notify_retro, notify_briefing, notify_return")
-        .maybeSingle();
-      return (data as WaLink | null) ?? null;
-    },
-  });
-}
 
 /* ── Convite compacto para a tela Hoje (feedback do fundador): Ajustes é onde
    pouca gente passeia — o convite mora onde o hábito acontece. Regras de
@@ -62,19 +38,10 @@ export function WhatsappHojeCard() {
   );
   const [code, setCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const { data: link, isLoading } = useWhatsappLink(code);
+  const { data: link, isLoading } = useWhatsappLinkQuery(code);
 
   // Só depois do primeiro registro (não compete com o dia 1 do onboarding)
-  const { data: hasEvents } = useQuery({
-    queryKey: ["wa-hoje-has-events", user?.id],
-    enabled: !!user && !dismissed && !link?.linked_at,
-    staleTime: 1000 * 60 * 10,
-    queryFn: async () => {
-      const { count } = await supabase.from("life_events")
-        .select("id", { count: "exact", head: true }).eq("user_id", user!.id);
-      return (count ?? 0) > 0;
-    },
-  });
+  const { data: hasEvents } = useHasAnyEventQuery(!dismissed && !link?.linked_at);
 
   useEffect(() => {
     // Vinculou com o código deste card: celebra e some.
@@ -151,7 +118,7 @@ export default function WhatsappCard() {
   const [code, setCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const { data: link, isLoading } = useWhatsappLink(code);
+  const { data: link, isLoading } = useWhatsappLinkQuery(code);
 
   const linked = !!link?.linked_at && !!link?.phone;
 

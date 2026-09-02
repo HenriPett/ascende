@@ -9,9 +9,10 @@ import { brl } from "@/lib/format";
 import { todayISOInSP, daysAgoISOInSP } from "@/lib/dates";
 import { readDailyMetrics } from "@/lib/insightsData";
 import {
-  computeInsights, MIN_OVERLAP_DAYS, MIN_GROUP_DAYS,
+  MIN_OVERLAP_DAYS, MIN_GROUP_DAYS,
   type Insight, type InsightKind,
 } from "@/lib/insights";
+import { useTrendInsights } from "@/hooks/useTrendInsights";
 
 /* Tendências — o que aconteceu junto na sua vida, medido pelo código.
  *
@@ -273,19 +274,7 @@ function InsightCard({ insight }: { insight: Insight }) {
 export default function TrendInsights() {
   const { user } = useAuth();
 
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ["trend-insights", user?.id, todayISOInSP()],
-    enabled: !!user,
-    queryFn: async () => {
-      // A data de referência é PARÂMETRO do cálculo, nunca lida do relógio lá
-      // dentro: é o que permite rodar duas vezes e obter o mesmo resultado.
-      const referenceDay = todayISOInSP();
-      const rows = await readDailyMetrics(
-        user!.id, daysAgoISOInSP(LOOKBACK_DAYS - 1), referenceDay,
-      );
-      return computeInsights(rows, referenceDay, LOOKBACK_DAYS);
-    },
-  });
+  const { data, isLoading, isError, refetch, isFetching } = useTrendInsights();
 
   return (
     <section className="space-y-2.5" aria-label="Tendências">

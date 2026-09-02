@@ -14,21 +14,12 @@ import Landing from "@/pages/Landing";
 import Auth from "@/pages/Auth";
 const AuthCallback = lazy(() => import("@/pages/AuthCallback"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
-const Hoje = lazy(() => import("@/pages/Hoje"));
-const Chat = lazy(() => import("@/pages/Chat"));
-const Pilares = lazy(() => import("@/pages/Pilares"));
-const Prosperidade = lazy(() => import("@/pages/Prosperidade"));
-const Vitalidade = lazy(() => import("@/pages/Vitalidade"));
-const Alimentacao = lazy(() => import("@/pages/Alimentacao"));
-const Mente = lazy(() => import("@/pages/Mente"));
-const Score = lazy(() => import("@/pages/Score"));
-const Batalhas = lazy(() => import("@/pages/Batalhas"));
-const Planos = lazy(() => import("@/pages/Planos"));
 const Legal = lazy(() => import("@/pages/Legal"));
 const Recusas = lazy(() => import("@/pages/Recusas"));
-const Ajustes = lazy(() => import("@/pages/Ajustes"));
-const Assinatura = lazy(() => import("@/pages/Assinatura"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
+// As páginas de /app vivem no registro de rotas: é ele que o teste usa para
+// provar que nenhuma rota antiga sumiu ou virou redirect (src/lib/routes.ts).
+import { APP_ROUTES } from "@/lib/routes";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -94,18 +85,14 @@ export default function App() {
                 </RequireAuth>
               }
             >
-              <Route index element={<Hoje />} />
-              <Route path="conselheiro" element={<Chat />} />
-              <Route path="pilares" element={<Pilares />} />
-              <Route path="prosperidade" element={<Prosperidade />} />
-              <Route path="vitalidade" element={<Vitalidade />} />
-              <Route path="alimentacao" element={<Alimentacao />} />
-              <Route path="mente" element={<Mente />} />
-              <Route path="batalhas" element={<Batalhas />} />
-              <Route path="assinatura" element={<Assinatura />} />
-              <Route path="planos" element={<Planos />} />
-              <Route path="score" element={<Score />} />
-              <Route path="ajustes" element={<Ajustes />} />
+              {/* Montadas a partir de APP_ROUTES. Nenhuma rota de /app pode
+                  ser um <Navigate>: alias renderiza a tela, não redireciona
+                  (ver o cabeçalho de src/lib/routes.ts). */}
+              {APP_ROUTES.map(({ path, Component }) => (
+                path === ""
+                  ? <Route key="__index" index element={<Component />} />
+                  : <Route key={path} path={path} element={<Component />} />
+              ))}
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

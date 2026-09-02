@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Swords, ShieldCheck, Shield, CloudRain, ChevronRight } from "lucide-react";
 import { todayISO } from "@/lib/format";
+import { useBattlesTodayQuery } from "@/hooks/useZoneQueries";
 import { daysAgoISOInSP } from "@/lib/dates";
 import {
   type Battle, type BattleCheckin as Checkin, type CheckinStatus,
@@ -137,18 +138,7 @@ export default function BattleCheckinCard() {
   const { user } = useAuth();
   const today = todayISO();
 
-  const { data } = useQuery({
-    queryKey: ["battles-today", user?.id, today],
-    enabled: !!user,
-    queryFn: async () => {
-      const [{ data: battles }, { data: checkins }] = await Promise.all([
-        supabase.from("battles").select("*").eq("user_id", user!.id).eq("active", true).order("created_at"),
-        supabase.from("battle_checkins").select("*").eq("user_id", user!.id)
-          .gte("checkin_date", daysAgoISOInSP(120)),
-      ]);
-      return { battles: (battles ?? []) as Battle[], checkins: (checkins ?? []) as Checkin[] };
-    },
-  });
+  const { data } = useBattlesTodayQuery();
 
   if (!data?.battles.length) return null;
 
