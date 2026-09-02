@@ -14,13 +14,13 @@
 //   WHATSAPP_VERIFY_TOKEN     string sua, usada na verificação do webhook
 //   WHATSAPP_APP_SECRET       App Secret (valida a assinatura HMAC do POST)
 //   WHATSAPP_CRON_SECRET      segredo do agendador (whatsapp-notify)
-//   APP_URL                   ex.: https://ascende.app (links de retorno)
+//   APP_URL                   ex.: https://ascende.site (links de retorno)
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
 export function appUrl(): string {
-  return (Deno.env.get("APP_URL") ?? "https://ascende.app").replace(/\/$/, "");
+  return (Deno.env.get("APP_URL") ?? "https://ascende.site").replace(/\/$/, "");
 }
 
 function phoneId(): string {
