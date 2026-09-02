@@ -237,3 +237,105 @@ export async function getInsight(
   if (error) { console.error("getInsight", error.message); return null; }
   return data ? toInsight(data as unknown as Row) : null;
 }
+
+/* ── "Isso te ajudou?" (Fase 6, medida 4) ─────────────────────────────────
+   A única coleta nova das sete medidas, e ela existe porque utilidade é
+   juízo da pessoa: não dá para inferir sem perguntar.
+
+   A linha registra uma AÇÃO NOSSA ("perguntamos sobre X"), não comportamento
+   dela — nenhuma rolagem, nenhum tempo de tela, nada para terceiro. É a
+   mesma classe do guides_seen, que já é o padrão da casa para não repetir o
+   que já dissemos. Por isso `answer` é anulável: null é "perguntamos e ela
+   não respondeu", que é um dos três estados, não um buraco.
+
+   Teto: uma pergunta por análise por pessoa. Três na vida da conta. */
+
+export type InsightAnswer = "sim" | "nao";
+
+export interface InsightFeedback {
+  id: string;
+  user_id: string;
+  kind: InsightKind;
+  /** null = perguntamos e ela não respondeu · "sim" · "nao". */
+  answer: InsightAnswer | null;
+  asked_at: string;
+  answered_at: string | null;
+  /** Qual insight estava na tela quando perguntamos (pode ter sido apagado). */
+  insight_id: string | null;
+  /** Estado do card no momento da pergunta — não dá para derivar depois,
+   *  porque o insight é atualizado no lugar a cada recálculo. */
+  asked_status: "tendencia" | "sem_tendencia" | null;
+}
+
+const FEEDBACK_COLS = "id,user_id,kind,answer,asked_at,answered_at,insight_id,asked_status";
+
+function toFeedback(row: Row): InsightFeedback {
+  const answer = str(row.answer);
+  const askedStatus = str(row.asked_status);
+  return {
+    id: str(row.id),
+    user_id: str(row.user_id),
+    kind: str(row.kind) as InsightKind,
+    answer: answer === "sim" || answer === "nao" ? answer : null,
+    asked_at: str(row.asked_at),
+    answered_at: typeof row.answered_at === "string" && row.answered_at ? row.answered_at : null,
+    insight_id: typeof row.insight_id === "string" && row.insight_id ? row.insight_id : null,
+    asked_status: askedStatus === "tendencia" || askedStatus === "sem_tendencia" ? askedStatus : null,
+  };
+}
+
+/** O que já foi perguntado a esta pessoa. A tela mostra a pergunta apenas
+ *  para os `kind` que NÃO aparecem aqui — é isso que garante que ninguém é
+ *  perguntado duas vezes, tenha respondido ou não. */
+export async function listInsightFeedback(userId: string): Promise<InsightFeedback[]> {
+  if (!userId) return [];
+  const { data, error } = await supabase.from("insight_feedback")
+    .select(FEEDBACK_COLS).eq("user_id", userId);
+  if (error) { console.error("listInsightFeedback", error.message); return []; }
+  return (data ?? []).map((r) => toFeedback(r as unknown as Row));
+}
+
+/**
+ * Registra que a pergunta foi posta na tela. Idempotente por (user_id, kind).
+ *
+ * `ignoreDuplicates` não é detalhe: sem ele, um segundo render faria o upsert
+ * SOBRESCREVER a linha e apagar a resposta que a pessoa já tinha dado. Com
+ * ele, o banco simplesmente não faz nada quando a linha existe.
+ *
+ * Melhor esforço: falhar em anotar a pergunta não pode quebrar o card.
+ */
+export async function recordInsightAsked(
+  userId: string, kind: InsightKind,
+  opts: { insightId?: string | null; askedStatus?: "tendencia" | "sem_tendencia" | null } = {},
+): Promise<void> {
+  const { error } = await supabase.from("insight_feedback").upsert({
+    user_id: userId,
+    kind,
+    insight_id: opts.insightId ?? null,
+    asked_status: opts.askedStatus ?? null,
+  }, { onConflict: "user_id,kind", ignoreDuplicates: true });
+  if (error) console.error("recordInsightAsked", error.message);
+}
+
+/**
+ * Guarda a resposta. Atualiza a linha da pergunta (preservando `asked_at`,
+ * que é quando perguntamos); se por algum motivo a linha não existir — a
+ * pessoa respondeu antes de a anotação da pergunta ter ido ao banco —, cria.
+ */
+export async function answerInsight(
+  userId: string, kind: InsightKind, answer: InsightAnswer,
+): Promise<InsightFeedback | null> {
+  const answered_at = new Date().toISOString();
+  const { data, error } = await supabase.from("insight_feedback")
+    .update({ answer, answered_at })
+    .eq("user_id", userId).eq("kind", kind)
+    .select(FEEDBACK_COLS).maybeSingle();
+  if (error) { console.error("answerInsight", error.message); return null; }
+  if (data) return toFeedback(data as unknown as Row);
+
+  const { data: created, error: insErr } = await supabase.from("insight_feedback")
+    .insert({ user_id: userId, kind, answer, answered_at })
+    .select(FEEDBACK_COLS).maybeSingle();
+  if (insErr) { console.error("answerInsight insert", insErr.message); return null; }
+  return created ? toFeedback(created as unknown as Row) : null;
+}
