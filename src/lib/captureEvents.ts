@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { todayISO } from "@/lib/format";
+import { existingRecordKeys, isDuplicateError } from "@/lib/dataSources";
 
 /** Evento PROPOSTO pela IA (capture / ai-chat). Só vira registro após o usuário confirmar. */
 export interface ProposedEvent {
@@ -29,6 +30,12 @@ export interface ProposedEvent {
    *  A importação de CSV histórico depende disto: sem a data verdadeira, 555
    *  noites de sono cairiam todas no dia de hoje. */
   occurred_at?: string;
+  /** Chave estável do registro dentro da FONTE que o trouxe
+   *  ("sleep|2022-08-03"). Só a importação preenche: é o par
+   *  (data_source_id, source_record_key) que o índice único de life_events
+   *  usa para reimportar sem duplicar. Quem vem da captura por texto não tem
+   *  arquivo nenhum, e fica sem chave mesmo. */
+  record_key?: string;
 }
 
 /** Contexto opcional da rotina de sono (para preencher horas quando a
@@ -97,9 +104,16 @@ function buildEventPayload(ev: ProposedEvent, sleepSchedule?: SleepScheduleCtx |
   return payload;
 }
 
-/** Linha pronta para insert em `life_events`. */
-function lifeEventRow(
-  userId: string, ev: ProposedEvent, source: string, sleepSchedule?: SleepScheduleCtx | null,
+/** Linha pronta para insert em `life_events`. Ponto ÚNICO de montagem: a
+ *  captura unitária e a importação em lote passam as duas por aqui.
+ *
+ *  `dataSourceId` é o ARQUIVO de onde o registro veio (data_sources), e não
+ *  se confunde com as colunas `source_table`/`source_id` da tabela, que
+ *  apontam o REGISTRO de origem de eventos derivados (a transação que gerou
+ *  o evento). Nomes diferentes, conceitos diferentes. */
+export function lifeEventRow(
+  userId: string, ev: ProposedEvent, source: string,
+  sleepSchedule?: SleepScheduleCtx | null, dataSourceId?: string | null,
 ) {
   return {
     user_id: userId,
@@ -109,7 +123,22 @@ function lifeEventRow(
     source,
     // Só enviamos quando existe: sem a chave, o banco usa `now()`.
     ...(ev.occurred_at ? { occurred_at: ev.occurred_at } : {}),
+    // A fonte entra mesmo sem chave de registro (a trilha "veio deste
+    // arquivo" vale por si); a chave, essa só faz sentido com a fonte, que é
+    // como o índice único parcial do banco a enxerga.
+    ...(dataSourceId ? { data_source_id: dataSourceId } : {}),
+    ...(dataSourceId && ev.record_key ? { source_record_key: ev.record_key } : {}),
   };
+}
+
+/** Resultado de uma importação em lote — vira o recibo (import_receipts). */
+export interface ImportSaveResult {
+  /** Eventos elegíveis recebidos (transações não entram por aqui). */
+  total: number;
+  /** Gravados agora. */
+  accepted: number;
+  /** Ignorados por já terem vindo desta mesma fonte antes. */
+  duplicates: number;
 }
 
 /**
@@ -122,22 +151,58 @@ function lifeEventRow(
  *
  * `source: "import"` distingue estes registros dos feitos à mão — é por ele
  * que o backend pode isentá-los de XP (importar não é viver).
+ *
+ * IDEMPOTÊNCIA: com `dataSourceId`, reimportar o mesmo arquivo não cria nada
+ * de novo e não falha — o que já estava lá é CONTADO como duplicata e vai
+ * para o recibo. Uma linha repetida nunca derruba a importação inteira.
  */
 export async function saveImportedEvents(
   userId: string,
   events: ProposedEvent[],
   onProgress?: (done: number, total: number) => void,
-  chunkSize = 100,
-): Promise<void> {
+  opts: { dataSourceId?: string | null; chunkSize?: number } = {},
+): Promise<ImportSaveResult> {
+  const { dataSourceId = null, chunkSize = 100 } = opts;
+
   // Importação de arquivo não cria lançamento financeiro — esse caminho tem
   // tela própria (Importar fatura, em Prosperidade).
-  const rows = events
-    .filter((ev) => ev.kind !== "transaction")
-    .map((ev) => lifeEventRow(userId, ev, "import"));
+  const candidates = events.filter((ev) => ev.kind !== "transaction");
+  const total = candidates.length;
+  let duplicates = 0;
+  let accepted = 0;
 
+  let pending = candidates;
+  if (dataSourceId) {
+    const already = await existingRecordKeys("life_events", userId, dataSourceId);
+    if (already.size) {
+      pending = candidates.filter((ev) => {
+        if (ev.record_key && already.has(ev.record_key)) { duplicates++; return false; }
+        return true;
+      });
+    }
+  }
+
+  const rows = pending.map((ev) => lifeEventRow(userId, ev, "import", null, dataSourceId));
   for (let i = 0; i < rows.length; i += chunkSize) {
-    const { error } = await supabase.from("life_events").insert(rows.slice(i, i + chunkSize));
-    if (error) throw error;
+    const chunk = rows.slice(i, i + chunkSize);
+    const { error } = await supabase.from("life_events").insert(chunk);
+    if (error) {
+      if (!isDuplicateError(error)) throw error;
+      // O insert do lote é uma transação só: uma duplicata derruba as 100.
+      // Reenviamos linha a linha para separar o que entra do que já existia
+      // (acontece quando a mesma importação roda duas vezes em paralelo, ou
+      // quando a consulta de chaves acima falhou).
+      for (const row of chunk) {
+        const { error: rowErr } = await supabase.from("life_events").insert(row);
+        if (!rowErr) { accepted++; continue; }
+        if (isDuplicateError(rowErr)) { duplicates++; continue; }
+        throw rowErr;
+      }
+    } else {
+      accepted += chunk.length;
+    }
     onProgress?.(Math.min(i + chunkSize, rows.length), rows.length);
   }
+
+  return { total, accepted, duplicates };
 }

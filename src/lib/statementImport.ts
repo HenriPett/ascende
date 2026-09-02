@@ -6,9 +6,47 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ProposedStatementTx } from "@/lib/prosperidade";
 
+/** Versão da regra que produz estes lançamentos, gravada na fonte
+ *  (data_sources.parser_version). */
+export const PARSER_VERSION = "statement/1";
+
 /** Chave de deduplicação: mesmo tipo, valor, mês e descrição normalizada. */
 const txKey = (t: { kind: string; amount: number; occurred_at: string; description: string | null }) =>
   `${t.kind}|${Number(t.amount).toFixed(2)}|${t.occurred_at.slice(0, 7)}|${(t.description ?? "").toLowerCase().replace(/\s+/g, " ").trim()}`;
+
+/**
+ * Chave estável de cada lançamento DENTRO da fatura, alinhada por índice com
+ * a lista recebida. É o que torna reimportar o mesmo documento idempotente
+ * (índice único em transactions).
+ *
+ * Duas diferenças em relação a `txKey`, e as duas importam:
+ * • usa o DIA, não o mês: dentro de um arquivo, dois lançamentos iguais em
+ *   dias diferentes são coisas diferentes;
+ * • lançamentos genuinamente idênticos (dois cafés na mesma padaria no mesmo
+ *   dia) ganham um sufixo #2, #3… Colapsá-los seria apagar uma compra que
+ *   existiu — o erro mais caro possível numa importação financeira.
+ *
+ * A ordem da lista NÃO influencia o resultado: as chaves são numeradas sobre
+ * uma cópia ordenada, então o mesmo conjunto de itens gera sempre as mesmas
+ * chaves, mesmo que a leitura do documento devolva tudo em outra ordem.
+ */
+export function statementRecordKeys(list: ProposedStatementTx[]): string[] {
+  const base = (t: ProposedStatementTx) =>
+    `${t.kind}|${Number(t.amount).toFixed(2)}|${t.occurred_at}|${(t.description ?? "").toLowerCase().replace(/\s+/g, " ").trim()}`;
+
+  const order = list.map((tx, index) => ({ tx, index }))
+    .sort((a, b) => base(a.tx).localeCompare(base(b.tx)) || a.index - b.index);
+
+  const seen = new Map<string, number>();
+  const keys: string[] = new Array(list.length);
+  for (const { tx, index } of order) {
+    const k = base(tx);
+    const n = (seen.get(k) ?? 0) + 1;
+    seen.set(k, n);
+    keys[index] = n === 1 ? k : `${k}#${n}`;
+  }
+  return keys;
+}
 
 /** Marca como duplicata o que já existe registrado no período dos itens. */
 export async function findStatementDuplicates(

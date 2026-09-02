@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { toast } from "sonner";
-import { LogOut, Loader2, Smartphone, Share, Sun, Moon, Monitor, Plus, X, Brain, Trash2, Download, ShieldAlert, Sparkles, Eye, Upload } from "lucide-react";
+import { LogOut, Loader2, Smartphone, Share, Sun, Moon, Monitor, Plus, X, Brain, Trash2, Download, ShieldAlert, Sparkles, Eye, Upload, FileStack } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -22,6 +22,7 @@ import { TRACKERS } from "@/lib/trackers";
 import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
 import { MEMORY_CATEGORY_LABEL } from "@/lib/memories";
 import HealthImport from "@/components/core/HealthImport";
+import SourcesAndImports from "@/components/core/SourcesAndImports";
 import { useGuides } from "@/hooks/useGuides";
 import FeedbackDialog from "@/components/core/FeedbackDialog";
 import WhatsappCard from "@/components/core/WhatsappCard";
@@ -736,6 +737,22 @@ export default function Ajustes() {
           </p>
         </div>
         <HealthImport />
+      </Card>
+
+      {/* Fontes e recibos: fica ENTRE importar e exportar de propósito — a
+          leitura da página passa a ser "trouxe → confira o que entrou →
+          leve embora". Sem esta seção, a importação acima seria uma
+          afirmação sem comprovante (plano refinado §4.1 e §4.4). */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="font-display font-semibold flex items-center gap-1.5">
+            <FileStack className="w-4 h-4 text-primary" /> Fontes e importações
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            De onde vieram seus registros, e o recibo de cada importação.
+          </p>
+        </div>
+        <SourcesAndImports />
       </Card>
 
       {/* Seus dados: exportação e exclusão — sempre gratuitas */}
