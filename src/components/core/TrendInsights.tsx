@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Link2, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useEffect, useRef, useState } from "react";
 import { brl } from "@/lib/format";
 import { todayISOInSP, daysAgoISOInSP } from "@/lib/dates";
 import { readDailyMetrics } from "@/lib/insightsData";
@@ -13,6 +14,11 @@ import {
   type Insight, type InsightKind,
 } from "@/lib/insights";
 import { useTrendInsights } from "@/hooks/useTrendInsights";
+import { pickFeedbackTarget } from "@/lib/insightFeedback";
+import {
+  listInsightFeedback, recordInsightAsked, answerInsight,
+} from "@/lib/insightsData";
+import InsightFeedback from "@/components/core/InsightFeedback";
 
 /* Tendências — o que aconteceu junto na sua vida, medido pelo código.
  *
@@ -192,7 +198,53 @@ function Medians({
   );
 }
 
-function InsightCard({ insight }: { insight: Insight }) {
+/* O slot da pergunta. Vive aqui, e não dentro do InsightFeedback, porque o
+   componente de pergunta é apresentacional de propósito — assim ele é
+   reutilizável e não carrega I/O.
+
+   DOIS CUIDADOS QUE DECIDEM SE ISSO IRRITA OU NÃO:
+
+   1. Anota a pergunta ao APARECER, uma vez. É isso que faz "não volta a
+      perguntar para quem ignorou" ser verdade: sem a anotação, quem passa o
+      olho e não toca em nada é perguntado de novo na próxima visita, e a
+      pergunta educada virou cobrança. O `ignoreDuplicates` do Cargo garante
+      que um segundo render não sobrescreve resposta já dada.
+
+   2. Depois de responder, NÃO invalidamos a lista. Invalidar faria o alvo
+      pular para o próximo card elegível na hora — a pessoa responderia uma e
+      apareceria outra em seguida, que é exatamente o assédio que a regra de
+      "uma pergunta por vez" existe para impedir. A próxima fica para uma
+      próxima visita. */
+function FeedbackSlot({ kind }: { kind: InsightKind }) {
+  const { user } = useAuth();
+  const [answered, setAnswered] = useState<"sim" | "nao" | null>(null);
+  const [saving, setSaving] = useState(false);
+  const anotado = useRef(false);
+
+  useEffect(() => {
+    if (!user || anotado.current) return;
+    anotado.current = true;
+    // `askedStatus` é sempre "tendencia": é o único estado que pergunta.
+    // Guardado ainda assim porque `insights` é atualizado no lugar a cada
+    // recálculo — o status de hoje pode não ser o que ela viu, e sem esta
+    // coluna a medida não teria como saber sobre o que perguntamos.
+    void recordInsightAsked(user.id, kind, { askedStatus: "tendencia" });
+  }, [user, kind]);
+
+  const responder = async (value: "sim" | "nao") => {
+    if (!user || saving) return;
+    setSaving(true);
+    // Otimista: a confirmação aparece na hora. Falhar em gravar não pode
+    // fazer a pergunta voltar na cara de quem acabou de responder.
+    setAnswered(value);
+    await answerInsight(user.id, kind, value);
+    setSaving(false);
+  };
+
+  return <InsightFeedback answered={answered} saving={saving} onAnswer={responder} />;
+}
+
+function InsightCard({ insight, askFeedback }: { insight: Insight; askFeedback: boolean }) {
   const copy = COPY[insight.kind];
   if (!copy) return null;
 
@@ -267,6 +319,17 @@ function InsightCard({ insight }: { insight: Insight }) {
       )}
 
       <LimitPhrase />
+
+      {/* A pergunta entra DEPOIS da frase de limite: é o último item do card,
+          e o card é sobre a vida dela, não sobre a nossa métrica.
+          SÓ em "tendencia" — ver canAskFeedback() para o porquê de
+          "sem_tendencia" ter ficado fora, que é a parte que alguém vai querer
+          reverter. A guarda repetida aqui não é redundância: `askFeedback`
+          vem de fora, e este card não confia em quem o chama para uma regra
+          que o produto inteiro depende de respeitar. */}
+      {askFeedback && insight.status === "tendencia" && (
+        <FeedbackSlot kind={insight.kind} />
+      )}
     </Card>
   );
 }
@@ -275,6 +338,27 @@ export default function TrendInsights() {
   const { user } = useAuth();
 
   const { data, isLoading, isError, refetch, isFetching } = useTrendInsights();
+
+  /* Quais análises JÁ receberam a pergunta — tenha a pessoa respondido ou
+     ignorado. É esta lista que garante que ninguém é perguntado duas vezes. */
+  const { data: feedback, isLoading: feedbackLoading } = useQuery({
+    queryKey: ["insight-feedback", user?.id],
+    enabled: !!user,
+    staleTime: 1000 * 60 * 30,
+    queryFn: () => listInsightFeedback(user!.id),
+  });
+
+  /* O alvo é TRAVADO na primeira vez que dá para escolher, e não recalculado.
+     Sem a trava, responder a pergunta de um card faria a próxima aparecer em
+     outro no mesmo instante — uma pergunta por vez deixaria de valer. */
+  const [target, setTarget] = useState<InsightKind | null>(null);
+  const escolhido = useRef(false);
+  useEffect(() => {
+    if (escolhido.current || !data || feedbackLoading) return;
+    escolhido.current = true;
+    const asked = new Set((feedback ?? []).map((f) => f.kind as string));
+    setTarget(pickFeedbackTarget(data.insights, asked));
+  }, [data, feedback, feedbackLoading]);
 
   return (
     <section className="space-y-2.5" aria-label="Tendências">
@@ -320,7 +404,11 @@ export default function TrendInsights() {
       )}
 
       {!isLoading && !isError && data?.insights.map((insight) => (
-        <InsightCard key={insight.kind} insight={insight} />
+        <InsightCard
+          key={insight.kind}
+          insight={insight}
+          askFeedback={insight.kind === target}
+        />
       ))}
     </section>
   );
