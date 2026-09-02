@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import GoalInput from "@/components/core/GoalInput";
 import ImportStatement from "@/components/core/ImportStatement";
+import QueryError from "@/components/core/QueryError";
 import Paywall from "@/components/core/Paywall";
 import type { PlanLimitError } from "@/lib/fnError";
 import { Link } from "react-router-dom";
@@ -165,7 +166,7 @@ function RaioX({ initialIncome, onDone, onSkip }: {
       qc.invalidateQueries();
       onDone();
     } catch {
-      toast.error("Algo deu errado ao salvar. Tente de novo.");
+      toast.error("Não consegui salvar o Raio-X. Tente de novo.");
     } finally {
       setSaving(false);
     }
@@ -330,7 +331,7 @@ export default function Prosperidade() {
   }, [user, qc]);
 
   // Últimos 6 meses (para gráficos) — a lista continua mostrando só o mês atual
-  const { data: txs, isLoading } = useQuery({
+  const { data: txs, isLoading, isError: txsError, refetch: refetchTxs, isFetching: txsFetching } = useQuery({
     queryKey: ["transactions-6m", user?.id],
     enabled: !!user,
     queryFn: async () => {
@@ -341,30 +342,36 @@ export default function Prosperidade() {
       const startM = m - 6 <= 0 ? m + 6 : m - 6;
       const startY = m - 6 <= 0 ? y - 1 : y;
       const startIso = `${startY}-${String(startM).padStart(2, "0")}-01`;
-      const { data } = await supabase.from("transactions").select("*")
+      const { data, error } = await supabase.from("transactions").select("*")
         .eq("user_id", user!.id).gte("occurred_at", startIso)
         .order("occurred_at", { ascending: false }).order("created_at", { ascending: false }).limit(1000);
+      // O `error` era descartado aqui, e a falha virava lista vazia — que
+      // esta tela lê como "mês em branco" e usa para DECIDIR coisas (ver
+      // `loadFailed` abaixo). Propague: vazio por falha não é vazio.
+      if (error) throw error;
       return (data ?? []) as Tx[];
     },
   });
 
-  const { data: estimates } = useQuery({
+  const { data: estimates, isError: estimatesError } = useQuery({
     queryKey: ["category-estimates", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase.from("category_estimates")
+      const { data, error } = await supabase.from("category_estimates")
         .select("id,category,amount").eq("user_id", user!.id);
+      if (error) throw error;
       return (data ?? []) as CategoryEstimate[];
     },
   });
 
-  const { data: recurrings } = useQuery({
+  const { data: recurrings, isError: recurringsError } = useQuery({
     queryKey: ["recurring-transactions", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase.from("recurring_transactions")
+      const { data, error } = await supabase.from("recurring_transactions")
         .select("id,kind,amount,category,description,day_of_month,active")
         .eq("user_id", user!.id).order("amount", { ascending: false });
+      if (error) throw error;
       return (data ?? []) as RecurringTx[];
     },
   });
@@ -414,7 +421,14 @@ export default function Prosperidade() {
   // mapa e os gráficos é a CAMADA DE GASTO: fixos, estimativas ou lançamentos.
   const hasSpendingLayer = (estimates ?? []).length > 0 ||
     (recurrings ?? []).length > 0 || (txs ?? []).length > 0;
-  const showRaiox = !isLoading && !hasSpendingLayer && !raioxSkipped;
+
+  // Falhou a leitura? Então NÃO SABEMOS se há camada de gasto — e as duas
+  // decisões abaixo dependem disso. Com as três queries falhando, tudo vira
+  // lista vazia e a tela concluía "mês em branco": oferecia o Raio-X de
+  // onboarding a quem tem oito meses de histórico e ainda mostrava o mês em
+  // R$ 0. Onboarding em cima de timeout é o pior estrago possível aqui.
+  const loadFailed = txsError || estimatesError || recurringsError;
+  const showRaiox = !isLoading && !loadFailed && !hasSpendingLayer && !raioxSkipped;
 
   // ── Dados dos gráficos ───────────────────────────────────────
   // Ancorado no ciclo corrente (nowKey), não no mês civil cru: com ciclo
@@ -490,7 +504,7 @@ export default function Prosperidade() {
     const { error } = await supabase.from("category_estimates")
       .upsert([{ user_id: user.id, category: categoryName, amount: newAmount, updated_at: new Date().toISOString() }],
         { onConflict: "user_id,category" });
-    if (error) { toast.error("Não consegui ajustar."); return; }
+    if (error) { toast.error("Não consegui ajustar a estimativa. Tente de novo."); return; }
     toast.success(`Estimativa de ${categoryName} ajustada para ${brl(newAmount)}.`);
     qc.invalidateQueries({ queryKey: ["category-estimates"] });
   };
@@ -505,7 +519,7 @@ export default function Prosperidade() {
   // Só faz sentido depois que o mês está mapeado: sem camada de gasto, quem
   // resolve o salário é o próprio Raio-X (checkbox "lançar como entrada fixa"),
   // e este card viraria só mais um alerta na cara de quem acabou de chegar.
-  const needsSalaryFix = !isLoading && hasSpendingLayer && monthlyIncome > 0 && curIncome === 0 &&
+  const needsSalaryFix = !isLoading && !loadFailed && hasSpendingLayer && monthlyIncome > 0 && curIncome === 0 &&
     (recurrings ?? []).every((r) => r.kind !== "income") && !salaryFixDismissed;
 
   const adoptSalaryRecurring = async () => {
@@ -527,7 +541,7 @@ export default function Prosperidade() {
       toast.success("Salário lançado como entrada fixa — cai todo mês, sozinho.");
       qc.invalidateQueries();
     } catch {
-      toast.error("Não consegui criar a entrada fixa.");
+      toast.error("Não consegui criar a entrada fixa. Tente de novo.");
     } finally {
       setSalaryFixSaving(false);
     }
@@ -536,9 +550,9 @@ export default function Prosperidade() {
   const saveSpendLimitRaw = async (raw: string) => {
     if (!user) return;
     const v = Number(raw.replace(",", "."));
-    if (!v || v <= 0) { toast.error("Informe um valor válido. Ex.: 80"); return; }
+    if (!v || v <= 0) { toast.error("Informe um valor válido em reais, como 80."); return; }
     const { error } = await supabase.from("profiles").update({ daily_spend_limit: v }).eq("user_id", user.id);
-    if (error) { toast.error("Não consegui salvar."); return; }
+    if (error) { toast.error("Não consegui salvar. Tente de novo."); return; }
     toast.success("Teto de gasto diário salvo. Acompanhe na tela Hoje.");
     refreshProfile();
   };
@@ -546,7 +560,7 @@ export default function Prosperidade() {
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     const v = Number(amount.replace(",", "."));
-    if (!user || !v || v <= 0) { toast.error("Informe um valor válido."); return; }
+    if (!user || !v || v <= 0) { toast.error("Informe um valor válido em reais."); return; }
     setSaving(true);
     const { error } = await supabase.from("transactions").insert({
       user_id: user.id, kind, amount: v, category,
@@ -587,11 +601,11 @@ export default function Prosperidade() {
       });
       toast.success(recKind === "income"
         ? "Entrada fixa criada — cai todo mês, sozinha."
-        : "Recorrente criado — repetirá todo mês, sozinho.");
+        : "Recorrente criado — se repete todo mês, sozinho.");
       setRecDesc(""); setRecAmount("");
       qc.invalidateQueries();
     } catch {
-      toast.error("Não consegui criar o recorrente.");
+      toast.error("Não consegui criar o recorrente. Tente de novo.");
     } finally {
       setRecSaving(false);
     }
@@ -600,14 +614,14 @@ export default function Prosperidade() {
   const toggleRecurring = async (r: RecurringTx) => {
     const { error } = await supabase.from("recurring_transactions")
       .update({ active: !r.active }).eq("id", r.id);
-    if (error) { toast.error("Não consegui atualizar."); return; }
+    if (error) { toast.error("Não consegui atualizar o recorrente. Tente de novo."); return; }
     toast.success(r.active ? "Recorrente pausado (não entra nos próximos meses)." : "Recorrente reativado.");
     qc.invalidateQueries({ queryKey: ["recurring-transactions"] });
   };
 
   const removeRecurring = async (r: RecurringTx) => {
     const { error } = await supabase.from("recurring_transactions").delete().eq("id", r.id);
-    if (error) { toast.error("Não consegui excluir."); return; }
+    if (error) { toast.error("Não consegui excluir o recorrente. Tente de novo."); return; }
     toast.success("Recorrente excluído. Lançamentos já feitos permanecem.");
     qc.invalidateQueries();
   };
@@ -617,7 +631,10 @@ export default function Prosperidade() {
 
   return (
     <div className="max-w-2xl lg:max-w-5xl mx-auto space-y-4 animate-fade-up">
-      <div className="flex items-start justify-between gap-3">
+      {/* No celular o botão de ação desce para a própria linha, em largura
+          total: dividindo a linha com o cabeçalho, sobravam 176px para o h1 e
+          a descrição (4 linhas), com espaço morto embaixo do botão. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="font-display text-2xl font-semibold" style={{ color: "hsl(var(--prosperidade))" }}>
             Prosperidade
@@ -626,8 +643,21 @@ export default function Prosperidade() {
             Dica: você também pode registrar gastos escrevendo na tela Hoje — "gastei 30 no almoço".
           </p>
         </div>
-        <ImportStatement onImported={() => qc.invalidateQueries()} onPlanLimit={setLimitInfo} />
+        <div className="w-full sm:w-auto [&_button]:w-full sm:[&_button]:w-auto">
+          <ImportStatement onImported={() => qc.invalidateQueries()} onPlanLimit={setLimitInfo} />
+        </div>
       </div>
+
+      {/* Falha de leitura tem cara própria e vem ANTES de tudo: sem ela, o
+          mês em branco parecia real e a tela agia em cima disso. */}
+      {loadFailed && (
+        <QueryError
+          title="Não consegui carregar suas finanças agora."
+          detail="Pode ser a conexão — nada foi perdido. Seus lançamentos, fixos e estimativas continuam salvos."
+          onRetry={() => refetchTxs()}
+          retrying={txsFetching}
+        />
+      )}
 
       {/* ── Raio-X de 60s: o empty state que mapeia o mês ─────── */}
       {showRaiox && (
@@ -637,7 +667,7 @@ export default function Prosperidade() {
           onSkip={() => { lsSet("prosperidade-raiox-skip", "1"); setRaioxSkipped(true); }}
         />
       )}
-      {!showRaiox && !isLoading && !hasSpendingLayer && (
+      {!showRaiox && !isLoading && !loadFailed && !hasSpendingLayer && (
         <button
           className="w-full text-left"
           onClick={() => { lsSet("prosperidade-raiox-skip", "0"); setRaioxSkipped(false); }}
@@ -646,8 +676,8 @@ export default function Prosperidade() {
             <Compass className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--prosperidade))" }} />
             <p className="text-sm">
               {monthlyIncome > 0
-                ? (<>Falta o outro lado: <strong>Raio-X de 60s</strong> para mapear o que sai todo mês</>)
-                : (<>Fazer o <strong>Raio-X de 60s</strong> e mapear o mês sem registrar nada</>)}
+                ? (<>Falta o outro lado: <strong>Raio-X de 60 segundos</strong> para mapear o que sai todo mês</>)
+                : (<>Fazer o <strong>Raio-X de 60 segundos</strong> e mapear o mês sem registrar nada</>)}
             </p>
           </Card>
         </button>
@@ -668,7 +698,7 @@ export default function Prosperidade() {
               <p className="font-semibold text-success text-[13px] sm:text-base tracking-tight">{brl(monthMap.incomeExpected)}</p>
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] text-muted-foreground">Comprometido + variáveis</p>
+              <p className="text-[11px] text-muted-foreground">Comprometido e variáveis</p>
               <p className="font-semibold text-[13px] sm:text-base tracking-tight">{brl(monthMap.committed + monthMap.variableExpected)}</p>
             </div>
             <div className="min-w-0">
@@ -690,7 +720,7 @@ export default function Prosperidade() {
           </div>
           <p className="text-xs text-muted-foreground">
             Fixos {brl(monthMap.committed)} · variáveis {brl(monthMap.variableExpected)}
-            {monthMap.hasEstimates && " (parte hachurada é estimativa — cada registro real refina)"}.
+            {monthMap.hasEstimates && " (a faixa listrada é estimativa — cada registro real refina)"}.
           </p>
         </Card>
       )}
@@ -782,10 +812,16 @@ export default function Prosperidade() {
       {/* Teto de gasto do dia */}
       <Card className="p-4 space-y-2.5">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium">Teto de gasto do dia</p>
+          {/* Sem teto definido, o título "Teto de gasto do dia" com o número
+              sozinho ao lado se lê como se o teto FOSSE aquele valor — mas o
+              número é o quanto já saiu hoje. O rótulo tem que dizer o que o
+              número é (achado nº 4 do QA). */}
+          <p className="text-sm font-medium">
+            {spendLimit > 0 ? "Teto de gasto do dia" : "Gasto de hoje"}
+          </p>
           <span className="text-sm text-muted-foreground">
             <strong className="text-foreground">{brl(spentToday)}</strong>
-            {spendLimit > 0 && <> / {brl(spendLimit)}</>}
+            {spendLimit > 0 ? <> / {brl(spendLimit)}</> : <> · sem teto definido</>}
           </span>
         </div>
         {spendLimit > 0 && (
@@ -837,7 +873,11 @@ export default function Prosperidade() {
           Sua vida financeira em gráficos
         </h2>
 
-        {!hasSpendingLayer ? (
+        {loadFailed ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            Os gráficos não carregaram. Use "Tentar de novo" no aviso acima.
+          </p>
+        ) : !hasSpendingLayer ? (
           <p className="text-sm text-muted-foreground py-4 text-center">
             Faça o Raio-X de 60s acima (ou registre um gasto) e os gráficos ganham vida hoje mesmo.
           </p>
@@ -916,8 +956,8 @@ export default function Prosperidade() {
                     </ResponsiveContainer>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Este mês por categoria: o sólido é registrado; o hachurado é a sua estimativa
-                    ainda não consumida. O real substitui o estimado — nunca soma.
+                    Este mês por categoria: a parte sólida é o que você registrou; a listrada é a
+                    sua estimativa ainda não consumida. O real substitui o estimado — nunca soma.
                   </p>
                 </>
               ) : (
@@ -930,7 +970,7 @@ export default function Prosperidade() {
             <TabsContent value="projecao" className="mt-3">
               {projNet === null ? (
                 <p className="text-sm text-muted-foreground py-4 text-center">
-                  Faça o Raio-X de 60s (renda + estimativas) e a projeção nasce hoje —
+                  Faça o Raio-X de 60 segundos (renda e estimativas) e a projeção nasce hoje —
                   ou registre um mês completo para projetar do seu padrão real.
                 </p>
               ) : (
@@ -969,7 +1009,7 @@ export default function Prosperidade() {
         {(recurrings ?? []).length === 0 && (
           <p className="text-sm text-muted-foreground">
             Salário, aluguel, contas, assinaturas: cadastre uma vez e o Ascende lança todo mês
-            sozinho — 60 a 70% do registro típico some daqui.
+            sozinho. É o que mais economiza registro manual.
           </p>
         )}
         <div className="divide-y">
@@ -1021,13 +1061,22 @@ export default function Prosperidade() {
             </SelectContent>
           </Select>
           <div className="flex gap-2">
+            {/* O campo nasce com "5", então o placeholder nunca aparece e o
+                número ficava sem explicação nenhuma na tela — daí a legenda
+                abaixo (achado nº 6 do QA). */}
             <Input className="w-16" placeholder="Dia" inputMode="numeric" value={recDay}
-              onChange={(e) => setRecDay(e.target.value.replace(/\D/g, "").slice(0, 2))} aria-label="Dia do mês" />
-            <Button className="flex-1" onClick={addRecurring} disabled={recSaving}>
+              onChange={(e) => setRecDay(e.target.value.replace(/\D/g, "").slice(0, 2))}
+              aria-label="Dia do mês em que repete" />
+            <Button className="flex-1" onClick={addRecurring} disabled={recSaving}
+              aria-label="Adicionar lançamento recorrente">
               {recSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             </Button>
           </div>
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          O número à esquerda do <span aria-hidden>+</span> é o dia do mês em que o
+          lançamento repete (1 a 28).
+        </p>
       </Card>
 
       {/* Novo lançamento */}

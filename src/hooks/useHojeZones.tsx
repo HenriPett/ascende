@@ -42,6 +42,9 @@ export function useSleepZoneVisible(): boolean {
     && scheduleHours !== null && hourInSP() < 12 && !dismissed;
 
   const { data: sleptToday } = useSleepTodayQuery(eligible);
+  // `=== false` e não `!sleptToday`: com a leitura falhando o valor é
+  // undefined, e undefined tem que ESCONDER a zona. Um "não" que vem de
+  // timeout não pode virar convite para registrar de novo.
   return eligible && sleptToday === false;
 }
 

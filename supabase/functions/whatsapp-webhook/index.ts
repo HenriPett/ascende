@@ -281,13 +281,16 @@ async function reserveChatTurn(
   if (!premium) {
     return { id: null, message: `Você atingiu o limite de ${LEGACY_DAILY_LIMIT} mensagens por dia com o Conselheiro. Amanhã ele estará aqui de novo.` };
   }
+  // Fallback no número por segurança: sem ele, uma configuração sem a janela
+  // manda "Você usou as undefined mensagens desta semana" para o WhatsApp da
+  // pessoa — e ali não há como corrigir depois de enviado.
   if (window === "weekly") {
-    return { id: null, message: `Você usou as ${L.chat_weekly} mensagens desta semana com o Conselheiro. Registrar o dia por aqui continua funcionando normalmente.${upsell}` };
+    return { id: null, message: `Você usou as ${L.chat_weekly ?? 0} mensagens desta semana com o Conselheiro. Registrar o dia por aqui continua funcionando normalmente.${upsell}` };
   }
   if (window === "monthly") {
-    return { id: null, message: `Você usou as ${L.chat_monthly} mensagens deste mês com o Conselheiro.${upsell}` };
+    return { id: null, message: `Você usou as ${L.chat_monthly ?? 0} mensagens deste mês com o Conselheiro.${upsell}` };
   }
-  return { id: null, message: `Você usou as ${L.chat_daily} mensagens de hoje com o Conselheiro. Amanhã ele volta — e registrar o dia por aqui continua funcionando normalmente.${upsell}` };
+  return { id: null, message: `Você usou as ${L.chat_daily ?? LEGACY_DAILY_LIMIT} mensagens de hoje com o Conselheiro. Amanhã ele volta — e registrar o dia por aqui continua funcionando normalmente.${upsell}` };
 }
 
 /** Reserva 1 análise de documento do mês (mesma cota do app, Ascende+).

@@ -115,14 +115,19 @@ export default function ImportStatement({
     // o que ficou fora por já estar registrado, e o que a pessoa descartou na
     // revisão. Os três somam `totalRows` — é o que permite auditar depois.
     const duplicateRows = items.filter((_, i) => dup[i] && !checked[i]).length;
-    const rejectedRows = items.filter((_, i) => !checked[i] && !dup[i]).length;
+    // DESMARCADO, não "rejeitado": desmarcar as parcelas futuras de uma fatura
+    // em 12x é a revisão funcionando, e marcava a fonte como importação
+    // incompleta para sempre. Ilegível é outra coisa — e aqui é sempre zero,
+    // porque a leitura do documento só devolve o que conseguiu ler.
+    const discardedRows = items.filter((_, i) => !checked[i] && !dup[i]).length;
 
     const ok = await confirmStatement(selected, {
       displayName: file?.name,
       fileHash: file?.hash ?? null,
       totalRows: items.length,
       duplicateRows,
-      rejectedRows,
+      discardedRows,
+      unreadableRows: 0,
     });
     if (ok) {
       setOpen(false);

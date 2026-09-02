@@ -15,6 +15,7 @@ import { todayISO } from "@/lib/format";
 import { PILLARS } from "@/lib/pillars";
 import { activeTrackerSet } from "@/lib/trackers";
 import SleepSchedule from "@/components/core/SleepSchedule";
+import QueryError from "@/components/core/QueryError";
 import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
 import { cn } from "@/lib/utils";
 import {
@@ -61,7 +62,7 @@ function RaioXVitalidade() {
     setSaving(true);
     const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
     setSaving(false);
-    if (error) { toast.error("Não consegui salvar o Raio-X."); return; }
+    if (error) { toast.error("Não consegui salvar o Raio-X. Tente de novo."); return; }
     toast.success("Retrato de Vitalidade pronto. O Conselheiro e o briefing já cruzam isso com os outros pilares.");
     setOpen(false);
     setWorkoutsWeek("");
@@ -76,7 +77,7 @@ function RaioXVitalidade() {
     if (routineHours !== null) {
       parts.push(`dorme ${timeForInput(profile.sleep_bedtime)} às ${timeForInput(profile.sleep_waketime)} (${formatWindowHours(routineHours)})`);
     } else if (profile.est_sleep_h != null) {
-      parts.push(`~${String(profile.est_sleep_h).replace(".", ",")}h de sono/noite`);
+      parts.push(`~${String(profile.est_sleep_h).replace(".", ",")} h de sono por noite`);
     }
     return (
       <Card className="p-4 flex items-start gap-3">
@@ -121,7 +122,7 @@ function RaioXVitalidade() {
           <Zap className="w-4 h-4" style={{ color: "hsl(var(--vitalidade))" }} /> Raio-X de Vitalidade
         </p>
         <p className="text-xs text-muted-foreground">
-          Como está HOJE, na média — não a meta, o real. Vale chutar honesto.
+          Como está HOJE, na média — não a meta, o real. Um chute honesto já serve.
         </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -165,19 +166,19 @@ export default function Vitalidade() {
   const saveVitalGoal = async (patch: Record<string, number>, label: string, clear: () => void) => {
     if (!user) return;
     const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
-    if (error) { toast.error("Não consegui salvar a meta."); return; }
+    if (error) { toast.error("Não consegui salvar a meta. Tente de novo."); return; }
     toast.success(`${label} salva. Acompanhe na tela Hoje.`);
     clear();
     refreshProfile();
   };
   const saveSleepGoalRaw = (raw: string) => {
     const h = Number(raw.replace(",", "."));
-    if (!h || h < 4 || h > 12) { toast.error("Meta de sono inválida. Ex.: 8"); return; }
+    if (!h || h < 4 || h > 12) { toast.error("Meta de sono inválida. Informe um número de horas entre 4 e 12."); return; }
     saveVitalGoal({ sleep_goal_h: h }, "Meta de sono", () => setSleepGoalInput(""));
   };
   const saveWorkoutsGoalRaw = (raw: string) => {
     const n = Math.round(Number(raw));
-    if (!n || n < 1 || n > 14) { toast.error("Meta inválida. Ex.: 4 treinos/semana"); return; }
+    if (!n || n < 1 || n > 14) { toast.error("Meta de treinos inválida. Informe um número entre 1 e 14."); return; }
     saveVitalGoal({ weekly_workouts_goal: n }, "Meta de treinos", () => setWorkoutsGoalInput(""));
   };
   const [medicationInput, setMedicationInput] = useState("");
@@ -189,7 +190,7 @@ export default function Vitalidade() {
   const saveHealth = async (patch: { health_conditions?: string[]; medications?: string[] }) => {
     if (!user) return;
     const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
-    if (error) { toast.error("Não consegui salvar."); return; }
+    if (error) { toast.error("Não consegui salvar. Tente de novo."); return; }
     refreshProfile();
   };
 
@@ -221,13 +222,13 @@ export default function Vitalidade() {
   const removeMedication = (idx: number) =>
     saveHealth({ medications: medications.filter((_, i) => i !== idx) });
 
-  const { data } = useQuery({
+  const { data, isError, refetch, isFetching } = useQuery({
     queryKey: ["vitalidade", user?.id],
     enabled: !!user,
     queryFn: async () => {
       const since = daysAgoISOInSP(27); // fronteira de dia em São Paulo (plano §5.4)
       const since30 = new Date(Date.now() - 30 * 864e5).toISOString();
-      const [{ data: habits }, { data: logs }, { data: workouts }, { data: sleepToday }] = await Promise.all([
+      const [habits, logs, workouts, sleepToday] = await Promise.all([
         supabase.from("habits").select("id,name,pillar").eq("user_id", user!.id).eq("active", true).order("created_at"),
         supabase.from("habit_logs").select("id,habit_id,log_date").eq("user_id", user!.id).gte("log_date", since),
         supabase.from("life_events").select("id,occurred_at,payload")
@@ -237,11 +238,16 @@ export default function Vitalidade() {
           .eq("user_id", user!.id).eq("kind", "sleep")
           .gte("occurred_at", new Date(new Date().setHours(0, 0, 0, 0)).toISOString()).limit(1),
       ]);
+      // Sem propagar, a falha vira "nenhum hábito, nenhum treino e você não
+      // dormiu" — três afirmações falsas de uma vez, e `sleptTonight` false
+      // ainda reabre um check-in que a pessoa já respondeu.
+      const failed = [habits, logs, workouts, sleepToday].find((r) => r.error);
+      if (failed?.error) throw failed.error;
       return {
-        habits: (habits ?? []) as Habit[],
-        logs: (logs ?? []) as HLog[],
-        workouts: (workouts ?? []) as WorkoutEvent[],
-        sleptTonight: (sleepToday ?? []).length > 0,
+        habits: (habits.data ?? []) as Habit[],
+        logs: (logs.data ?? []) as HLog[],
+        workouts: (workouts.data ?? []) as WorkoutEvent[],
+        sleptTonight: (sleepToday.data ?? []).length > 0,
       };
     },
   });
@@ -252,7 +258,7 @@ export default function Vitalidade() {
     e.preventDefault();
     if (!user || !newHabit.trim()) return;
     const { error } = await supabase.from("habits").insert({ user_id: user.id, name: newHabit.trim(), pillar: newPillar });
-    if (error) { toast.error("Não consegui criar o hábito."); return; }
+    if (error) { toast.error("Não consegui criar o hábito. Tente de novo."); return; }
     toast.success("Hábito criado. Consistência constrói a subida!");
     setNewHabit("");
     invalidate();
@@ -291,7 +297,7 @@ export default function Vitalidade() {
       user_id: user.id, pillar: "vitalidade", kind: isNap ? "nap" : "sleep",
       payload: { hours: h, summary: isNap ? `Soneca: ${h}h` : `Sono: ${h}h` }, source: "form",
     });
-    if (error) { toast.error("Não consegui salvar."); return; }
+    if (error) { toast.error("Não consegui salvar o sono. Tente de novo."); return; }
     toast.success(isNap ? "Soneca registrada. +2 XP" : "Sono registrado. +5 XP");
     setSleepHours("");
     setSleepType(null);
@@ -316,7 +322,7 @@ export default function Vitalidade() {
       },
       source: "form",
     });
-    if (error) { toast.error("Não consegui salvar."); return; }
+    if (error) { toast.error("Não consegui salvar o treino. Tente de novo."); return; }
     toast.success("Treino registrado. +8 XP");
     setWorkout("");
     setMuscles([]);
@@ -361,6 +367,15 @@ export default function Vitalidade() {
         </p>
       </div>
 
+      {isError && (
+        <QueryError
+          title="Não consegui carregar seus treinos e hábitos."
+          detail="Pode ser a conexão — nada do que você registrou se perdeu."
+          onRetry={() => refetch()}
+          retrying={isFetching}
+        />
+      )}
+
       {/* Valor no dia 1 (Sugestões 2 e 4): o equivalente ao Raio-X */}
       <RaioXVitalidade />
 
@@ -380,7 +395,12 @@ export default function Vitalidade() {
                 key={t} type="button" onClick={() => setSleepType(t)}
                 className={cn(
                   "text-xs rounded-full border px-3 py-1 transition-colors",
-                  effectiveSleepType === t ? "border-transparent text-white" : "text-muted-foreground hover:bg-muted/60"
+                  // Branco sobre o coral de --vitalidade dava 2,86:1 no
+                  // escuro e 3,79:1 no claro; a tinta escura da casa dá
+                  // 4,85:1 e 6,73:1 (QA visual, M2).
+                  effectiveSleepType === t
+                    ? "border-transparent text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted/60"
                 )}
                 style={effectiveSleepType === t ? { background: "hsl(var(--vitalidade))" } : undefined}
                 aria-pressed={effectiveSleepType === t}
@@ -396,13 +416,13 @@ export default function Vitalidade() {
           )}
           <div className="flex gap-2">
             <Input inputMode="decimal"
-              placeholder={effectiveSleepType === "nap" ? "Duração em horas: 0,5 = 30 min" : "Horas na noite: ex. 7,5"}
+              placeholder={effectiveSleepType === "nap" ? "Duração em horas. Ex.: 0,5 = 30 min" : "Horas de sono. Ex.: 7,5"}
               value={sleepHours}
               onChange={(e) => setSleepHours(e.target.value)} />
             <Button onClick={logSleep} variant="secondary">Salvar</Button>
           </div>
           <GoalInput
-            placeholder="Meta de horas/noite"
+            placeholder="Meta de horas por noite"
             currentLabel={profile?.sleep_goal_h ? `Meta: ${String(profile.sleep_goal_h).replace(".", ",")}h/noite` : null}
             onSubmit={saveSleepGoalRaw}
           />
@@ -419,8 +439,9 @@ export default function Vitalidade() {
                 key={m} type="button" onClick={() => toggleMuscle(m)}
                 className={cn(
                   "text-xs rounded-full border px-2.5 py-1 transition-colors",
+                  // Mesmo par do chip de sono: branco sobre coral reprova.
                   muscles.includes(m)
-                    ? "border-transparent text-white"
+                    ? "border-transparent text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted/60"
                 )}
                 style={muscles.includes(m) ? { background: "hsl(var(--vitalidade))" } : undefined}
@@ -433,8 +454,8 @@ export default function Vitalidade() {
           <Button onClick={logWorkout} variant="secondary" className="w-full">Salvar treino</Button>
           <GoalInput
             inputMode="numeric"
-            placeholder="Meta de treinos/semana"
-            currentLabel={profile?.weekly_workouts_goal ? `Meta: ${profile.weekly_workouts_goal} treinos/semana` : null}
+            placeholder="Meta de treinos por semana"
+            currentLabel={profile?.weekly_workouts_goal ? `Meta: ${profile.weekly_workouts_goal} treinos por semana` : null}
             onSubmit={saveWorkoutsGoalRaw}
           />
         </Card>
@@ -509,7 +530,7 @@ export default function Vitalidade() {
       <Card className="p-4 space-y-3">
         <h2 className="font-display font-semibold">Hábitos diários</h2>
 
-        {!(data?.habits ?? []).length && (
+        {!isError && !(data?.habits ?? []).length && (
           <p className="text-sm text-muted-foreground">
             Comece com UM hábito pequeno — pequeno demais para falhar. Você pode criar hábitos
             de qualquer pilar aqui.

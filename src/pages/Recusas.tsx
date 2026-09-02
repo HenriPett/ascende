@@ -13,27 +13,30 @@ const RECUSAS: { title: string; detail: string }[] = [
   {
     title: "Nunca venderemos seus dados. Nem \u201Canonimizados\u201D.",
     detail:
-      "Nosso modelo é assinatura justamente para nunca precisarmos disso. O que você registra — dinheiro, corpo, fé, emoções — existe para te servir, não para virar produto.",
+      "O Ascende vive de assinatura justamente para nunca precisarmos disso. O que você registra — dinheiro, corpo, fé, emoções — existe para te servir, não para virar produto.",
   },
   {
     title: "Nunca aceitaremos anúncios. De ninguém. Muito menos de bets.",
     detail:
-      "Parte dos nossos usuários está numa Batalha contra apostas. Aceitar anúncio de casa de aposta seria lucrar duas vezes com a queda de quem confiou na gente.",
+      "O Ascende tem uma Batalha contra apostas dentro do produto. Aceitar anúncio de casa de aposta seria lucrar duas vezes com a queda de quem confiou na gente.",
   },
   {
-    title: "Nunca usaremos notificação de culpa nem streak que pune sua semana ruim.",
+    // "streak" é jargão de app, e esta é a página em que os "nãos" da casa
+    // viram promessa pública: tem de ser lida sem tradução. A mesma frase
+    // aparece na Landing — as duas mudam juntas, sempre.
+    title: "Nunca usaremos notificação de culpa nem sequência que pune sua semana ruim.",
     detail:
       "A sequência tem dia de descanso embutido e os dias limpos acumulados nunca zeram. Semana ruim não apaga a subida — isso está no código, não só nesta página.",
   },
   {
     title: "O Conselheiro nunca fingirá ser seu médico, seu psicólogo ou seu corretor.",
     detail:
-      "Ele organiza, conecta e aponta o próximo degrau. Decisões clínicas, terapêuticas e de investimento continuam com os profissionais certos — e a própria IA te lembra disso.",
+      "Ele organiza, conecta e aponta o próximo degrau. Decisões clínicas, terapêuticas e de investimento continuam com os profissionais certos — e ele mesmo te lembra disso.",
   },
   {
     title: "Suas fotos são analisadas e descartadas. Não existe \u201Cacervo\u201D.",
     detail:
-      "Fotos de refeição e de corpo enviadas para análise são processadas e descartadas. Não guardamos um dataset das suas imagens — nem para \u201Cmelhorar o serviço\u201D.",
+      "Fotos de refeição e de corpo enviadas para análise são processadas e descartadas. Não guardamos nenhuma coleção das suas imagens — nem para \u201Cmelhorar o serviço\u201D.",
   },
   {
     title: "Cancelou? Seus dados continuam seus. Sem chantagem.",
@@ -41,9 +44,14 @@ const RECUSAS: { title: string; detail: string }[] = [
       "Ao encerrar o Ascende+ você não perde nada: registros e memórias ficam com você; o que passar do limite gratuito fica arquivado (somente leitura) e volta ao reativar. Mantemos seus dados guardados com custo nosso e receita zero — porque eles são seus.",
   },
   {
-    title: "XP nunca premiará tempo de tela ou abrir o app.",
+    title: "O plano gratuito nunca será rebaixado. Registrar a vida nunca terá preço.",
     detail:
-      "Só ações na vida real valem pontos. No dia em que um app te recompensa por ficar mais tempo nele, ele parou de trabalhar para você.",
+      "\u201CGrátis para sempre no essencial\u201D não é promoção de lançamento: é contrato. Registrar a sua vida — gastos, treinos, refeições, humor, hábitos, batalhas — nunca vai custar nada. O Ascende+ amplia os recursos de inteligência artificial; ele nunca vai passar a cobrar por algo que já era gratuito.",
+  },
+  {
+    title: "XP nunca premiará tempo de tela nem abrir o app.",
+    detail:
+      "Só ações na vida real valem pontos. No dia em que um app te recompensar por ficar mais tempo nele, ele parou de trabalhar para você.",
   },
 ];
 
@@ -69,7 +77,7 @@ export default function Recusas() {
         </h1>
         <p className="mt-4 text-muted-foreground">
           Posicionamento não é o que a gente declara. É o que a gente recusa na frente de
-          dinheiro. Esta página lista os "nãos" que sustentam o Ascende — todos já verdadeiros
+          dinheiro. Esta página lista os “nãos” que sustentam o Ascende — todos já verdadeiros
           no produto hoje, todos assinados em público. Se um dia quebrarmos qualquer um deles,
           esta página existe para você cobrar.
         </p>

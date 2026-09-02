@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import QueryError from "@/components/core/QueryError";
 import GoalInput from "@/components/core/GoalInput";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -116,15 +117,18 @@ export default function Alimentacao() {
   // ── Edição de calorias no histórico ──────────────────────────
   const [editingMeal, setEditingMeal] = useState<MealEvent | null>(null);
 
-  const { data: meals, isLoading } = useQuery({
+  const { data: meals, isLoading, isError: mealsError, refetch: refetchMeals, isFetching: mealsFetching } = useQuery({
     queryKey: ["meals", user?.id],
     enabled: !!user,
     queryFn: async () => {
       const since = new Date(Date.now() - 14 * 864e5).toISOString();
-      const { data } = await supabase.from("life_events")
+      const { data, error } = await supabase.from("life_events")
         .select("id,occurred_at,payload")
         .eq("user_id", user!.id).eq("kind", "meal").gte("occurred_at", since)
         .order("occurred_at", { ascending: false }).limit(100);
+      // Falha virava lista vazia, e lista vazia aqui vira "nenhuma refeição
+      // registrada ainda" — a tela de quem nunca usou o app.
+      if (error) throw error;
       return (data ?? []) as MealEvent[];
     },
   });
@@ -134,10 +138,11 @@ export default function Alimentacao() {
     enabled: !!user,
     queryFn: async () => {
       const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-      const { data } = await supabase.from("life_events")
+      const { data, error } = await supabase.from("life_events")
         .select("id,occurred_at,payload")
         .eq("user_id", user!.id).eq("kind", "water").gte("occurred_at", dayStart.toISOString())
         .order("occurred_at", { ascending: false });
+      if (error) throw error;
       return (data ?? []) as WaterEvent[];
     },
   });
@@ -147,10 +152,11 @@ export default function Alimentacao() {
     enabled: !!user,
     queryFn: async () => {
       const since = new Date(Date.now() - 90 * 864e5).toISOString();
-      const { data } = await supabase.from("life_events")
+      const { data, error } = await supabase.from("life_events")
         .select("id,occurred_at,payload")
         .eq("user_id", user!.id).eq("kind", "weight").gte("occurred_at", since)
         .order("occurred_at", { ascending: true }).limit(200);
+      if (error) throw error;
       return (data ?? []) as WeightEvent[];
     },
   });
@@ -162,7 +168,7 @@ export default function Alimentacao() {
       user_id: user.id, pillar: "alimentacao", kind: "meal",
       payload: { description: meal.trim(), summary: `Refeição: ${meal.trim()}` }, source: "form",
     });
-    if (error) { toast.error("Não consegui salvar."); return; }
+    if (error) { toast.error("Não consegui salvar a refeição. Tente de novo."); return; }
     toast.success("Refeição registrada. +4 XP");
     setMeal("");
     qc.invalidateQueries();
@@ -250,7 +256,7 @@ export default function Alimentacao() {
       source: photoData ? "photo" : "text",
     });
     setSavingPhoto(false);
-    if (error) { toast.error("Não consegui salvar."); return; }
+    if (error) { toast.error("Não consegui salvar a refeição. Tente de novo."); return; }
     toast.success("Refeição registrada. +4 XP");
     resetPhoto();
     qc.invalidateQueries();
@@ -266,7 +272,7 @@ export default function Alimentacao() {
       user_id: user.id, pillar: "alimentacao", kind: "water",
       payload: { ml, summary: `Água: ${ml} ml` }, source: "form",
     });
-    if (error) { toast.error("Não consegui registrar."); return; }
+    if (error) { toast.error("Não consegui registrar a água. Tente de novo."); return; }
     qc.invalidateQueries({ queryKey: ["water-today", user.id] });
   };
 
@@ -280,14 +286,14 @@ export default function Alimentacao() {
   // ── Peso ─────────────────────────────────────────────────────
   const logWeight = async () => {
     const kg = Number(weightInput.replace(",", "."));
-    if (!user || !kg || kg < 20 || kg > 400) { toast.error("Informe um peso válido em kg. Ex.: 78,5"); return; }
+    if (!user || !kg || kg < 20 || kg > 400) { toast.error("Informe um peso válido em kg, como 78,5."); return; }
     setSavingWeight(true);
     const { error } = await supabase.from("life_events").insert({
       user_id: user.id, pillar: "alimentacao", kind: "weight",
       payload: { kg, summary: `Peso: ${kg} kg` }, source: "form",
     });
     setSavingWeight(false);
-    if (error) { toast.error("Não consegui salvar."); return; }
+    if (error) { toast.error("Não consegui salvar o peso. Tente de novo."); return; }
     toast.success("Peso registrado. +3 XP");
     setWeightInput("");
     qc.invalidateQueries();
@@ -296,9 +302,9 @@ export default function Alimentacao() {
   const saveCalorieGoalRaw = async (raw: string) => {
     if (!user) return;
     const kcal = Math.round(Number(raw.replace(/\D/g, "")));
-    if (!kcal || kcal < 800 || kcal > 8000) { toast.error("Meta inválida. Ex.: 3000"); return; }
+    if (!kcal || kcal < 800 || kcal > 8000) { toast.error("Meta calórica inválida. Informe um valor entre 800 e 8000 kcal."); return; }
     const { error } = await supabase.from("profiles").update({ calorie_goal_kcal: kcal }).eq("user_id", user.id);
-    if (error) { toast.error("Não consegui salvar a meta."); return; }
+    if (error) { toast.error("Não consegui salvar a meta. Tente de novo."); return; }
     toast.success("Meta calórica diária salva. Acompanhe na tela Hoje.");
     setCalorieGoalInput("");
     refreshProfile();
@@ -307,9 +313,9 @@ export default function Alimentacao() {
   const saveWeightGoal = async () => {
     if (!user) return;
     const kg = Number(weightGoalInput.replace(",", "."));
-    if (!kg || kg < 20 || kg > 400) { toast.error("Meta inválida. Ex.: 75"); return; }
+    if (!kg || kg < 20 || kg > 400) { toast.error("Meta de peso inválida. Informe um valor em kg, como 75."); return; }
     const { error } = await supabase.from("profiles").update({ weight_goal_kg: kg }).eq("user_id", user.id);
-    if (error) { toast.error("Não consegui salvar a meta."); return; }
+    if (error) { toast.error("Não consegui salvar a meta. Tente de novo."); return; }
     toast.success("Meta de peso salva.");
     setWeightGoalInput("");
     refreshProfile();
@@ -325,7 +331,7 @@ export default function Alimentacao() {
     const desc = payload.description ?? "Refeição";
     payload.summary = calories > 0 ? `Refeição (~${calories} kcal): ${desc}` : `Refeição: ${desc}`;
     const { error } = await supabase.from("life_events").update({ payload }).eq("id", meal.id);
-    if (error) { toast.error("Não consegui atualizar."); return; }
+    if (error) { toast.error("Não consegui atualizar as calorias. Tente de novo."); return; }
     toast.success("Calorias atualizadas.");
     setEditingMeal(null);
     qc.invalidateQueries({ queryKey: ["meals"] });
@@ -361,7 +367,11 @@ export default function Alimentacao() {
     for (const m of meals ?? []) {
       const kcal = Number(m.payload?.calories);
       if (kcal > 0) {
-        const d = m.occurred_at.slice(0, 10);
+        // A chave era GRAVADA em UTC (slice) e LIDA em São Paulo (linha
+        // abaixo, daysAgoISOInSP): jantar às 22:00 de 21/03 chega como
+        // 2024-03-22T01:00:00Z, caía na barra do dia 22 e sumia da do 21.
+        // Quem janta depois das 21:00 via o gráfico inteiro deslocado.
+        const d = dateISOInSP(m.occurred_at);
         map[d] = (map[d] ?? 0) + kcal;
       }
     }
@@ -384,7 +394,9 @@ export default function Alimentacao() {
   // Agrupa refeições por dia
   const byDay: Record<string, MealEvent[]> = {};
   for (const m of meals ?? []) {
-    const day = m.occurred_at.slice(0, 10);
+    // Mesmo fuso do filtro de "hoje" logo acima: sem isto, todo jantar
+    // depois das 21:00 aparecia na lista do dia seguinte.
+    const day = dateISOInSP(m.occurred_at);
     (byDay[day] ??= []).push(m);
   }
 
@@ -430,13 +442,16 @@ export default function Alimentacao() {
         {trackers.has("meals") && (
         <Card className="p-4 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
+            {/* Sem meta definida, "Meta do dia" ao lado do consumido faz o
+                consumido parecer a meta (achado nº 4 do QA). */}
             <p className="text-sm font-medium flex items-center gap-1.5">
               <Flame className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
-              Meta do dia
+              {kcalGoal > 0 ? "Meta do dia" : "Consumido hoje"}
             </p>
             <span className="text-sm text-muted-foreground">
               <strong className="text-foreground">{kcalToday.toLocaleString("pt-BR")}</strong>
-              {kcalGoal > 0 && <> / {kcalGoal.toLocaleString("pt-BR")}</>} kcal
+              {kcalGoal > 0 ? <> / {kcalGoal.toLocaleString("pt-BR")}</> : null} kcal
+              {kcalGoal === 0 && <> · sem meta definida</>}
             </span>
           </div>
 
@@ -474,7 +489,7 @@ export default function Alimentacao() {
         <Card className="p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Camera className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} />
-            Foto ou descrição, eu estimo as calorias
+            Manda a foto ou descreva — o Ascende estima as calorias
           </div>
 
           <input
@@ -781,8 +796,17 @@ export default function Alimentacao() {
         {/* Histórico 14 dias */}
         <Card className="p-4">
           <h2 className="font-display font-semibold mb-3">Últimos 14 dias</h2>
-          {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
-          {!isLoading && !(meals ?? []).length && (
+          {isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+          {mealsError && (
+            <QueryError
+              variant="plain"
+              title="Não consegui carregar suas refeições."
+              detail="Pode ser a conexão — o que você já registrou continua salvo."
+              onRetry={() => refetchMeals()}
+              retrying={mealsFetching}
+            />
+          )}
+          {!isLoading && !mealsError && !(meals ?? []).length && (
             <div className="text-center py-6">
               <UtensilsCrossed className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">
@@ -965,7 +989,7 @@ function WaterSettingsDialog({
       .update({ water_goal_ml: goalMl, water_bottles: clean })
       .eq("user_id", user.id);
     setSaving(false);
-    if (error) { toast.error("Não consegui salvar."); return; }
+    if (error) { toast.error("Não consegui salvar. Tente de novo."); return; }
     toast.success("Preferências de hidratação salvas.");
     onSaved();
     onOpenChange(false);
@@ -977,8 +1001,8 @@ function WaterSettingsDialog({
         <DialogHeader>
           <DialogTitle>Personalizar hidratação</DialogTitle>
           <DialogDescription>
-            Defina sua meta do dia e o tamanho das garrafas/copos que você usa. Isso deixa o registro
-            de um toque.
+            Defina sua meta do dia e o tamanho das garrafas ou copos que você usa. Assim, registrar
+            água passa a ser um toque só.
           </DialogDescription>
         </DialogHeader>
 

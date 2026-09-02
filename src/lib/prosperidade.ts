@@ -168,12 +168,32 @@ export interface CalibrationRow {
   category: string;
   estimated: number;
   real: number;
-  /** Sugestão de nova estimativa (real do mês anterior, arredondado a R$ 10). */
+  /** Sugestão de nova estimativa (real do mês anterior, arredondado a R$ 10).
+   *  `0` quando o mês fechou sem gasto nenhum na categoria: ali a sugestão é
+   *  zerar a reserva, não arredondar nada. */
   suggestion: number;
 }
 
-/** Calibração do fechamento: compara mês ANTERIOR (estimado × real) e sugere
- *  ajuste quando a diferença é relevante. Pergunta, não bronca. */
+/**
+ * Calibração do fechamento: compara mês ANTERIOR (estimado × real) e sugere
+ * ajuste quando a diferença é relevante. Pergunta, não bronca.
+ *
+ * GASTO REAL ZERO TAMBÉM ENTRA — e é o caso que mais importa.
+ *
+ * Antes havia um `if (real <= 0) continue` com a justificativa "sem registro
+ * real: nada a calibrar". É o contrário: a categoria que fechou o mês em R$ 0
+ * é justamente a estimativa mais mal calibrada da lista. A pessoa reservou
+ * R$ 500 em Lazer, gastou nada, e o "sobra para viver" ficou R$ 500 mais
+ * pessimista o mês inteiro — sem que a única tela que existe para perguntar
+ * "sua estimativa bateu?" tivesse perguntado.
+ *
+ * Duas escolhas para não virar cobrança:
+ * • a sugestão é `0` (zerar), não um arredondamento de zero;
+ * • só entra a partir de `minAbsDiff`, para uma estimativa de R$ 5 esquecida
+ *   não gerar linha nenhuma. A checagem relativa (`minRelDiff`) não se aplica
+ *   aqui: com real 0 a diferença relativa é sempre 100%, então ela não separa
+ *   nada e o piso absoluto é o único filtro que decide.
+ */
 export function buildCalibration(
   prevMonthExpensesByCategory: Record<string, number>,
   estimates: CategoryEstimate[],
@@ -184,7 +204,11 @@ export function buildCalibration(
   for (const e of estimates) {
     const real = Math.max(0, prevMonthExpensesByCategory[e.category] ?? 0);
     const est = Number(e.amount);
-    if (real <= 0) continue; // sem registro real: nada a calibrar (pode ter sido menor de verdade)
+    if (real <= 0) {
+      if (est < minAbsDiff) continue;
+      rows.push({ category: e.category, estimated: est, real: 0, suggestion: 0 });
+      continue;
+    }
     const diff = Math.abs(real - est);
     if (diff < minAbsDiff || diff < est * minRelDiff) continue;
     rows.push({ category: e.category, estimated: est, real, suggestion: Math.max(10, Math.round(real / 10) * 10) });

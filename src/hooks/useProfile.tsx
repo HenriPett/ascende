@@ -26,6 +26,35 @@ export const JOURNAL_COLORS: { id: string; label: string; hsl: string }[] = [
 export const journalColorHsl = (id?: string | null) =>
   (JOURNAL_COLORS.find((c) => c.id === id) ?? JOURNAL_COLORS[0]).hsl;
 
+/**
+ * A tinta legível sobre uma cor de diário.
+ *
+ * O botão "Guardar no diário" pinta o fundo com a cor escolhida pela pessoa e
+ * mantinha a tinta escura do botão padrão: sobre violeta isso dava 3,36:1,
+ * abaixo do mínimo AA de 4,5:1 (QA visual, M2). Branco resolveria seis das sete
+ * cores — e falharia justamente no ouro (3,45:1). Então a escolha é calculada:
+ * ganha a tinta de maior contraste. Pior caso das sete passa a ser 4,68:1.
+ *
+ * Fórmula de luminância relativa da WCAG 2.1. Fica aqui, ao lado das cores que
+ * ela serve; quando `src/lib` estiver livre, é candidata natural a mudar de casa.
+ */
+export function journalInkHsl(id?: string | null): string {
+  const [h, s, l] = journalColorHsl(id).split(/\s+/).map((v) => parseFloat(v));
+  const c = (1 - Math.abs((2 * l) / 100 - 1)) * (s / 100);
+  const x = c * (1 - Math.abs((((h / 60) % 2) + 2) % 2 - 1));
+  const m = l / 100 - c / 2;
+  const seg = Math.floor(h / 60) % 6;
+  const [r, g, b] = [
+    [c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x],
+  ][seg].map((v) => v + m);
+  const lum = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  const Lbg = 0.2126 * lum(r) + 0.7152 * lum(g) + 0.0722 * lum(b);
+  // Contraste contra branco (L=1) e contra a tinta escura da casa (L≈0.0086).
+  const vsWhite = 1.05 / (Lbg + 0.05);
+  const vsInk = (Lbg + 0.05) / (0.0086 + 0.05);
+  return vsWhite >= vsInk ? "0 0% 100%" : "240 25% 10%";
+}
+
 export interface Profile {
   user_id: string;
   name: string | null;
@@ -100,5 +129,16 @@ export function useProfile() {
   });
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["profile", user?.id] });
-  return { profile: query.data ?? null, loading: query.isLoading, refresh };
+  // `profile: null` tinha DOIS significados — "ainda não carregou/não existe" e
+  // "a leitura falhou" — e quem consome não tinha como separar. Formulário em
+  // branco por falha de rede parece perfil vazio, e a tela age em cima disso.
+  // O contrato antigo continua igual; `isError` é adição.
+  return {
+    profile: query.data ?? null,
+    loading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    isFetching: query.isFetching,
+    refresh,
+  };
 }

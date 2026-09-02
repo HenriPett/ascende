@@ -452,10 +452,54 @@ describe("limiares", () => {
     // desde março.
     const eventos = [ev(60, "mente")];
     const semInicio = mokariEnvironment(eventos, addDays(BASE, 70));
-    const comInicio = mokariEnvironment(eventos, addDays(BASE, 70), `${BASE}T00:00:00Z`);
+    // 12:00Z = 09:00 em SP, mesmo dia: a conta foi criada de manhã. Não use
+    // meia-noite UTC aqui — é 21:00 do dia ANTERIOR em São Paulo, e o teste
+    // passaria a medir a conversão de fuso em vez do que ele quer medir.
+    const comInicio = mokariEnvironment(eventos, addDays(BASE, 70), `${BASE}T12:00:00Z`);
     expect(comInicio.journeyDays).toBe(70);
     expect(semInicio.journeyDays).toBe(10);
     expect(comInicio.environment).toBeGreaterThan(semInicio.environment);
+  });
+
+  /* ─── Fuso: o dia é o de São Paulo, não o de UTC ──────────────────── */
+
+  it("registro de 22:30 conta no dia em que a pessoa viveu, não no dia UTC", () => {
+    // O achado da revisão desta branch, na mesma classe do que quebrava
+    // Alimentação: `occurred_at` é timestamptz e chega do PostgREST em UTC.
+    // Cinco noites seguidas às 22:30 em São Paulo caem no dia SEGUINTE em UTC
+    // (UTC-3), então a última escapa pela borda da janela e o Mokari cai de
+    // "movimento" para "atento" — sem nada ter mudado na vida da pessoa.
+    // 01:30Z é 22:30 do dia ANTERIOR em São Paulo. Escrito na mão, sem
+    // aritmética, para o próprio fixture não repetir a suposição em teste.
+    const noites: MokariEvent[] = [
+      { occurred_at: "2026-05-27T01:30:00Z", pillar: "vitalidade", kind: "habit_done" }, // 26/05 22:30 SP
+      { occurred_at: "2026-05-28T01:30:00Z", pillar: "vitalidade", kind: "habit_done" }, // 27/05 22:30 SP
+      { occurred_at: "2026-05-29T01:30:00Z", pillar: "vitalidade", kind: "habit_done" }, // 28/05 22:30 SP
+      { occurred_at: "2026-05-30T01:30:00Z", pillar: "vitalidade", kind: "habit_done" }, // 29/05 22:30 SP
+      { occurred_at: "2026-05-31T01:30:00Z", pillar: "vitalidade", kind: "habit_done" }, // 30/05 22:30 SP
+    ];
+    const { state, activeDays } = mokariState(noites, "2026-05-30");
+    expect(activeDays).toBe(5);
+    expect(state).toBe("movimento");
+  });
+
+  it("dois registros do MESMO dia em SP contam como um dia ativo", () => {
+    // 17:00 e 22:30 do dia 28 em São Paulo — a pessoa registrou duas vezes no
+    // mesmo dia. Em UTC os carimbos caem em dias diferentes (28 e 29), e o
+    // corte por `slice` inflaria a consistência dela em 100%.
+    const mesmoDia: MokariEvent[] = [
+      { occurred_at: "2026-05-28T20:00:00Z", pillar: "vitalidade", kind: "habit_done" },
+      { occurred_at: "2026-05-29T01:30:00Z", pillar: "vitalidade", kind: "habit_done" },
+    ];
+    expect(mokariState(mesmoDia, "2026-05-30").activeDays).toBe(1);
+  });
+
+  it("journeyStart à meia-noite UTC começa a jornada no dia anterior em SP", () => {
+    // Não é bug, é a conversão certa: 00:00Z é 21:00 da véspera em São Paulo,
+    // e quem criou a conta às 21:00 está na jornada desde aquele dia. Fica
+    // fixado para ninguém "consertar" isto de volta para o corte de string.
+    const { journeyDays } = mokariEnvironment([], "2026-03-11", "2026-03-01T00:00:00Z");
+    expect(journeyDays).toBe(11);
   });
 
   it("daysBetween atravessa mês e ano", () => {

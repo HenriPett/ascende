@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,6 +32,49 @@ import { useStatementConfirm } from "@/hooks/useStatementConfirm";
    quem desligou o tracker de água não vê "Tomei 2 copos de água" como
    exemplo. A lista vem de captureExamplesForTrackers(). */
 
+/* ── RASCUNHO: recarregar a página não pode custar a cota do dia ──────────
+   Recarregar no meio do fluxo jogava fora o texto digitado E a proposta já
+   analisada — e a análise consome a cota de captura do dia, então a pessoa
+   perdia uma chamada de IA por atualizar a tela. Guardamos os dois no
+   navegador, que é onde este estado pertence: é rascunho de uma pessoa num
+   aparelho, não dado do produto (nada vai para o banco).
+
+   Validade curta de propósito: um rascunho de ontem reaparecendo como se
+   fosse de agora seria pior que perdê-lo — a proposta cita valores e datas
+   que a pessoa já não tem em mente. */
+const DRAFT_KEY = "ascend-capture-draft";
+const DRAFT_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2h
+
+interface CaptureDraft {
+  text: string;
+  proposed: ProposedEvent[] | null;
+  checked: boolean[];
+  /** Quando foi guardado, para não ressuscitar rascunho velho. */
+  at: number;
+}
+
+/** Todo acesso a localStorage é protegido: quem navega com armazenamento
+ *  bloqueado (e o teste, que roda sem DOM) não pode quebrar por causa disto —
+ *  mesmo cuidado de `xpToastSuffix` em lib/xp. */
+function readDraft(): CaptureDraft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw) as CaptureDraft;
+    if (!d || typeof d.text !== "string" || typeof d.at !== "number") return null;
+    if (Date.now() - d.at > DRAFT_MAX_AGE_MS) return null;
+    return d;
+  } catch { return null; }
+}
+
+function writeDraft(d: Omit<CaptureDraft, "at">): void {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...d, at: Date.now() })); } catch { /* sem storage: segue sem rascunho */ }
+}
+
+function clearDraft(): void {
+  try { localStorage.removeItem(DRAFT_KEY); } catch { /* idem */ }
+}
+
 export default function CaptureBar({
   initialText,
   onConfirmed,
@@ -44,17 +87,27 @@ export default function CaptureBar({
   const { user } = useAuth();
   const { profile } = useProfile();
   const qc = useQueryClient();
-  const [text, setText] = useState(initialText ?? "");
+  /* `initialText` (continuidade da demo da landing) tem precedência: é intenção
+     explícita de quem abriu a tela, e não pode ser sobrescrita por rascunho. */
+  const [draft0] = useState(() => (initialText ? null : readDraft()));
+  const [text, setText] = useState(initialText ?? draft0?.text ?? "");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [proposed, setProposed] = useState<ProposedEvent[] | null>(null);
+  const [proposed, setProposed] = useState<ProposedEvent[] | null>(draft0?.proposed ?? null);
   const [limitInfo, setLimitInfo] = useState<PlanLimitError | null>(null);
   const [learned, setLearned] = useState<LearnedMemory[] | null>(null);
   /* Comentário de aderência ao plano ativo (refeição/treino), vindo do
      capture. Só existe quando a pessoa TEM plano da área e o relato
      conversa com ele; vive junto da proposta e sai com ela. */
   const [commentary, setCommentary] = useState<string | null>(null);
-  const [checked, setChecked] = useState<boolean[]>([]);
+  const [checked, setChecked] = useState<boolean[]>(draft0?.checked ?? []);
+
+  /* Persiste o rascunho a cada mudança. Vazio limpa: se a pessoa apagou o
+     texto e dispensou a proposta, ela não quer nada guardado. */
+  useEffect(() => {
+    if (!text && !proposed) { clearDraft(); return; }
+    writeDraft({ text, proposed, checked });
+  }, [text, proposed, checked]);
   // Print de fatura/comprovante direto na captura (Fatura em toda IA):
   const [image, setImage] = useState<{ name: string; data: string } | null>(null);
   const [statementItems, setStatementItems] = useState<ProposedStatementTx[] | null>(null);
@@ -126,7 +179,7 @@ export default function CaptureBar({
         if (!insights.length && !stItems.length) {
           toast.info(image
             ? "Não encontrei nada registrável na imagem. Prints de fatura, comprovantes e telas de Pix funcionam melhor."
-            : "Não encontrei nada para registrar nesse texto. Tente descrever o que aconteceu — um gasto, um treino, como você dormiu...");
+            : "Não encontrei nada para registrar nesse texto. Tente descrever o que aconteceu — um gasto, um treino, como você dormiu…");
         } else if (!stItems.length) {
           setText("");
         }
@@ -145,6 +198,9 @@ export default function CaptureBar({
     }
   };
 
+  // Quantos itens o botão vai gravar — o rótulo diz o resultado, não a ação.
+  const selectedCount = checked.filter(Boolean).length;
+
   const confirm = async () => {
     if (!user || !proposed) return;
     markSeen("confirmar-registros"); // confirmou uma vez: já sabe como funciona
@@ -153,23 +209,49 @@ export default function CaptureBar({
     setSaving(true);
     try {
       const schedHours = sleepWindowHours(profile?.sleep_bedtime, profile?.sleep_waketime);
-      await saveProposedEvents(user.id, selected, schedHours ? {
+      const { savedEvents, warnings } = await saveProposedEvents(user.id, selected, schedHours ? {
         hours: schedHours,
         bedtime: timeForInput(profile?.sleep_bedtime),
         waketime: timeForInput(profile?.sleep_waketime),
       } : null);
-      const gained = selected.reduce((sum, ev) => sum + xpForKind(ev.kind), 0);
+
+      /* NADA GRAVADO NÃO É SUCESSO. O toast antigo era montado a partir de
+         `selected` e saía igual mesmo que a camada de gravação tivesse
+         recusado tudo — foi assim que "Gasto de R$ 22 · +2 XP" apareceu para
+         um lançamento que o banco pôs em 2024. Agora, se nada entrou, a
+         pessoa recebe o MOTIVO e nenhum XP é anunciado. */
+      if (!savedEvents.length) {
+        toast.error(warnings[0] ?? "Não consegui salvar. Tente de novo.");
+        for (const w of warnings.slice(1)) toast.warning(w);
+        return;
+      }
+
+      /* XP sobre o que REALMENTE entrou, nunca sobre o que estava marcado:
+         somar por `selected` anuncia pontos que o gatilho do banco não
+         creditou, porque a proposta recusada nunca virou linha. */
+      const gained = savedEvents.reduce((sum, ev) => sum + xpForKind(ev.kind), 0);
+      /* O RESUMO SÓ ECOA QUANDO NADA FOI RECUSADO.
+         O `summary` é a frase que a IA montou a partir dos números da proposta,
+         então ele CITA o valor — e um valor recusado não pode ser afirmado na
+         linha de sucesso ("Almocei 200g de frango (~3500 kcal)" logo acima de
+         "não registrei as calorias"). Com qualquer recusa no lote, o sucesso
+         vira a forma contada, que é verdadeira sem repetir o número errado. */
+      const plural = savedEvents.length === 1 ? "registro feito" : "registros feitos";
       toast.success(
-        (selected.length === 1
-          ? `${selected[0].summary} · +${gained} XP`
-          : `${selected.length} registros feitos de uma vez · +${gained} XP`) + xpToastSuffix()
+        (savedEvents.length === 1 && !warnings.length
+          ? `${savedEvents[0].summary} · +${gained} XP`
+          : `${savedEvents.length} ${plural} · +${gained} XP`) + xpToastSuffix()
       );
+      // O que não entrou é dito à parte, e sem se disfarçar de sucesso.
+      for (const w of warnings) toast.warning(w);
+
       setText("");
       setImage(null);
       setProposed(null);
       setCommentary(null);
+      clearDraft();
       invalidateKeys(qc, [...LIFE_DATA_KEYS, "entitlements"]);
-      onConfirmed?.(selected.length);
+      onConfirmed?.(savedEvents.length);
     } catch {
       toast.error("Não consegui salvar. Tente de novo.");
     } finally {
@@ -203,7 +285,7 @@ export default function CaptureBar({
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={(() => {
-              if (listening) return "Ouvindo... conte como foi o seu dia";
+              if (listening) return "Ouvindo… conte como foi o seu dia";
               if (image) return "Quer acrescentar algo sobre a imagem? (opcional)";
               const examples = captureExamplesForTrackers(profile);
               return `Ex.: "${examples[new Date().getDate() % examples.length]}"`;
@@ -272,7 +354,7 @@ export default function CaptureBar({
                   {ev.summary}
                   {trackerOff && (
                     <span className="block text-[11px] text-muted-foreground">
-                      você não acompanha {trackerForEventKind(ev.kind)?.label.toLowerCase() ?? "isso"} — marque se quiser registrar mesmo assim
+                      Você não acompanha {trackerForEventKind(ev.kind)?.label.toLowerCase() ?? "isso"} — marque se quiser registrar mesmo assim
                     </span>
                   )}
                 </span>
@@ -293,7 +375,9 @@ export default function CaptureBar({
               <X className="w-4 h-4 mr-1" /> Cancelar
             </Button>
             <Button onClick={confirm} disabled={saving}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Confirmar</>)}
+              {saving
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : (<><Check className="w-4 h-4 mr-1" /> {selectedCount === 1 ? "Registrar 1 item" : `Registrar ${selectedCount} itens`}</>)}
             </Button>
           </div>
         </div>

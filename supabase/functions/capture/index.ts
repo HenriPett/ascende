@@ -12,7 +12,7 @@
 // descartada — nada fica armazenado (página /recusas).
 import {
   serviceClient, requireUser, assertRateLimit, corsFor, isTrivialMessage,
-  extractEventsAndMemories, SAFETY_RULES, attachMemorySources,
+  extractEventsAndMemories, SAFETY_RULES, attachMemorySources, nowInSpForPrompt,
   MODEL_FAST, CAPTURE_TOOL, CAPTURE_SYSTEM,
   STATEMENT_TOOL, STATEMENT_SYSTEM, normalizeStatementItems,
 } from "../_shared/lib.ts";
@@ -127,7 +127,7 @@ LIMITES INEGOCIÁVEIS DESTE COMENTÁRIO:
 • NUNCA trate comida como inimigo, nem use vocabulário de punição, compensação ou restrição ("compense amanhã", "queime isso", "saiu da linha", "furou a dieta").
 • NUNCA invente o que está no plano: comente apenas o que o trecho abaixo realmente diz. Se o plano não falar sobre o que foi relatado, devolva string vazia.
 • Não repita de volta o que a pessoa disse, não dê aula de nutrição nem de treino, não faça perguntas.
-• ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –): use vírgula, dois-pontos, parênteses ou outra frase. Nada de "Vamos lá!", "Parabéns!" solto ou fechos genéricos.
+• ESTILO: escreva como uma pessoa escreve. NUNCA use travessão ou meia-risca (— ou –) no comentário que a pessoa vai ler: use vírgula, dois-pontos, parênteses ou outra frase. (Estas instruções usam travessão; a proibição vale para a sua saída.) Nada de "Vamos lá!", "Parabéns!" solto ou fechos genéricos.
 • Máximo 240 caracteres. Melhor a string vazia do que um comentário genérico.
 ${SAFETY_RULES}
 Responda SEMPRE usando a ferramenta comentar_aderencia.`;
@@ -161,11 +161,6 @@ async function planAdherenceComment(
       .slice(0, ADHERENCE_MAX_EVENTS);
     if (!relevant.length) return null;
 
-    const nowSp = new Intl.DateTimeFormat("pt-BR", {
-      timeZone: TZ, weekday: "long", day: "2-digit", month: "2-digit",
-      hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-    }).format(new Date());
-
     const planBlocks = [...byKind.values()].map((p) =>
       `━━━ PLANO ATIVO (${p.kind}): "${String(p.title).slice(0, 120)}" ━━━\n` +
       `${String(p.content).slice(0, ADHERENCE_MAX_PLAN_CHARS)}`
@@ -183,7 +178,7 @@ async function planAdherenceComment(
       tool_choice: { type: "tool", name: "comentar_aderencia" },
       messages: [{
         role: "user",
-        content: `AGORA (fuso de São Paulo): ${nowSp}.\n\n${planBlocks}\n\n━━━ O QUE A PESSOA ACABOU DE RELATAR ━━━\n${eventLines}\n\nComente a aderência em 1 ou 2 frases, ou devolva string vazia.`,
+        content: `${nowInSpForPrompt()}\n\n${planBlocks}\n\n━━━ O QUE A PESSOA ACABOU DE RELATAR ━━━\n${eventLines}\n\nComente a aderência em 1 ou 2 frases, ou devolva string vazia.`,
       }],
     });
     if (!res.ok || !data) return null;
@@ -242,7 +237,7 @@ Deno.serve(async (req) => {
 
     const { text, image, media_type } = await req.json();
     if (!text || typeof text !== "string" || text.length > 2000) {
-      return json({ error: "Texto inválido." }, 400);
+      return json({ error: "Não consegui ler o texto. Escreva o que você quer registrar, em até 2000 caracteres." }, 400);
     }
     const hasImage = typeof image === "string" && image.length > 0;
     if (hasImage && (image.length > MAX_IMG_B64 || !IMG_TYPES.includes(String(media_type)))) {
@@ -337,6 +332,6 @@ Deno.serve(async (req) => {
     await refund().catch((err) => console.error("refund", err));
     if (e instanceof Response) return e;
     console.error(e);
-    return json({ error: "Erro interno." }, 500);
+    return json({ error: "Algo falhou do nosso lado. Tente de novo em instantes; se continuar, mande um feedback pelos Ajustes." }, 500);
   }
 });

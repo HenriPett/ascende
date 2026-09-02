@@ -77,7 +77,7 @@ export default function SleepCheckin() {
 
   const confirmAdjust = () => {
     const h = Number(hoursInput.replace(",", "."));
-    if (!h || h <= 0 || h > 24) { toast.error("Quantas horas você dormiu? Ex.: 6,5"); return; }
+    if (!h || h <= 0 || h > 24) { toast.error("Informe quantas horas você dormiu — por exemplo, 6,5."); return; }
     log(Math.round(h * 10) / 10, false);
   };
 
@@ -116,6 +116,7 @@ export default function SleepCheckin() {
         <div className="flex gap-2 animate-fade-up">
           <Input
             inputMode="decimal" autoFocus
+            aria-label="Quantas horas você dormiu"
             placeholder="Quantas horas? Ex.: 6,5"
             value={hoursInput}
             onChange={(e) => setHoursInput(e.target.value)}

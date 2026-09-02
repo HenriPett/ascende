@@ -53,6 +53,19 @@ import {
 import { cn } from "@/lib/utils";
 import { brl } from "@/lib/format";
 
+/* Tinta do chip aceso, por pilar. Branco sobre a cor cheia reprovava o mínimo
+   AA de 4,5:1 em três dos quatro (prosperidade 2,74:1, vitalidade 3,79:1,
+   alimentação 4,03:1) — a tinta escura da casa resolve os três (6,71 · 4,85 ·
+   4,57). Mente é o caso em que NENHUMA das duas passa (branco 4,49, tinta
+   4,10): fica no branco, que é o melhor disponível, e o token --mente é que
+   precisa escurecer. */
+const CHIP_INK: Record<PillarId, string> = {
+  prosperidade: "text-primary-foreground",
+  vitalidade: "text-primary-foreground",
+  alimentacao: "text-primary-foreground",
+  mente: "text-white",
+};
+
 const DEFAULT_PRACTICE = "Momento de prática";
 const FALLBACK_PILLAR: PillarId = "prosperidade";
 const TOTAL_STEPS = 9;
@@ -69,7 +82,7 @@ function consumeLandingPhrase(): string {
 export default function Onboarding() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { profile, refresh, loading: profileLoading } = useProfile();
+  const { profile, refresh, loading: profileLoading, isError: profileError } = useProfile();
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -78,7 +91,10 @@ export default function Onboarding() {
   // ── Bloco 1: meta ──
   const [goal, setGoal] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const needsName = !profileLoading && !(profile?.name ?? "").trim();
+  // `!profileError`: com a leitura falhando o perfil vem null e o nome parece
+  // vazio — pedir o nome de novo a quem acabou de informá-lo no cadastro é a
+  // mesma decisão-a-partir-de-vazio que a rodada 2 tirou das outras telas.
+  const needsName = !profileLoading && !profileError && !(profile?.name ?? "").trim();
   const [inferred, setInferred] = useState<PillarId | null>(null);
 
   // ── Bloco 2: corpo ──
@@ -384,7 +400,7 @@ export default function Onboarding() {
       qc.invalidateQueries();
       refresh();
       toast.success(applied.length
-        ? `Ativado: ${applied.join(", ")}. Tudo isso vive na tela Hoje e em Meus planos.`
+        ? `Ativado: ${applied.join(", ")}. Tudo isso vive na tela Hoje e em Jornada > Planos.`
         : "Tudo bem — nada foi ativado. O Blueprint continua disponível com o Conselheiro.");
       next();
     } catch {
@@ -427,7 +443,7 @@ export default function Onboarding() {
         <Input id={inputId} maxLength={60} placeholder={placeholder} className="min-w-0 flex-1"
           value={value} onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addChip(value, list, setList, () => setValue("")); } }} />
-        <Button type="button" size="icon" variant="secondary" className="shrink-0" aria-label="Adicionar"
+        <Button type="button" size="icon" variant="secondary" className="shrink-0" aria-label="Adicionar à lista"
           onClick={() => addChip(value, list, setList, () => setValue(""))}>
           <Plus className="w-4 h-4" />
         </Button>
@@ -441,7 +457,7 @@ export default function Onboarding() {
   const savedMap = useMemo(() => {
     const rows: string[] = [];
     if (activatedPlans.length) {
-      rows.push(`${activatedPlans.length === 1 ? "Seu plano" : `Seus ${activatedPlans.length} planos`} (${activatedPlans.join(", ")}): Pilares > Meus planos`);
+      rows.push(`${activatedPlans.length === 1 ? "Seu plano" : `Seus ${activatedPlans.length} planos`} (${activatedPlans.join(", ")}): Jornada > Planos`);
     }
     if (activatedGoals.length) rows.push(`Metas (${activatedGoals.join(", ")}): tela Hoje`);
     if (activatedHabits > 0) rows.push(`${activatedHabits === 1 ? "Seu compromisso diário" : `Seus ${activatedHabits} compromissos diários`}: tela Hoje`);
@@ -485,7 +501,7 @@ export default function Onboarding() {
       </div>
       {needsName && (
         <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={80}
-          placeholder="Antes: como você quer ser chamado(a)?" aria-label="Seu nome ou apelido" />
+          placeholder="Como você quer ser chamado(a)?" aria-label="Seu nome ou apelido" />
       )}
       <Input value={goal} onChange={(e) => setGoal(e.target.value)} maxLength={200}
         aria-label="O que subir de nível significa para você"
@@ -649,7 +665,7 @@ export default function Onboarding() {
         <h1 className="font-display text-2xl font-semibold">Existe uma batalha que você quer vencer?</h1>
         <p className="text-sm text-muted-foreground mt-1.5">
           Redes sociais, cigarro, apostas, compras por impulso... Este bloco é opcional e
-          totalmente seu: você escolhe depois se a IA pode ver. Recaída nunca zera sua
+          totalmente seu: você escolhe depois se o Conselheiro pode ver. Recaída nunca zera sua
           história — o que conta é o acumulado.
         </p>
       </div>
@@ -695,7 +711,7 @@ export default function Onboarding() {
                         onClick={() => setPrefs((pr) => ({ ...pr, [t.id]: !(pr[t.id] !== false) }))}
                         className={cn(
                           "text-xs rounded-full border px-2.5 py-1 transition-colors",
-                          active ? "border-transparent text-white" : "text-muted-foreground hover:bg-muted/60 line-through"
+                          active ? cn("border-transparent", CHIP_INK[p.id]) : "text-muted-foreground hover:bg-muted/60 line-through"
                         )}
                         style={active ? { background: `hsl(var(${p.colorVar}))` } : undefined}
                         aria-pressed={active}>

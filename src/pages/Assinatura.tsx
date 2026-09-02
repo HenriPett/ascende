@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import QueryError from "@/components/core/QueryError";
 import { toast } from "sonner";
 import { Check, Loader2, Sparkles, ExternalLink } from "lucide-react";
 import { useEntitlements } from "@/hooks/useEntitlements";
@@ -14,11 +15,11 @@ import { formatSP } from "@/lib/dates";
 const FREE_FEATURES = [
   "Registros manuais, hábitos e batalhas sem limite",
   "Registro e Conselheiro pelo WhatsApp — texto, áudio e foto",
-  "Diário, hidratação, XP e níveis, gráficos básicos",
-  "Captura inteligente: 3 por dia — e 10 por dia nas suas 2 primeiras semanas",
+  "Diário, hidratação, XP, níveis e gráficos básicos",
+  "Captura inteligente: 3 por dia (10 por dia nas suas 2 primeiras semanas)",
   "Conselheiro: 15 mensagens por semana",
   "4 análises de refeição por mês (1 por semana)",
-  "Retrospectiva toda semana (domingo)",
+  "Retrospectiva da semana, todo domingo",
   "1 plano ativo · 20 memórias do Conselheiro",
   "Exportação de dados e privacidade — sempre grátis",
 ];
@@ -38,7 +39,7 @@ const PLUS_FEATURES = [
 
 export default function Assinatura() {
   const qc = useQueryClient();
-  const { data: ent, isLoading } = useEntitlements();
+  const { data: ent, isLoading, refetch, isFetching, planUnknown, isPlus, canOfferUpgrade } = useEntitlements();
   const [searchParams, setSearchParams] = useSearchParams();
   const [starting, setStarting] = useState<"monthly" | "annual" | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
@@ -47,17 +48,18 @@ export default function Assinatura() {
     const status = searchParams.get("status");
     if (!status) return;
     if (status === "sucesso") {
-      toast.success("Assinatura confirmada! Bem-vindo(a) ao Ascende+. Pode levar alguns segundos para ativar.");
+      toast.success("Assinatura confirmada. Boas-vindas ao Ascende+! A liberação pode levar alguns segundos.");
       qc.invalidateQueries({ queryKey: ["entitlements"] });
     } else if (status === "cancelado") {
-      toast.info("Checkout cancelado. Nada foi cobrado.");
+      toast.info("Pagamento cancelado. Nada foi cobrado.");
     }
     setSearchParams({}, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkoutEnabled = !!ent?.flags?.subscriptions_enabled && !!ent?.flags?.stripe_checkout_enabled;
-  const isPlus = ent?.plan === "ascend_plus";
+  // `isPlus`, `planUnknown` e `canOfferUpgrade` vêm do hook (ver o comentário
+  // longo em useEntitlements sobre por que nunca rebaixamos por falha).
 
   const startCheckout = async (plan: "monthly" | "annual") => {
     setStarting(plan);
@@ -66,7 +68,7 @@ export default function Assinatura() {
       if (error || !data?.url) throw new Error(data?.error ?? "erro");
       window.location.href = data.url as string;
     } catch (e) {
-      toast.error(e instanceof Error && e.message !== "erro" ? e.message : "Não consegui iniciar o checkout. Tente de novo.");
+      toast.error(e instanceof Error && e.message !== "erro" ? e.message : "Não consegui abrir o pagamento. Tente de novo.");
       setStarting(null);
     }
   };
@@ -78,7 +80,7 @@ export default function Assinatura() {
       if (error || !data?.url) throw new Error(data?.error ?? "erro");
       window.location.href = data.url as string;
     } catch (e) {
-      toast.error(e instanceof Error && e.message !== "erro" ? e.message : "Não consegui abrir o portal. Tente de novo.");
+      toast.error(e instanceof Error && e.message !== "erro" ? e.message : "Não consegui abrir a página de gerenciamento. Tente de novo.");
       setOpeningPortal(false);
     }
   };
@@ -100,7 +102,15 @@ export default function Assinatura() {
       {/* Estado atual */}
       <Card className="p-4 space-y-1.5">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Carregando seu plano...</p>
+          <p className="text-sm text-muted-foreground">Carregando seu plano…</p>
+        ) : planUnknown ? (
+          <QueryError
+            variant="plain"
+            title="Não consegui confirmar o seu plano agora."
+            detail="Pode ser a conexão. Se você assina o Ascende+, sua assinatura continua ativa — isto é só a leitura desta tela."
+            onRetry={() => refetch()}
+            retrying={isFetching}
+          />
         ) : (
           <>
             <p className="text-sm">
@@ -114,12 +124,12 @@ export default function Assinatura() {
             </p>
             {ent?.subscription?.status === "past_due" && (
               <p className="text-sm text-destructive">
-                O último pagamento falhou. Atualize a forma de pagamento no portal abaixo para não perder o Ascende+.
+                O último pagamento falhou. Atualize a forma de pagamento no botão abaixo para não perder o Ascende+.
               </p>
             )}
             {ent?.subscription && ent.subscription.provider === "stripe" && (
               <Button variant="outline" size="sm" onClick={openPortal} disabled={openingPortal}>
-                {openingPortal ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Gerenciar assinatura (portal)</>)}
+                {openingPortal ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Gerenciar assinatura</>)}
               </Button>
             )}
           </>
@@ -145,14 +155,14 @@ export default function Assinatura() {
               <Sparkles className="w-4 h-4 text-gold" /> Ascende+
             </h2>
             <p className="text-lg font-bold">{ent?.pricing?.monthly_label ?? "R$ 29,90/mês"}</p>
-            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "R$ 239,90/ano (2 meses grátis)"}</p>
+            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "R$ 239,90/ano — economia de R$ 118,90"}</p>
           </div>
           <ul className="text-sm space-y-1.5">
             {PLUS_FEATURES.map((f) => (
               <li key={f} className="flex gap-2"><Check className="w-4 h-4 text-gold shrink-0 mt-0.5" /><span>{f}</span></li>
             ))}
           </ul>
-          {!isPlus && (checkoutEnabled ? (
+          {canOfferUpgrade && (checkoutEnabled ? (
             <div className="flex flex-col gap-2 pt-1">
               <Button onClick={() => startCheckout("monthly")} disabled={starting !== null}>
                 {starting === "monthly" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assinar mensal"}
@@ -163,7 +173,7 @@ export default function Assinatura() {
             </div>
           ) : (
             <p className="text-xs text-muted-foreground pt-1">
-              A assinatura ainda não está disponível. Em breve!
+              A assinatura ainda não está aberta. Quando abrir, o botão aparece aqui.
             </p>
           ))}
         </Card>
@@ -171,7 +181,7 @@ export default function Assinatura() {
 
       {ent?.honeymoon_until && !isPlus && (
         <p className="text-xs text-muted-foreground px-1">
-          Você está nas suas 2 primeiras semanas: a captura inteligente vale 10 por dia
+          Você está nas suas 2 primeiras semanas: são 10 capturas inteligentes por dia
           até {formatSP(ent.honeymoon_until, { day: "2-digit", month: "2-digit" })} — aproveite
           para formar o hábito.
         </p>
@@ -190,10 +200,10 @@ export default function Assinatura() {
       </Card>
 
       <p className="text-xs text-muted-foreground px-1">
-        Ao encerrar a assinatura você não perde nada: seus registros, relatórios e memórias
+        Ao encerrar a assinatura você não perde nada: seus registros e memórias
         continuam com você; planos e memórias além do limite gratuito ficam arquivados
         (somente leitura) e voltam ao reativar. Cancelamento a qualquer momento pelo portal.
-        Sem chantagem — está assinado na nossa página{" "}
+        Sem chantagem — é compromisso assinado na nossa página{" "}
         <Link to="/recusas" className="underline underline-offset-2">O que o Ascende recusa</Link>.
       </p>
     </div>

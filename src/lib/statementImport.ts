@@ -48,17 +48,43 @@ export function statementRecordKeys(list: ProposedStatementTx[]): string[] {
   return keys;
 }
 
-/** Marca como duplicata o que já existe registrado no período dos itens. */
+/** A conferência de duplicatas não pôde ser feita. É erro de propósito: as
+ *  três telas que chamam `findStatementDuplicates` já envolvem a chamada em
+ *  try/catch e mostram recusa, então lançar PARA o fluxo antes da revisão. */
+export class StatementDuplicateCheckError extends Error {
+  constructor(cause?: string) {
+    super("Não consegui conferir o que já está registrado. Tente de novo em instantes.");
+    this.name = "StatementDuplicateCheckError";
+    if (cause) console.error("findStatementDuplicates", cause);
+  }
+}
+
+/**
+ * Marca como duplicata o que já existe registrado no período dos itens.
+ *
+ * FALHA AQUI NÃO PODE VIRAR SILÊNCIO. A versão anterior ignorava o erro da
+ * consulta e devolvia "nada duplicado" — que a tela lê como "pode marcar
+ * tudo". Numa rede instável, a fatura inteira vinha pré-marcada para
+ * reimportação, e a pessoa confirmava em cima de lançamentos que já estavam
+ * lá. Sem conferência não há revisão honesta: melhor recusar e pedir de novo
+ * do que oferecer uma lista com cara de conferida.
+ */
 export async function findStatementDuplicates(
   userId: string, list: ProposedStatementTx[],
 ): Promise<boolean[]> {
   if (!list.length) return [];
   const dates = list.map((i) => i.occurred_at).sort();
-  const { data: existing } = await supabase.from("transactions")
+  const { data: existing, error } = await supabase.from("transactions")
     .select("kind,amount,description,occurred_at")
     .eq("user_id", userId)
     .gte("occurred_at", dates[0]).lte("occurred_at", dates[dates.length - 1])
     .limit(2000);
+  if (error) throw new StatementDuplicateCheckError(error.message);
   const seen = new Set((existing ?? []).map(txKey));
   return list.map((it) => seen.has(txKey(it)));
 }
+
+/* O desfecho da importação (o que ficou de fora, e se a fonte é 'partial')
+   mora em dataSourcesPure.ts: `importOutcome`. É a MESMA conta para a fatura
+   e para o arquivo de saúde — quando cada tela tinha a sua, uma esquecia o
+   que a pessoa desmarcou e a outra misturava linha de CSV com registro. */

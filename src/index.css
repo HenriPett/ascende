@@ -34,7 +34,14 @@
     --accent: 46 70% 92%;              /* banho de ouro pálido */
     --accent-foreground: 235 12% 20%;
 
-    --destructive: 4 72% 52%;
+    /* O vermelho tem DOIS papéis, e por isso dois tokens (ver a nota longa
+       no tema escuro, onde a diferença entre eles é obrigatória).
+       Aqui, no claro, os dois papéis querem a mesma coisa — escurecer — então
+       os dois valores coincidem. 52% reprovava por pouco nas duas pontas:
+       4,34:1 como fundo de botão e 4,49:1 como `text-destructive` sobre card
+       branco. Com 49%: 4,70:1 e 4,86:1. Mesmo matiz, mesma saturação. */
+    --destructive: 4 72% 49%;        /* preenchimento (bg-destructive) */
+    --destructive-text: 4 72% 49%;   /* tinta (text-destructive) */
     --destructive-foreground: 46 55% 98%;
 
     --success: 152 45% 38%;
@@ -100,7 +107,26 @@
     --accent: 240 6% 15%;
     --accent-foreground: 45 25% 92%;
 
-    --destructive: 4 72% 58%;
+    /* POR QUE O VERMELHO DESTRUTIVO VIROU DOIS TOKENS.
+       No escuro os dois papéis do vermelho se excluem — e isso é medido, não
+       opinião. Varrendo a luminosidade inteira (H=4, S=72%, de 40% a 76%) não
+       existe UM valor que atenda aos dois ao mesmo tempo:
+         · como PREENCHIMENTO, com a tinta clara por cima, ele precisa ser
+           ESCURO — o antigo 58% dava 3,56:1, o achado do QA;
+         · como TEXTO, ele precisa ser CLARO para sobreviver ao card
+           quase-preto — e `text-destructive` está em Prosperidade, Planos,
+           Assinatura, Ajustes, MemoryControl e StatementReview.
+       Escurecer o token único consertaria o botão e derrubaria seis telas;
+       clarear faria o contrário. Um token que serve a dois papéis opostos não
+       é um token, são dois — então aqui eles se separam. Nenhuma cor nova:
+       44% é o vermelho que a Ajustes já usava à mão, 58% é o de hoje.
+       Resultado: preenchimento 5,38:1, texto 4,66:1 sobre card e 5,06:1 sobre
+       o fundo, traço do gráfico 3,35:1 (objeto gráfico, mínimo 3:1).
+       De quebra, o `bg-[hsl(4 72% 44%)]` que a Ajustes tinha fixado à mão para
+       contornar o token quebrado passa a ser exatamente a cor do token — a
+       gambiarra vira inofensiva sozinha, sem ninguém precisar editá-la. */
+    --destructive: 4 72% 44%;        /* preenchimento (bg-destructive) */
+    --destructive-text: 4 72% 58%;   /* tinta (text-destructive) */
     --destructive-foreground: 45 30% 96%;
 
     --success: 152 48% 52%;
@@ -175,15 +201,65 @@
 }
 
 @layer utilities {
-  /* ── Cristal: vidro fosco do chrome (header, navegação, flutuantes) ── */
+  /* `text-destructive` é gerado pelo Tailwind a partir de --destructive, que
+     agora é a cor de PREENCHIMENTO. Esta linha é o que faz a utility usar o
+     token de TINTA. `:root` só está aqui para garantir a especificidade
+     (0,2,0) sobre a utility original (0,1,0), independente da ordem em que o
+     Tailwind emitir as duas. */
+  :root .text-destructive { color: hsl(var(--destructive-text)); }
+
+  /* ── Cristal: o chrome do app (header, navegação, flutuantes) ──
+   *
+   * ESTE FUNDO É OPACO, E ISSO É UMA DECISÃO, NÃO UM DESCUIDO.
+   *
+   * A régua: header e navegação precisam ser legíveis SEMPRE. O blur era
+   * enfeite, e enfeite não pode ser o que separa o wordmark do texto da
+   * página.
+   *
+   * Como chegamos aqui, em três tentativas — vale registrar para ninguém
+   * refazer o caminho:
+   *
+   * 1. `alpha 0.62/0.55 + backdrop-filter`. Legível só onde o blur é pintado.
+   *
+   * 2. `@supports not ((backdrop-filter: ...) or (-webkit-backdrop-filter: ...))`
+   *    para engrossar o fundo em quem não suporta. A condição está CERTA e é
+   *    insuficiente: existe navegador em que `CSS.supports('backdrop-filter',
+   *    'blur(1px)')` responde `true` — então a regra não ativa — e que mesmo
+   *    assim NÃO pinta o blur (capturas com o filtro ligado e desligado saem
+   *    com MD5 idêntico). É o caso de GPU em blocklist, aceleração de hardware
+   *    desligada e economia de bateria: o navegador aceita a propriedade e
+   *    descarta o efeito. E não há como perguntar em CSS "você vai mesmo
+   *    PINTAR isto?" — @supports responde sobre sintaxe, nunca sobre
+   *    resultado. Detecção, aqui, é um beco sem saída.
+   *
+   * 3. Subir a opacidade base. Medido a olho e em pixel, com o blur desligado
+   *    e o conteúdo rolando por baixo do header (faixa de 470x52 sob o
+   *    wordmark, tema escuro, amplitude em 256 níveis de cinza):
+   *
+   *      alpha 0.55 → amplitude 101   (o achado original: o título da página
+   *                                    colide com o "Ascende")
+   *      alpha 0.97 → amplitude   7   fantasma ainda LEGÍVEL
+   *      alpha 0.99 → amplitude   3   fantasma ainda LEGÍVEL
+   *      alpha 1.00 → amplitude   0   limpo
+   *
+   *    Qualquer valor que ainda pareça vidro deixa o texto de trás passar. Não
+   *    existe meio-termo: o fantasma some junto com a translucidez.
+   *
+   * Daí o fundo opaco — e daí, também, não haver mais `backdrop-filter` aqui.
+   * Atrás de um fundo opaco ele não pinta coisa alguma; mantê-lo seria uma
+   * declaração que promete um efeito que não acontece, e ainda cobraria uma
+   * camada de composição a cada quadro de rolagem.
+   *
+   * O que sustenta o "Cristal" agora é a borda de 1px, o arredondamento e a
+   * sombra — não a translucidez. Se a identidade do chrome merecer outro
+   * tratamento no lugar do vidro, isso é decisão de design, não de correção
+   * de bug: fica registrado aqui como pendência, não como esquecimento. */
   .glass {
-    background: hsl(var(--card) / 0.62);
-    backdrop-filter: blur(20px) saturate(1.5);
-    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+    background: hsl(var(--card));
     border: 1px solid hsl(var(--border) / 0.7);
   }
   .dark .glass {
-    background: hsl(var(--card) / 0.55);
+    background: hsl(var(--card));
     border-color: hsl(0 0% 100% / 0.08);
   }
 

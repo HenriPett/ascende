@@ -18,6 +18,17 @@ import { Loader2, MailCheck, Sparkles, Check, KeyRound } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { loadGis, makeNoncePair, isStandalone } from "@/lib/googleIdentity";
 
+/** Trilha das abas: recuada em relação ao Card em que ela senta.
+ *  Claro: --muted (94%) sob o card branco. Escuro: --background (5,5%) sob o
+ *  card (9,5%). */
+const TAB_TRACK = "grid grid-cols-2 w-full mb-4 dark:bg-background";
+
+/** Aba selecionada: sempre mais clara que a trilha — é o sinal de elevação.
+ *  Claro: --card (100%) contra a trilha de 94%. Escuro: --muted (13%) contra
+ *  a trilha de 5,5%. A cor do texto continua reforçando, não carregando
+ *  sozinha o estado. */
+const TAB_ACTIVE = "data-[state=active]:bg-card dark:data-[state=active]:bg-muted";
+
 export default function Auth() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -433,9 +444,13 @@ export default function Auth() {
                 <Sparkles className="w-3.5 h-3.5 text-gold" /> O que te espera do outro lado (2 minutos):
               </p>
               {[
-                "Sua meta, no seu jeito — a bússola da IA",
-                "Corpo + dinheiro como porta de entrada",
-                "A mágica: uma frase e o dia inteiro registrado",
+                // Escrito para quem está criando conta, não para quem escreveu
+                // o POSICIONAMENTO.md: "porta de entrada" e "bússola" são
+                // vocabulário interno, e "a mágica" promete truque em vez de
+                // dizer o que a pessoa vai fazer.
+                "Você diz seu objetivo e o Conselheiro passa a guiar por ele",
+                "Começa pelo corpo e pelo dinheiro",
+                "Uma frase registra o dia inteiro",
               ].map((t) => (
                 <p key={t} className="text-xs text-muted-foreground flex items-start gap-1.5">
                   <Check className="w-3.5 h-3.5 text-success shrink-0 mt-px" /> {t}
@@ -453,7 +468,7 @@ export default function Auth() {
             </button>
           </Card>
           <p className="text-center text-xs text-muted-foreground mt-4">
-            Não chegou? Confira a caixa de spam — o remetente é o seu projeto Supabase.
+            Não chegou? Confira a caixa de spam e a aba Promoções — o link chega em alguns minutos.
           </p>
         </div>
       </div>
@@ -515,9 +530,9 @@ export default function Auth() {
           </div>
 
           <Tabs defaultValue={initialTab}>
-            <TabsList className="grid grid-cols-2 w-full mb-4">
-              <TabsTrigger value="signin">Entrar</TabsTrigger>
-              <TabsTrigger value="signup">Criar conta</TabsTrigger>
+            <TabsList className={TAB_TRACK}>
+              <TabsTrigger value="signin" className={TAB_ACTIVE}>Entrar</TabsTrigger>
+              <TabsTrigger value="signup" className={TAB_ACTIVE}>Criar conta</TabsTrigger>
             </TabsList>
 
             <TabsContent value="signin">
@@ -548,7 +563,7 @@ export default function Auth() {
             <TabsContent value="signup">
               <form onSubmit={signUp} className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name-up">Como quer ser chamado(a)?</Label>
+                  <Label htmlFor="name-up">Como podemos te chamar?</Label>
                   <Input id="name-up" required maxLength={60}
                     value={name} onChange={(e) => setName(e.target.value)} />
                 </div>

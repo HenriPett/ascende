@@ -95,12 +95,13 @@ export function WhatsappHojeCard() {
                 )}
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Mande o código (vale 15 min). Assim que chegar, confirmo aqui sozinho.
+                Mande o código (vale por 15 minutos). Assim que ele chegar, esta tela
+                confirma o vínculo sozinha.
               </p>
             </div>
           ) : (
             <Button variant="outline" size="sm" onClick={generate} disabled={busy}>
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Conectar em 3 toques"}
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Conectar meu WhatsApp"}
             </Button>
           )}
         </div>
@@ -196,8 +197,8 @@ export default function WhatsappCard() {
             </div>
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="wa-return" className="text-sm font-normal">
-                Convite de retorno
-                <span className="block text-[11px] text-muted-foreground">Se você sumir uns dias, um lembrete gentil (no máximo 1 a cada 2 semanas)</span>
+                Recomeço sem cobrança
+                <span className="block text-[11px] text-muted-foreground">Depois de um tempo sem registros, uma mensagem com o que continua valendo — no máximo uma a cada 2 semanas</span>
               </Label>
               <Switch id="wa-return" checked={link!.notify_return}
                 onCheckedChange={(v) => setPrefs({ notify_return: v })} />

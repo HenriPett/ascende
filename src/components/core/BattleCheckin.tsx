@@ -17,10 +17,10 @@ import {
 } from "@/lib/battles";
 import { cn } from "@/lib/utils";
 
-const STATUS_META: Record<CheckinStatus, { label: string; toastMsg: string; icon: typeof Shield }> = {
-  clean: { label: "Dia limpo", toastMsg: "Dia limpo registrado. +10 XP", icon: ShieldCheck },
-  resisted: { label: "Resisti à vontade", toastMsg: "Resistir vale mais. +12 XP", icon: Shield },
-  relapsed: { label: "Recaí", toastMsg: "Obrigado pela honestidade — é ela que constrói a subida. +5 XP", icon: CloudRain },
+const STATUS_META: Record<CheckinStatus, { label: string; done: string; toastMsg: string; icon: typeof Shield }> = {
+  clean: { label: "Dia limpo", done: "dia limpo registrado hoje", toastMsg: "Dia limpo registrado. +10 XP", icon: ShieldCheck },
+  resisted: { label: "Resisti à vontade", done: "você resistiu à vontade hoje", toastMsg: "Resistir vale mais. +12 XP", icon: Shield },
+  relapsed: { label: "Recaí", done: "recaída registrada hoje", toastMsg: "Obrigado pela honestidade — é ela que constrói a subida. +5 XP", icon: CloudRain },
 };
 
 export function CheckinRow({ battle, todayCheckin }: { battle: Battle; todayCheckin?: Checkin }) {
@@ -60,10 +60,10 @@ export function CheckinRow({ battle, todayCheckin }: { battle: Battle; todayChec
         <M.icon className="w-4 h-4 text-success shrink-0" />
         <p className="text-sm flex-1">
           <span className="font-medium">{battleLabel(battle)}</span>
-          <span className="text-muted-foreground"> — {M.label.toLowerCase()} registrado hoje</span>
+          <span className="text-muted-foreground"> — {M.done}</span>
         </p>
         <button className="text-xs text-muted-foreground underline" onClick={() => setPendingStatus(todayCheckin.status)}>
-          mudar
+          Corrigir
         </button>
       </div>
     );
@@ -99,7 +99,7 @@ export function CheckinRow({ battle, todayCheckin }: { battle: Battle; todayChec
       {pendingStatus && (
         <div className="space-y-2 animate-fade-up">
           <p className="text-xs text-muted-foreground">
-            {pendingStatus === "relapsed" ? "Sem julgamento — o que estava acontecendo?" : "O que bateu?"}
+            {pendingStatus === "relapsed" ? "Sem julgamento — o que estava acontecendo?" : "O que disparou a vontade?"}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {[...battle.triggers, "outro"].map((t) => (
@@ -116,7 +116,7 @@ export function CheckinRow({ battle, todayCheckin }: { battle: Battle; todayChec
             ))}
           </div>
           {pendingStatus === "relapsed" && (
-            <Input maxLength={200} placeholder="Anotar o contexto ajuda a IA a achar o padrão (opcional)"
+            <Input maxLength={200} placeholder="Anotar o contexto ajuda o Conselheiro a achar o padrão (opcional)"
               value={note} onChange={(e) => setNote(e.target.value)} className="text-sm" />
           )}
           <div className="flex gap-2 justify-end">
@@ -124,7 +124,7 @@ export function CheckinRow({ battle, todayCheckin }: { battle: Battle; todayChec
               Voltar
             </Button>
             <Button size="sm" disabled={saving} onClick={() => save(pendingStatus, trigger, note)}>
-              Registrar
+              Registrar check-in
             </Button>
           </div>
         </div>
@@ -149,7 +149,7 @@ export default function BattleCheckinCard() {
           <Swords className="w-4 h-4 text-gold" /> Suas batalhas
         </h2>
         <Link to="/app/batalhas" className="text-xs text-muted-foreground flex items-center hover:text-foreground">
-          ver tudo <ChevronRight className="w-3.5 h-3.5" />
+          Ver todas <ChevronRight className="w-3.5 h-3.5" />
         </Link>
       </div>
       <div className="space-y-2">

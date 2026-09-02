@@ -25,9 +25,11 @@ import { isDuplicateError } from "@/lib/dataSourcesPure";
 // elas moram noutro arquivo (a separação existe só para o teste rodar sem
 // puxar o cliente Supabase).
 export {
-  hashFile, isDuplicateError, sourceKindLabel, buildReceiptSummary,
+  hashFile, fingerprintLargeFile, isDuplicateError, sourceKindLabel,
+  buildReceiptSummary, importOutcome, markAlreadyImported, markAlreadyInHistory,
+  importMilestoneLabel, importMilestoneSourceId, IMPORT_MILESTONE_PREFIX,
 } from "@/lib/dataSourcesPure";
-export type { HashInput } from "@/lib/dataSourcesPure";
+export type { HashInput, ImportCounts, ImportOutcome } from "@/lib/dataSourcesPure";
 
 /* ── Tipos (contrato com a interface) ─────────────────────────────────────
    Os nomes dos campos são os MESMOS das colunas do banco, de propósito: uma
@@ -38,6 +40,7 @@ export type { HashInput } from "@/lib/dataSourcesPure";
  *  medidas): esse detalhe vive em `display_name` e `parser_version`. */
 export type DataSourceKind =
   | "health_csv"          // CSV de app de saúde (Sleep Cycle, Hevy…)
+  | "health_export"       // export completo do App Saúde do iPhone (zip/xml)
   | "financial_statement" // fatura, extrato, comprovante
   | "chat_attachment"     // arquivo enviado na conversa com o Conselheiro
   | "manual";             // origem declarada à mão
@@ -90,6 +93,11 @@ export interface ImportReceipt {
  *  (reimportar o mesmo arquivo gera um recibo novo na mesma fonte). */
 export interface DataSourceWithReceipt extends DataSource {
   receipt: ImportReceipt | null;
+  /** A consulta de recibos FALHOU — `receipt: null` aqui não quer dizer "não
+   *  há recibo", quer dizer "não consegui carregar". A diferença é a promessa
+   *  inteira da Fase 1: negar doze recibos que existem no banco é pior do que
+   *  dizer que a lista não carregou. */
+  receiptUnavailable?: boolean;
 }
 
 export interface NewDataSource {
@@ -316,7 +324,12 @@ export async function listSourcesWithReceipts(
   const { data: receiptRows, error: rErr } = await supabase.from("import_receipts")
     .select("*").in("source_id", sources.map((s) => s.id))
     .order("created_at", { ascending: false });
-  if (rErr) console.error("listSourcesWithReceipts recibos", rErr.message);
+  if (rErr) {
+    // NÃO devolvemos `receipt: null` calado: a tela mostraria "sem recibo" em
+    // toda fonte, e a pessoa leria que a trilha que prometemos nunca existiu.
+    console.error("listSourcesWithReceipts recibos", rErr.message);
+    return sources.map((s) => ({ ...s, receipt: null, receiptUnavailable: true }));
+  }
 
   // Vem em ordem decrescente: o primeiro de cada fonte é o mais recente.
   const latest = new Map<string, ImportReceipt>();
@@ -327,24 +340,47 @@ export async function listSourcesWithReceipts(
   return sources.map((s) => ({ ...s, receipt: latest.get(s.id) ?? null }));
 }
 
+/* Página da consulta de chaves. O PostgREST tem teto próprio de linhas por
+   resposta (`max-rows`), então pedir "tudo" não traz tudo: é preciso paginar
+   com `range` até vir uma página incompleta. */
+const KEYS_PAGE = 1000;
+/* Teto de sanidade. MAX_IMPORT_EVENTS é 1.000 por importação, então 50 mil
+   chaves cobrem dezenas de reimportações da mesma fonte com folga. */
+const KEYS_MAX = 50_000;
+
 /**
  * Chaves de registro que ESTA fonte já gravou. Consultar antes de inserir é
  * o que evita reenviar centenas de linhas para o banco recusar uma a uma —
  * o índice único continua sendo a garantia, isto é só o caminho barato.
  *
- * Em falha devolve conjunto vazio: pior caso, o insert descobre as
+ * PAGINA de propósito. A versão anterior pedia `.limit(5000)` e parava ali:
+ * numa fonte com mais chaves que isso, o pré-filtro ficava incompleto, o
+ * insert em lote batia no índice único e o fallback caía para UMA REQUISIÇÃO
+ * POR LINHA. Com o export do App Saúde (muito mais registros que um CSV),
+ * isso deixou de ser hipótese.
+ *
+ * Em falha devolve o que já juntou: pior caso, o insert descobre as
  * duplicatas pelo caminho de exceção, que o chamador já sabe tratar.
  */
 export async function existingRecordKeys(
   table: "life_events" | "transactions", userId: string, dataSourceId: string,
 ): Promise<Set<string>> {
-  const { data, error } = await supabase.from(table)
-    .select("source_record_key")
-    .eq("user_id", userId).eq("data_source_id", dataSourceId)
-    .not("source_record_key", "is", null)
-    .limit(5000);
-  if (error) { console.error("existingRecordKeys", table, error.message); return new Set(); }
-  return new Set((data ?? []).map((r) => str((r as Row).source_record_key)));
+  const keys = new Set<string>();
+  for (let from = 0; from < KEYS_MAX; from += KEYS_PAGE) {
+    const { data, error } = await supabase.from(table)
+      .select("source_record_key")
+      .eq("user_id", userId).eq("data_source_id", dataSourceId)
+      .not("source_record_key", "is", null)
+      .order("source_record_key", { ascending: true })
+      .range(from, from + KEYS_PAGE - 1);
+    if (error) { console.error("existingRecordKeys", table, error.message); break; }
+    const rows = data ?? [];
+    for (const r of rows) keys.add(str((r as Row).source_record_key));
+    // Página incompleta = acabou. É o único jeito de saber, já que o
+    // PostgREST pode cortar a resposta antes do tamanho pedido.
+    if (rows.length < KEYS_PAGE) break;
+  }
+  return keys;
 }
 
 /**
@@ -365,4 +401,21 @@ export async function awardImportMilestone(sourceId?: string | null): Promise<bo
   );
   if (error) { console.error("awardImportMilestone", error.message); return false; }
   return data === true;
+}
+
+
+/**
+ * Nome legível de cada fonte, por id. Serve ao extrato de XP: a razão gravada
+ * pelo banco carrega o uuid da fonte, e é aqui que ele vira "exportar.zip".
+ *
+ * Em falha devolve mapa vazio — o extrato então mostra "Importação concluída"
+ * sem o nome, que é pior que o nome e muito melhor que um uuid na cara.
+ */
+export async function sourceNamesByIds(ids: string[]): Promise<Map<string, string>> {
+  const unicos = [...new Set(ids.filter(Boolean))];
+  if (!unicos.length) return new Map();
+  const { data, error } = await supabase.from("data_sources")
+    .select("id,display_name").in("id", unicos);
+  if (error) { console.error("sourceNamesByIds", error.message); return new Map(); }
+  return new Map((data ?? []).map((r) => [str((r as Row).id), str((r as Row).display_name)]));
 }

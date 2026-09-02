@@ -7,7 +7,7 @@ import type { ProposedStatementTx } from "@/lib/prosperidade";
 import { PARSER_VERSION, statementRecordKeys } from "@/lib/statementImport";
 import {
   awardImportMilestone, buildReceiptSummary, createReceipt, createSource,
-  confirmSource, markSourcePartial, existingRecordKeys, isDuplicateError,
+  confirmSource, importOutcome, markSourcePartial, existingRecordKeys, isDuplicateError,
   type DataSource, type ImportWarning,
 } from "@/lib/dataSources";
 
@@ -24,8 +24,18 @@ export interface StatementConfirmCtx {
   totalRows?: number;
   /** Desmarcados por já estarem registrados (findStatementDuplicates). */
   duplicateRows?: number;
-  /** Lidos mas descartados na revisão (parcela futura, linha ilegível). */
+  /** Lidos mas que ficaram de fora, sem distinguir o motivo. Continua aceito
+   *  para não quebrar quem já chama assim, e é lido como DESMARCADO: acusar a
+   *  fonte de incompleta sem prova de linha ilegível é o defeito que
+   *  `unreadableRows` veio corrigir. */
   rejectedRows?: number;
+  /** Linhas que o documento trouxe e NÃO deu para ler. Ficam FORA da
+   *  partição do recibo (nunca viraram lançamento) e são a única coisa que
+   *  marca a fonte como 'partial' — problema nosso, não escolha dela. */
+  unreadableRows?: number;
+  /** Desmarcados de propósito na revisão (parcela futura, compra que ela não
+   *  quer registrar). Caminho saudável: não deixa a fonte incompleta. */
+  discardedRows?: number;
   warnings?: ImportWarning[];
 }
 
@@ -62,10 +72,20 @@ export function useStatementConfirm() {
     if (!user || !selected.length) return null;
     setSaving(true);
     try {
-      // ── 1. A fonte. Falhar aqui NÃO pode impedir a gravação: perder a
-      //    trilha é ruim, perder o lançamento da pessoa é pior. Seguimos sem
-      //    proveniência e o recibo simplesmente não nasce.
-      let source: DataSource | null = null;
+      // ── 1. A fonte. SEM ELA NÃO GRAVAMOS — e isso é uma mudança
+      //    deliberada em relação ao que este arquivo fazia antes.
+      //
+      //    O índice único que protege o dinheiro de entrar duas vezes é
+      //    PARCIAL: só vale quando `data_source_id` E `source_record_key`
+      //    existem na linha. Gravar "só o lançamento, sem a trilha" desligava
+      //    a proteção exatamente no caminho de erro — e é aí que a pessoa
+      //    tenta de novo. Duas tentativas viravam gasto em dobro no histórico
+      //    dela, sem nada para desfazer.
+      //
+      //    Entre perder uma tentativa de importação (ela reenvia, e o hash
+      //    reconhece o mesmo arquivo) e duplicar dinheiro no histórico, a
+      //    escolha não é difícil.
+      let source: DataSource;
       try {
         const days = selected.map((t) => t.occurred_at).filter(Boolean).sort();
         source = await createSource({
@@ -80,10 +100,14 @@ export function useStatementConfirm() {
         });
       } catch (e) {
         console.error("fonte da fatura", e);
+        toast.error("Não consegui abrir a trilha deste arquivo, então não gravei nada. Tente de novo.");
+        return null;
       }
 
       // ── 2. As linhas, com a chave estável de cada uma dentro do documento.
       const keys = statementRecordKeys(selected);
+      // As duas colunas de proveniência SEMPRE juntas: é o par que o índice
+      // único parcial enxerga. Uma sem a outra não protege nada.
       let rows = selected.map((it, i) => ({
         user_id: user.id,
         kind: it.kind,
@@ -92,18 +116,17 @@ export function useStatementConfirm() {
         description: it.description,
         occurred_at: it.occurred_at,
         source: "import",
-        ...(source ? { data_source_id: source.id, source_record_key: keys[i] } : {}),
+        data_source_id: source.id,
+        source_record_key: keys[i],
       }));
 
       let duplicates = 0;
-      if (source) {
-        const already = await existingRecordKeys("transactions", user.id, source.id);
-        if (already.size) {
-          rows = rows.filter((r) => {
-            if (already.has(String(r.source_record_key))) { duplicates++; return false; }
-            return true;
-          });
-        }
+      const already = await existingRecordKeys("transactions", user.id, source.id);
+      if (already.size) {
+        rows = rows.filter((r) => {
+          if (already.has(String(r.source_record_key))) { duplicates++; return false; }
+          return true;
+        });
       }
 
       // ── 3. Gravação. Uma duplicata derruba o insert do lote inteiro (é uma
@@ -126,29 +149,38 @@ export function useStatementConfirm() {
       }
 
       // ── 4. O recibo: o que entrou, o que já estava lá, o que ficou de fora.
+      //    `rejectedRows` legado (sem motivo declarado) conta como DESMARCADO:
+      //    é o caso comum, e chamar de ilegível o que a pessoa escolheu deixar
+      //    de fora acusaria o documento de um defeito que ele não tem.
       const duplicateRows = duplicates + (ctx?.duplicateRows ?? 0);
-      const rejectedRows = ctx?.rejectedRows ?? 0;
+      const outcome = importOutcome({
+        acceptedRows: accepted,
+        duplicateRows,
+        discardedRows: ctx?.discardedRows ?? ctx?.rejectedRows ?? 0,
+        unreadableLines: ctx?.unreadableRows ?? 0,
+      });
       const summary = buildReceiptSummary({
         acceptedRows: accepted,
         duplicateRows,
-        rejectedRows,
+        rejectedRows: outcome.rejectedRows,
         acceptedLabel: `${accepted} ${accepted === 1 ? "lançamento" : "lançamentos"}`,
       });
-      if (source) {
-        await createReceipt({
-          sourceId: source.id,
-          userId: user.id,
-          totalRows: ctx?.totalRows ?? (accepted + duplicateRows + rejectedRows),
-          acceptedRows: accepted,
-          duplicateRows,
-          rejectedRows,
-          warnings: ctx?.warnings ?? [],
-          summary,
-        });
-        // Parcial quando parte do documento ficou de fora — o que entrou vale
-        // e está no histórico; a fonte só não pode se dizer completa.
-        await (rejectedRows > 0 ? markSourcePartial(source.id) : confirmSource(source.id));
-      }
+      await createReceipt({
+        sourceId: source.id,
+        userId: user.id,
+        totalRows: outcome.totalRows,
+        acceptedRows: accepted,
+        duplicateRows,
+        rejectedRows: outcome.rejectedRows,
+        warnings: ctx?.warnings ?? [],
+        summary,
+      });
+      // 'partial' agora quer dizer UMA coisa: o documento tinha linha que não
+      // deu para ler. Parcela futura desmarcada é a pessoa usando a revisão
+      // como ela deve ser usada, e não deixa a fonte marcada como incompleta.
+      await (outcome.status === "partial"
+        ? markSourcePartial(source.id)
+        : confirmSource(source.id));
 
       // ── 5. O marco, só quando algo novo entrou de fato.
       //    COM hash: uma vez por FONTE — reimportar o mesmo documento
@@ -157,7 +189,7 @@ export function useStatementConfirm() {
       //    arquivo para reconhecer, então cada envio abriria uma fonte nova e
       //    +15 XP a cada vez. Aí vale a regra antiga, de um marco por mês.
       const awarded = accepted > 0
-        && await awardImportMilestone(source?.file_hash ? source.id : null);
+        && await awardImportMilestone(source.file_hash ? source.id : null);
 
       if (accepted > 0) {
         // O marco agora vale para qualquer importação, não só para fatura do

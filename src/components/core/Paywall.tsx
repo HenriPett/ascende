@@ -43,25 +43,38 @@ export default function Paywall({
     ? formatSP(info.reset_at, { day: "2-digit", month: "2-digit" })
     : null;
   // O título dizia sempre "limite de hoje", mas o limite atingido pode ser
-  // diário, semanal ou mensal (o corpo da mensagem já vem certo do backend,
-  // achado de QA ao vivo: as duas informações se contradiziam na mesma tela).
-  // Sem um campo de período explícito no payload, a distância até o reset
-  // já entrega o período real com folga suficiente para não confundir dia
-  // com semana nem semana com mês.
-  const daysUntilReset = info.reset_at
-    ? (new Date(info.reset_at).getTime() - Date.now()) / 86_400_000
-    : null;
-  const periodLabel = daysUntilReset === null ? "de agora"
-    : daysUntilReset <= 1.5 ? "de hoje"
-    : daysUntilReset <= 9 ? "desta semana"
-    : "deste mês";
+  // diário, semanal ou mensal — e com o padrão do plano grátis (15 mensagens
+  // por SEMANA) o corpo dizia "desta semana" embaixo de um título "de hoje".
+  //
+  // O período verdadeiro já chega em `info.error`, que o backend monta por
+  // janela ("...desta semana...", "...deste mês...", "...de hoje..."): ler
+  // dali é exato. A versão anterior deduzia o período pela distância até o
+  // reset, e isso erra justamente nas bordas, que é quando alguém esbarra no
+  // teto: um limite SEMANAL atingido num domingo reseta em poucas horas e
+  // saía rotulado "de hoje"; um MENSAL atingido no dia 30, idem.
+  // Quando a frase não disser o período, o título não inventa: fica sem
+  // sufixo, porque "Você chegou ao limite" já é verdade em qualquer janela.
+  // É o caso das mensagens que não são teto de período e sim recurso pago
+  // ("A análise de documentos (PDF) faz parte do Ascende+") ou cortesia já
+  // usada ("Você já usou a importação gratuita").
+  //
+  // O casamento é com as TRÊS frases exatas que o backend emite, e não com
+  // "mensal"/"por mês" soltos: a oferta do Ascende+ fala em "cota mensal de
+  // documentos" dentro da mesma mensagem, e um padrão frouxo rotulava a
+  // importação de fatura (cortesia de uso único) como "limite deste mês".
+  const said = (info.error ?? "").toLowerCase();
+  const periodLabel =
+    said.includes("desta semana") ? " desta semana"
+    : said.includes("deste mês") ? " deste mês"
+    : said.includes("de hoje") ? " de hoje"
+    : "";
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-gold" /> Você chegou no limite {periodLabel} — e ele existe de propósito
+            <Sparkles className="w-5 h-5 text-gold" /> Você chegou ao limite{periodLabel} — e ele existe de propósito
           </DialogTitle>
           <DialogDescription>
             {info.error} {resetLabel && <>Renova em <strong>{resetLabel}</strong>.</>}
@@ -89,7 +102,7 @@ export default function Paywall({
         <div className="flex items-center justify-between gap-2 pt-1">
           <div className="text-sm">
             <p className="font-semibold">{ent?.pricing?.monthly_label ?? "R$ 29,90/mês"}</p>
-            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "R$ 239,90/ano (2 meses grátis)"}</p>
+            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "R$ 239,90/ano — economia de R$ 118,90"}</p>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>Agora não</Button>

@@ -29,6 +29,9 @@
 // mesma história produz o mesmo Mokari — sempre.
 import { addDays } from "@/lib/insights";
 import { PILLARS, type PillarId } from "@/lib/pillars";
+// A regra de "que dia é este carimbo" mora num lugar só (lib/localDays.ts):
+// reimplementá-la aqui é como o `slice` errado nasceu em três telas.
+import { localDay } from "@/lib/localDays";
 
 /** Versão da regra de cálculo. Muda quando os limiares mudam, para que um
  *  Mokari lido ontem não pareça outro hoje sem explicação. */
@@ -157,8 +160,23 @@ export const RECENT_WINDOW_DAYS = 7;
 
 /* ═══ Primitivas ══════════════════════════════════════════════════════ */
 
-/** "2026-08-14T22:10:00Z" → "2026-08-14". */
-const dayOf = (iso: string) => String(iso ?? "").slice(0, 10);
+/**
+ * Dia do carimbo NO FUSO DO APP.
+ *
+ * Era `slice(0, 10)`, e isso estava errado pelo mesmo motivo que a revisão da
+ * branch pegou em Alimentação: `occurred_at` é `timestamptz` e chega do
+ * PostgREST em UTC, então o corte devolve o dia UTC — não o dia que a pessoa
+ * viveu. Com São Paulo em UTC-3, tudo registrado das 21:00 em diante cai no dia
+ * seguinte: um treino às 22:30 de sábado contava como domingo. Na janela de
+ * sete dias do estado recente isso faz um dia ativo entrar ou sair pela borda,
+ * e o Mokari alterna entre "movimento" e "atento" sem nada ter mudado na vida
+ * da pessoa. No ambiente, desloca `journey_days` em um.
+ *
+ * `localDay` devolve `null` para carimbo ilegível; aqui isso vira "", que não
+ * casa com nenhuma janela e não conta como dia — um registro corrompido não
+ * pode inventar um dia nem derrubar o cálculo inteiro.
+ */
+const dayOf = (iso: string) => localDay(iso) ?? "";
 
 /** Dias inteiros de `from` até `to`. Negativo se `to` for anterior. */
 export function daysBetween(from: string, to: string): number {
@@ -312,7 +330,8 @@ function environmentForDays(journeyDays: number): MokariEnvironment {
 function eventDays(events: readonly MokariEvent[]): string[] {
   const dias = new Set(
     events.filter((e) => !IGNORED_KINDS.includes(String(e.kind)))
-      .map((e) => dayOf(e.occurred_at)),
+      .map((e) => dayOf(e.occurred_at))
+      .filter(Boolean),
   );
   return [...dias].sort((a, b) => a.localeCompare(b));
 }
@@ -336,7 +355,9 @@ export function mokariState(
     return d >= inicio && d <= referenceDay;
   });
 
-  const activeDays = new Set(naJanela.map((e) => dayOf(e.occurred_at))).size;
+  const activeDays = new Set(
+    naJanela.map((e) => dayOf(e.occurred_at)).filter(Boolean),
+  ).size;
   const pilares = new Set(naJanela.map((e) => e.pillar)).size;
 
   if (activeDays === 0) return { state: "descanso", activeDays };

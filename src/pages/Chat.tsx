@@ -25,6 +25,7 @@ import { sleepWindowHours, timeForInput } from "@/lib/sleep";
 import { useDictation } from "@/hooks/useDictation";
 import { cn } from "@/lib/utils";
 import Paywall from "@/components/core/Paywall";
+import QueryError from "@/components/core/QueryError";
 import { readFnError, isPlanLimit, type PlanLimitError } from "@/lib/fnError";
 import { imageToBase64, fileToBase64, fileToText } from "@/lib/files";
 import type { ProposedStatementTx } from "@/lib/prosperidade";
@@ -129,13 +130,14 @@ export default function Chat() {
   );
   const { markSeen } = useGuides();
 
-  const { data: history, isLoading } = useQuery({
+  const { data: history, isLoading, isError: historyError, refetch: refetchHistory, isFetching: historyFetching } = useQuery({
     queryKey: ["chat", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase.from("chat_messages")
+      const { data, error } = await supabase.from("chat_messages")
         .select("id,role,content").eq("user_id", user!.id)
         .order("created_at", { ascending: true }).limit(200);
+      if (error) throw error;
       return (data ?? []) as Msg[];
     },
   });
@@ -154,7 +156,7 @@ export default function Chat() {
     e.target.value = "";
     for (const file of files) {
       if (attachments.length + 1 > MAX_ATTACHMENTS) {
-        toast.error(`Máximo de ${MAX_ATTACHMENTS} anexos por mensagem.`);
+        toast.error(`Dá para enviar até ${MAX_ATTACHMENTS} anexos por mensagem.`);
         break;
       }
       try {
@@ -172,7 +174,7 @@ export default function Chat() {
           const text = (await fileToText(file)).slice(0, MAX_TEXT_CHARS);
           setAttachments((a) => [...a, { name: file.name, kind: "text", text }]);
         } else {
-          toast.error(`Tipo de arquivo não suportado: "${file.name}". Envie fotos, PDF, TXT, MD ou CSV.`);
+          toast.error(`Não consigo ler "${file.name}". Envie foto, PDF, TXT, MD ou CSV.`);
         }
       } catch {
         toast.error(`Não consegui ler "${file.name}".`);
@@ -328,6 +330,22 @@ export default function Chat() {
     }
   };
 
+  /* O campo do Conselheiro não crescia: `rows={1}` + `min-h-[44px]` deixavam
+     44px fixos. No celular sobram ~236px de largura (anexo, microfone e enviar
+     comem o resto), então o próprio placeholder ocupa duas linhas e a segunda
+     aparecia fatiada; escrever duas linhas rolava dentro da caixa. Agora ele
+     acompanha o conteúdo até um teto e só então rola por dentro. */
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const COMPOSER_MAX_H = 160; // = max-h-40, o ponto em que o histórico ficaria espremido
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";            // mede o conteúdo do zero
+    const h = Math.min(el.scrollHeight, COMPOSER_MAX_H);
+    el.style.height = `${h}px`;
+    el.style.overflowY = el.scrollHeight > COMPOSER_MAX_H ? "auto" : "hidden";
+  }, [input, listening]);
+
   const confirmCaptured = async () => {
     if (!user || !captured) return;
     markSeen("confirmar-registros");
@@ -336,15 +354,34 @@ export default function Chat() {
     setSavingCaptured(true);
     try {
       const schedHours = sleepWindowHours(profile?.sleep_bedtime, profile?.sleep_waketime);
-      await saveProposedEvents(user.id, selected, schedHours ? {
+      // `saveProposedEvents` RECUSA proposta com data implausível e devolve o
+      // que de fato entrou. Ignorar o retorno fazia duas coisas erradas ao
+      // mesmo tempo: o aviso da recusa sumia em silêncio e o toast comemorava
+      // XP que o banco não concedeu, porque a soma era sobre o SELECIONADO.
+      const { savedEvents, warnings } = await saveProposedEvents(user.id, selected, schedHours ? {
         hours: schedHours,
         bedtime: timeForInput(profile?.sleep_bedtime),
         waketime: timeForInput(profile?.sleep_waketime),
       } : null);
-      const gained = selected.reduce((sum, ev) => sum + xpForKind(ev.kind), 0);
-      toast.success(selected.length === 1
-        ? `${selected[0].summary} · +${gained} XP`
-        : `${selected.length} registros feitos · +${gained} XP`);
+
+      // Nada entrou: não existe "registrei" a dizer. O primeiro aviso já
+      // explica o motivo e o caminho de volta.
+      if (!savedEvents.length) {
+        toast.error(warnings[0] ?? "Não consegui salvar. Tente de novo.");
+        for (const w of warnings.slice(1)) toast.warning(w);
+        return;
+      }
+
+      const gained = savedEvents.reduce((sum, ev) => sum + xpForKind(ev.kind), 0);
+      // `summary` é a frase que a IA montou A PARTIR dos números, então ela
+      // CITA o valor. Com qualquer recusa no lote, ecoá-la afirmaria na linha
+      // de sucesso justamente o número que o aviso ao lado diz que não entrou
+      // ("...(~3500 kcal)" logo acima de "não registrei as calorias"). Havendo
+      // aviso, o sucesso usa a forma contada.
+      toast.success(savedEvents.length === 1 && !warnings.length
+        ? `${savedEvents[0].summary} · +${gained} XP`
+        : `${savedEvents.length} ${savedEvents.length === 1 ? "registro feito" : "registros feitos"} · +${gained} XP`);
+      for (const w of warnings) toast.warning(w);
       setCaptured(null);
       qc.invalidateQueries();
     } catch {
@@ -397,7 +434,7 @@ export default function Chat() {
       }
     }
 
-    toast.success("Plano salvo! Ele fica em Pilares > Meus planos, e o Conselheiro passa a acompanhá-lo.");
+    toast.success("Plano salvo! Ele fica em Jornada > Planos, e o Conselheiro passa a acompanhá-lo.");
     setProposedPlan(null);
     setPlanOpen(false);
     qc.invalidateQueries({ queryKey: ["plans"] });
@@ -417,7 +454,18 @@ export default function Chat() {
         <FirstTimeTip id="conselheiro" />
         {isLoading && <Skeleton className="h-16 w-3/4" />}
 
-        {!isLoading && messages.length === 0 && (
+        {/* Histórico que não carregou não é conversa nova: sem isto, a tela
+            de boas-vindas aparecia por cima de meses de conversa. */}
+        {historyError && messages.length === 0 && (
+          <QueryError
+            title="Não consegui carregar sua conversa."
+            detail="Pode ser a conexão — nada foi apagado. Você pode tentar de novo ou escrever mesmo assim."
+            onRetry={() => refetchHistory()}
+            retrying={historyFetching}
+          />
+        )}
+
+        {!isLoading && !historyError && messages.length === 0 && (
           <div className="space-y-2 pt-4">
             {profile?.goal && (
               <p className="text-sm">
@@ -523,7 +571,7 @@ export default function Chat() {
             </p>
             <p className="text-xs text-muted-foreground">
               Veja o plano formatado, peça ajustes ("não gosto do exercício tal") ou salve.
-              Salvo, ele fica em Pilares &gt; Meus planos e o Conselheiro acompanha sua adesão.
+              Salvo, ele fica em Jornada &gt; Planos e o Conselheiro acompanha sua adesão.
             </p>
             <div className="flex flex-wrap gap-2 justify-end pt-0.5">
               <Button variant="ghost" size="sm" onClick={() => setProposedPlan(null)} disabled={savingPlan}>
@@ -660,12 +708,13 @@ export default function Chat() {
           {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
         </Button>
         <Textarea
+          ref={composerRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={listening ? "Ouvindo... fale à vontade" : "Pergunte qualquer coisa sobre a sua vida..."}
-          rows={1}
+          placeholder={listening ? "Ouvindo… fale à vontade" : "Pergunte qualquer coisa sobre a sua vida…"}
+          rows={2}
           maxLength={4000}
-          className="resize-none min-h-[44px]"
+          className="resize-none min-h-[44px] max-h-40"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
           }}
