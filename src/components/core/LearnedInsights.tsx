@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Brain, X, Pencil, ThumbsDown, Check, Loader2, Undo2 } from "lucide-react";
@@ -13,7 +13,7 @@ import {
 } from "@/lib/memories";
 import { updateMemoryContent, rejectMemory, reactivateMemory } from "@/lib/memoriesData";
 import {
-  initLearnedBlock, learnedBlockReducer, pedidoDeCorrecao,
+  initLearnedBlock, learnedBlockReducer, pedidoDeCorrecao, statusAoDesfazer,
   rowAceitaMenu, rowOutcome, rowSaindo, blocoCongelado, blocoVazio,
   type LearnedRow,
 } from "@/lib/learnedRows";
@@ -131,7 +131,12 @@ function Bloco({
   const recusar = (row: LearnedRow) => executar(row, "recusar", () => rejectMemory(row.id));
   // Desfazer é reativar: recusar marca a memória, nunca apaga — é por isso que
   // dá para voltar atrás aqui e, depois dos 8s, ainda em Descartadas.
-  const desfazer = (row: LearnedRow) => executar(row, "desfazer", () => reactivateMemory(row.id));
+  //
+  // `statusAoDesfazer` é o que impede o desfazer de REBAIXAR uma linha que já
+  // tinha sido corrigida. Sem ele, o chat continuava dizendo "Corrigido por
+  // você" e Ajustes voltava a perguntar "isso está certo?" sobre o mesmo item.
+  const desfazer = (row: LearnedRow) => executar(row, "desfazer",
+    () => reactivateMemory(row.id, { voltarComo: statusAoDesfazer(row) }));
 
   return (
     <div className="rounded-xl border border-primary/25 bg-primary/5 p-3 space-y-2 animate-fade-up">
@@ -144,13 +149,19 @@ function Bloco({
             some com o BLOCO, enquanto as linhas agem item a item — hierarquias
             diferentes, por isso não competem.
 
-            `size="icon"` no lugar do antigo `h-6 w-6`: no toque o botão passa a
-            medir 44x44 de verdade em getBoundingClientRect, e não só a ter um
-            ::after desse tamanho (ver o comentário longo em FirstTimeTip.tsx
-            sobre por que o pseudo-elemento não conta). A margem negativa
-            devolve o crescimento ao layout, e o cabeçalho fica onde estava. */}
+            `h-11 w-11` cravado, e não o `size="icon"` sozinho. O `icon` só
+            chega a 44px sob `coarse:` (ponteiro grosso), e o QA mediu 40x40 em
+            TODO ambiente que ele conseguiu usar — inclusive com user agent de
+            iPhone, porque `pointer: coarse` não é emulável no portal. Um alvo
+            que só é 44 em ambiente que ninguém consegue medir é, na prática,
+            um alvo de 40: fica 44 sempre, e some a discussão.
+
+            A margem negativa devolve os 20px de crescimento ao layout, então o
+            cabeçalho fica exatamente onde estava (ver o comentário longo em
+            FirstTimeTip.tsx sobre por que se cresce a CAIXA e não um ::after). */}
         <Button
-          variant="ghost" size="icon" className="-my-2 -mr-2 shrink-0 text-muted-foreground"
+          variant="ghost" size="icon"
+          className="h-11 w-11 -my-2.5 -mr-2 shrink-0 text-muted-foreground"
           onClick={onDismiss} aria-label="Dispensar o que o Conselheiro aprendeu"
         >
           <X className="w-3.5 h-3.5" />
@@ -192,6 +203,116 @@ function ErroInline({ children }: { children: React.ReactNode }) {
   return <p className="text-[11px] text-destructive" role="alert">{children}</p>;
 }
 
+/** Teto da caixa de correção, como o `COMPOSER_MAX_H` do Conselheiro: passou
+ *  disso, ela rola por dentro em vez de empurrar o resto do bloco tela abaixo. */
+const CAMPO_MAX_H = 160;
+
+/**
+ * O campo que substitui a linha.
+ *
+ * Três defeitos que o QA mediu moram aqui, e os três são do mesmo tipo — a
+ * caixa não sabia onde estava:
+ *
+ * 1. ALTURA FIXA. `rows={3}` dá 78px de área útil contra um limite de 200
+ *    caracteres; num campo de 248px de largura (a barra de captura da Hoje é
+ *    estreita, aninhada em dois cartões) 199 caracteres precisam de 156px. A
+ *    quarta linha aparecia fatiada no meio dos glifos. É o mesmo defeito que o
+ *    compositor do Conselheiro já teve, e a solução é a mesma: crescer com o
+ *    conteúdo até um teto (ver COMPOSER_MAX_H em Chat.tsx).
+ *
+ * 2. FORA DA TELA. Na Hoje em 390x844 o Salvar nascia em y=797 com a barra de
+ *    navegação ocupando 766–832: o botão ficava 100% coberto, o clique caía na
+ *    nav, e a página NÃO rolava sozinha. Quem tentasse corrigir um aprendizado
+ *    pelo celular na tela Hoje simplesmente não conseguia salvar. `scroll-mb-32`
+ *    é o mesmo número do `pb-32` que o AppLayout já reserva para a nav — é
+ *    assim que o navegador fica sabendo que aqueles pixels não são visíveis.
+ *
+ * 3. SEM FOCO. A pessoa pedia para corrigir e o teclado não subia; era preciso
+ *    tocar de novo no campo. `preventScroll` porque quem decide o scroll é o
+ *    `scrollIntoView` abaixo, que conhece a nav — o foco sozinho não conhece.
+ */
+function CampoCorrecao({
+  row, salvando, onRascunho, onCancelar, onSalvar,
+}: {
+  row: LearnedRow;
+  salvando: boolean;
+  onRascunho: (draft: string) => void;
+  onCancelar: () => void;
+  onSalvar: () => void;
+}) {
+  const campo = useRef<HTMLTextAreaElement>(null);
+  const caixa = useRef<HTMLLIElement>(null);
+
+  // Antes da pintura, senão a caixa aparece com a altura errada por um quadro.
+  useLayoutEffect(() => {
+    const el = campo.current;
+    if (!el) return;
+    el.style.height = "auto";                     // mede o conteúdo do zero
+    const h = Math.min(el.scrollHeight, CAMPO_MAX_H);
+    el.style.height = `${h}px`;
+    el.style.overflowY = el.scrollHeight > CAMPO_MAX_H ? "auto" : "hidden";
+  }, [row.draft, row.error]);
+
+  useEffect(() => {
+    const el = campo.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    // Cursor no fim, não selecionando tudo: ela veio consertar um pedaço da
+    // frase, e um Ctrl+A implícito apaga tudo no primeiro caractere digitado.
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+
+  // Na montagem e sempre que um erro entra (o erro cresce a caixa e pode
+  // empurrar o Salvar para debaixo da nav de novo).
+  useEffect(() => {
+    caixa.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [row.error]);
+
+  return (
+    // `px-1.5 -mx-1.5`: a mesma caixa da linha normal, para o bloco não deslocar
+    // 6px ao entrar e sair da correção.
+    <li ref={caixa} className="space-y-2 px-1.5 -mx-1.5 py-1 scroll-mb-32">
+      <label
+        htmlFor={`aprendizado-${row.id}`}
+        className="text-[11px] font-medium text-muted-foreground"
+      >
+        Como isso deveria estar escrito?
+      </label>
+      {/* Sem placeholder: o campo abre com o texto atual dentro, porque é
+          correção e não redação em branco. */}
+      <Textarea
+        ref={campo}
+        id={`aprendizado-${row.id}`}
+        value={row.draft}
+        onChange={(e) => onRascunho(e.target.value)}
+        maxLength={MEMORY_CONTENT_MAX}
+        rows={2}
+        disabled={salvando}
+        className="resize-none text-sm min-h-11"
+      />
+      {row.error && <ErroInline>{row.error}</ErroInline>}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] text-muted-foreground">
+          {row.draft.trim().length}/{MEMORY_CONTENT_MAX}
+        </span>
+        {/* `h-11` por cima do `size="sm"`: o `sm` é h-9 = 36px MEDIDOS, e ao
+            contrário do `icon` ele nem tem variante `coarse:` — falhava a régua
+            dos 44 em qualquer ambiente, com dedo ou com mouse. */}
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" className="h-11" onClick={onCancelar} disabled={salvando}>
+            Cancelar
+          </Button>
+          <Button size="sm" className="h-11" onClick={onSalvar} disabled={salvando || !row.draft.trim()}>
+            {salvando
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : (<><Check className="w-4 h-4 mr-1" /> Salvar</>)}
+          </Button>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 function Linha({
   row, menuAberto, onMenu, onEditar, onRascunho, onCancelar, onSalvar, onRecusar, onDesfazer,
 }: {
@@ -217,41 +338,10 @@ function Linha({
      pessoa pediu ao tocar. */
   if (row.phase === "editando" || (salvando && row.pending === "corrigir")) {
     return (
-      <li className="space-y-2 py-1">
-        <label
-          htmlFor={`aprendizado-${row.id}`}
-          className="text-[11px] font-medium text-muted-foreground"
-        >
-          Como isso deveria estar escrito?
-        </label>
-        {/* Sem placeholder: o campo abre com o texto atual dentro, porque é
-            correção e não redação em branco. */}
-        <Textarea
-          id={`aprendizado-${row.id}`}
-          value={row.draft}
-          onChange={(e) => onRascunho(e.target.value)}
-          maxLength={MEMORY_CONTENT_MAX}
-          rows={3}
-          disabled={salvando}
-          className="resize-none text-sm"
-        />
-        {row.error && <ErroInline>{row.error}</ErroInline>}
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] text-muted-foreground">
-            {row.draft.trim().length}/{MEMORY_CONTENT_MAX}
-          </span>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={onCancelar} disabled={salvando}>
-              Cancelar
-            </Button>
-            <Button size="sm" onClick={onSalvar} disabled={salvando || !row.draft.trim()}>
-              {salvando
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : (<><Check className="w-4 h-4 mr-1" /> Salvar</>)}
-            </Button>
-          </div>
-        </div>
-      </li>
+      <CampoCorrecao
+        row={row} salvando={salvando}
+        onRascunho={onRascunho} onCancelar={onCancelar} onSalvar={onSalvar}
+      />
     );
   }
 
@@ -263,13 +353,18 @@ function Linha({
   if (outcome === "recusada") {
     const desfazendo = salvando && row.pending === "desfazer";
     return (
+      // `px-1.5 -mx-1.5` e o marcador: a mesma caixa e a mesma coluna de texto
+      // da linha normal. Sem os dois, recusar deslocava a linha 6px para a
+      // direita e ainda começava o texto 14px antes das outras — a coluna não
+      // se sustentava entre os estados, e o bloco "pulava" a cada ação.
       <li
         className={cn(
-          "flex items-center justify-between gap-2 transition-opacity duration-300",
+          "flex items-center gap-2 px-1.5 -mx-1.5 min-h-11 transition-opacity duration-300",
           rowSaindo(row) && "opacity-0",
         )}
       >
-        <div className="min-w-0">
+        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" aria-hidden />
+        <div className="min-w-0 flex-1">
           <p className="text-sm text-muted-foreground">Tirei isso do seu retrato</p>
           {row.error && <ErroInline>{row.error}</ErroInline>}
         </div>
@@ -315,7 +410,12 @@ function Linha({
               : <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0" aria-hidden />}
             <span className="min-w-0 break-words">
               {row.content}
-              <span className="ml-1.5 text-[11px] text-muted-foreground">· {categoria}</span>
+              {/* `whitespace-nowrap`: sem isto o "·" (1,4px de largura) sobrava
+                  sozinho no fim da linha e a categoria descia para a seguinte —
+                  um separador separando nada. Agora os dois quebram juntos. */}
+              <span className="ml-1.5 text-[11px] text-muted-foreground whitespace-nowrap">
+                · {categoria}
+              </span>
               {/* A linha passa a dizer de quem é a frase. A AUTORIA da memória
                   não muda com isso — quem deduziu primeiro continua tendo
                   deduzido, e o banco congela `created_by` por gatilho. Isto

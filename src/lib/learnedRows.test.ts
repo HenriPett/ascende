@@ -11,7 +11,7 @@
 // segundos nem mockar Date.
 import { describe, it, expect } from "vitest";
 import {
-  initLearnedBlock, learnedBlockReducer, pedidoDeCorrecao,
+  initLearnedBlock, learnedBlockReducer, pedidoDeCorrecao, statusAoDesfazer,
   rowOutcome, rowAceitaMenu, rowSaindo, blocoCongelado, blocoVazio,
   UNDO_WINDOW_MS, UNDO_FADE_MS,
   type LearnedBlockAction, type LearnedBlockState,
@@ -214,6 +214,85 @@ describe("recusar e desfazer", () => {
     const s = run(recusada(), { type: "tick", ms: UNDO_WINDOW_MS }, { type: "tick", ms: 5000 });
     expect(linha(s, "m1").undoLeftMs).toBe(0);
     expect(linha(s, "m1").phase).toBe("removida");
+  });
+});
+
+describe("statusAoDesfazer — o desfazer não pode rebaixar o que a pessoa já disse", () => {
+  // O QA reproduziu assim: corrigir uma linha, recusar a MESMA linha, desfazer.
+  // O chat seguia dizendo "Corrigido por você" e Ajustes voltava a oferecer
+  // "Isso está certo" — duas telas contando histórias diferentes sobre o mesmo
+  // item, que é exatamente o que esta fase veio evitar.
+
+  it("linha corrigida volta CONFIRMADA", () => {
+    const s = run(inicial(),
+      { type: "editar", id: "m1" },
+      { type: "salvando", id: "m1", acao: "corrigir" },
+      { type: "corrigido", id: "m1", content: "Você treina à noite" },
+      { type: "salvando", id: "m1", acao: "recusar" },
+      { type: "recusado", id: "m1" },
+    );
+    expect(statusAoDesfazer(linha(s, "m1"))).toBe("confirmada");
+  });
+
+  it("linha que nunca foi corrigida volta neutra", () => {
+    const s = run(inicial(),
+      { type: "salvando", id: "m1", acao: "recusar" },
+      { type: "recusado", id: "m1" },
+    );
+    expect(statusAoDesfazer(linha(s, "m1"))).toBe("ativa");
+  });
+
+  it("vale por linha, e não pelo bloco", () => {
+    // Corrigir a linha de cima não pode confirmar a de baixo por tabela.
+    const s = run(inicial(),
+      { type: "editar", id: "m1" },
+      { type: "salvando", id: "m1", acao: "corrigir" },
+      { type: "corrigido", id: "m1", content: "Você treina à noite" },
+      { type: "salvando", id: "m2", acao: "recusar" },
+      { type: "recusado", id: "m2" },
+    );
+    expect(statusAoDesfazer(linha(s, "m2"))).toBe("ativa");
+  });
+
+  it("uma correção CANCELADA não confirma nada", () => {
+    // Abrir e fechar o campo não é se pronunciar sobre o texto.
+    const s = run(inicial(),
+      { type: "editar", id: "m1" },
+      { type: "rascunho", id: "m1", draft: "sei lá" },
+      { type: "cancelar", id: "m1" },
+      { type: "salvando", id: "m1", acao: "recusar" },
+      { type: "recusado", id: "m1" },
+    );
+    expect(statusAoDesfazer(linha(s, "m1"))).toBe("ativa");
+  });
+
+  it("uma correção que FALHOU não confirma nada", () => {
+    // A gravação não aconteceu, então não há o que restaurar.
+    const s = run(inicial(),
+      { type: "editar", id: "m1" },
+      { type: "salvando", id: "m1", acao: "corrigir" },
+      { type: "falhou", id: "m1", error: "Não consegui salvar. Tente de novo." },
+      { type: "cancelar", id: "m1" },
+      { type: "salvando", id: "m1", acao: "recusar" },
+      { type: "recusado", id: "m1" },
+    );
+    expect(statusAoDesfazer(linha(s, "m1"))).toBe("ativa");
+  });
+
+  it("depois do desfazer a linha continua se dizendo corrigida — e o status casa", () => {
+    // As duas telas têm que contar a MESMA história: o chat mostra "Corrigido
+    // por você" e Ajustes tem que mostrar "Confirmado por você".
+    const s = run(inicial(),
+      { type: "editar", id: "m1" },
+      { type: "salvando", id: "m1", acao: "corrigir" },
+      { type: "corrigido", id: "m1", content: "Você treina à noite" },
+      { type: "salvando", id: "m1", acao: "recusar" },
+      { type: "recusado", id: "m1" },
+      { type: "salvando", id: "m1", acao: "desfazer" },
+      { type: "desfeito", id: "m1" },
+    );
+    expect(rowOutcome(linha(s, "m1"))).toBe("corrigida");
+    expect(statusAoDesfazer(linha(s, "m1"))).toBe("confirmada");
   });
 });
 

@@ -328,12 +328,33 @@ export function rejectMemory(memoryId: string): Promise<AiMemory> {
   });
 }
 
-/** Volta uma memória rejeitada (ou vencida) para o jogo. Existe porque o
- *  botão de descartar precisa ter desfazer: errar de clique não pode custar
- *  uma memória. */
-export function reactivateMemory(memoryId: string): Promise<AiMemory> {
+/**
+ * Volta uma memória rejeitada (ou vencida) para o jogo. Existe porque o botão
+ * de descartar precisa ter desfazer: errar de clique não pode custar uma
+ * memória.
+ *
+ * `voltarComo` existe por causa do Desfazer do chat, e a diferença é de
+ * VERDADE, não de gosto:
+ *
+ * • Em Ajustes, a pessoa desfaz uma recusa olhando a lista de Descartadas. Ali
+ *   não se sabe o que a memória era antes, e "ativa" (neutro) é a resposta
+ *   honesta — é por isso que continua sendo o padrão.
+ * • No bloco do chat, ela pode ter CORRIGIDO a linha segundos antes de recusar.
+ *   Corrigir marca a memória como `confirmada` de propósito (ver
+ *   `updateMemoryContent`), então devolver "ativa" apagaria o fato de ela já
+ *   ter se pronunciado: Ajustes voltaria a perguntar "isso está certo?" sobre
+ *   um texto que ela mesma escreveu, enquanto o chat segue dizendo "Corrigido
+ *   por você". Duas telas, duas histórias sobre o mesmo item — exatamente o que
+ *   esta fase veio evitar.
+ *
+ * Só 'ativa' e 'confirmada' entram: reativar para 'rejeitada' ou 'expirada'
+ * seria desfazer que não desfaz.
+ */
+export function reactivateMemory(
+  memoryId: string, opts: { voltarComo?: "ativa" | "confirmada" } = {},
+): Promise<AiMemory> {
   return patchMemory(memoryId, {
-    status: "ativa",
+    status: opts.voltarComo ?? "ativa",
     valid_until: null,
     last_verified_at: new Date().toISOString(),
   });

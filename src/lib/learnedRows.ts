@@ -96,6 +96,23 @@ export function rowSaindo(row: LearnedRow): boolean {
 }
 
 /**
+ * Com que status a memória volta ao retrato quando a pessoa toca em Desfazer.
+ *
+ * Desfazer tem que devolver a linha ao estado em que ela ESTAVA — e uma linha
+ * corrigida não estava neutra: `updateMemoryContent` a marca como `confirmada`,
+ * porque corrigir é a forma mais forte de confirmar (o texto passou a ser o
+ * dela). Voltar tudo para "ativa" apagava esse fato, e o estrago aparecia na
+ * outra tela: o chat seguia dizendo "Corrigido por você" enquanto Ajustes
+ * voltava a oferecer "Isso está certo", cobrando confirmação de uma frase que a
+ * própria pessoa escreveu.
+ *
+ * A linha que nunca foi corrigida volta neutra, que é o que ela era.
+ */
+export function statusAoDesfazer(row: LearnedRow): "ativa" | "confirmada" {
+  return row.corrigida ? "confirmada" : "ativa";
+}
+
+/**
  * O bloco está congelado: tem menu aberto ou edição/salvamento em curso.
  *
  * Serve a duas coisas ao mesmo tempo, e é de propósito que seja a MESMA
