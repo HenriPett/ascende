@@ -535,6 +535,19 @@ export async function extractDocumentText(
    CAPTURE_OUTCOME_PREFIX. Tudo que vem ANTES dela já teve seu destino
    decidido e não pode ser ressuscitado. Então a varredura para ali. */
 
+/** A proposta guardada em whatsapp_pending já venceu?
+ *
+ * Pura (o agora entra por parâmetro) porque é ela que decide se o relato
+ * antigo morre: um erro aqui é um item ressuscitando ou um "Confirmar"
+ * gravando coisa velha, e os dois são o tipo de defeito que só aparece em
+ * produção. `createdAt` ilegível conta como VENCIDA: uma pendente que
+ * ninguém consegue datar não pode bloquear proposta nova para sempre. */
+export function isPendingExpired(createdAt: unknown, nowMs: number, ttlMin: number): boolean {
+  const t = new Date(String(createdAt ?? "")).getTime();
+  if (!Number.isFinite(t)) return true;
+  return nowMs - t > ttlMin * 60_000;
+}
+
 /** Prefixo das linhas de DESFECHO de captura no histórico — escritas por
  *  `captureOutcomeLine` (whatsapp-webhook) e por `capture`. Mora aqui porque
  *  é a FRONTEIRA que `textForExtraction` respeita: quem mudar o formato lá
@@ -590,36 +603,12 @@ const XP_BY_KIND: Record<string, number> = {
 };
 export const xpForKind = (kind: string) => XP_BY_KIND[kind] ?? 3;
 
-/* O DIA DE UM REGISTRO DE SONO — espelha src/lib/sleep.ts (`sleepWakeDay`).
-   Se mudar lá, mude aqui: o motivo inteiro está escrito naquele arquivo, e a
-   promessa deste canal é que app e WhatsApp gravam o MESMO fato do mesmo
-   jeito. Resumo: o dia de um sono é o dia em que a pessoa ACORDOU, então
-   "ontem dormi 6h" dito de manhã é a noite que acabou — hoje, não ontem. */
-const SLEEP_MORNING_UNTIL_H = 12;
-
-function dayBefore(dateISO: string): string {
-  const [y, m, d] = dateISO.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
-}
-
-/** Pura de propósito (dia e hora de SP entram por parâmetro): é o que deixa a
- *  regra testável sem banco e sem relógio. */
-export function sleepWakeDay(reportedDay: string, today: string, hourNow: number): string {
-  if (hourNow >= SLEEP_MORNING_UNTIL_H) return reportedDay;
-  return reportedDay === dayBefore(today) ? today : reportedDay;
-}
-
 export async function saveEventsServer(
   supabase: SupabaseClient, userId: string, events: AnyEvent[],
   sleepHoursFallback?: number | null,
 ): Promise<{ saved: number; xp: number }> {
   let saved = 0, xp = 0;
   const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
-  // Hora de SP, não do servidor: o Deno roda em UTC e a regra do sono depende
-  // de ser manhã PARA A PESSOA.
-  const hourNow = Number(new Intl.DateTimeFormat("en-GB", {
-    timeZone: "America/Sao_Paulo", hour: "2-digit", hourCycle: "h23",
-  }).formatToParts(new Date()).find((x) => x.type === "hour")?.value ?? "12");
   for (const ev of events) {
     if (!ev || typeof ev.kind !== "string" || typeof ev.pillar !== "string") continue;
     if (ev.kind === "transaction" && Number(ev.amount) > 0) {
@@ -670,15 +659,10 @@ export async function saveEventsServer(
     // Meio-dia como âncora: sem hora informada, qualquer horário dentro do dia
     // serve, e 12:00 nunca escorrega para o dia vizinho ao ser lido em SP
     // (o Brasil não usa mais horário de verão desde 2019).
+    // O dia do evento chega JÁ RESOLVIDO da extração (inclusive a regra do sono,
+    // em _shared/lib.ts): o gravador escreve o que a pessoa confirmou, nada mais.
     const evDay = String(ev.occurred_at ?? "").slice(0, 10);
-    // Sono: a noite que acabou de terminar é de HOJE, mesmo que a pessoa a
-    // chame de "ontem" (ver `sleepWakeDay` acima). Sem isto o registro nascia
-    // em ontem e a tela Hoje, que pergunta por hoje, dizia que não havia sono
-    // — e o convite matinal voltava para quem tinha acabado de registrar.
-    const reportedDay = /^\d{4}-\d{2}-\d{2}$/.test(evDay) && ev.kind === "sleep"
-      ? sleepWakeDay(evDay, todayIso, hourNow)
-      : evDay;
-    const retroDay = /^\d{4}-\d{2}-\d{2}$/.test(reportedDay) && reportedDay < todayIso ? reportedDay : null;
+    const retroDay = /^\d{4}-\d{2}-\d{2}$/.test(evDay) && evDay < todayIso ? evDay : null;
     const { error } = await supabase.from("life_events").insert({
       user_id: userId, pillar: ev.pillar, kind: ev.kind, payload, source: "whatsapp",
       ...(retroDay ? { occurred_at: `${retroDay}T12:00:00-03:00` } : {}),

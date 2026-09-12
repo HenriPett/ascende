@@ -69,57 +69,17 @@ export function pointToMinutes(x: number, y: number, cx: number, cy: number): nu
   return (Math.round(raw / 15) * 15) % 1440; // snap de 15 min (estilo iPhone)
 }
 
-/* ─── O DIA DE UM REGISTRO DE SONO ───────────────────────────────
+/* ─── E O DIA DE UM REGISTRO DE SONO? ─────────────────────────────
 
-   Sono é o único registro cujo dia é ambíguo por natureza: a noite atravessa
-   a virada. "Dormi 6h" dito às 7h da manhã fala de um sono que começou ONTEM
-   e terminou HOJE, e as duas respostas para "que dia foi isso?" são defensáveis.
+   Não mora aqui, e isso é deliberado. A regra ("o dia de um sono é o dia em
+   que a pessoa ACORDOU") está escrita por extenso em
+   supabase/functions/_shared/lib.ts, junto de `sleepWakeDay`/`resolveSleepDays`.
 
-   A REGRA DA CASA, agora escrita: o dia de um registro de sono é o dia em que
-   a pessoa ACORDOU.
+   Ela vive lá porque é lá que toda proposta nasce — app (capture, ai-chat) e
+   WhatsApp passam pela MESMA extração. O dia chega ao front já resolvido, e
+   `captureEvents.saveProposedEvents` escreve o que a pessoa confirmou sem
+   reinterpretar nada.
 
-   Não é invenção — é o que o app já fazia sem dizer. O check-in matinal
-   (SleepCheckin) pergunta de manhã sobre a noite que acabou e grava com o
-   `now()` do banco, ou seja, HOJE. É também a leitura que faz os Indicadores
-   valerem alguma coisa: correlacionar "o sono do dia D" com "o treino do dia
-   D" só diz algo se o sono for a noite que ANTECEDE aquele dia.
-
-   O BUG QUE ISTO CORRIGE. A captura por texto (app e WhatsApp) resolve datas
-   com a regra genérica de qualquer evento: "ontem" é hoje menos um. Para um
-   almoço está certo; para a noite que a pessoa acabou de dormir, não — quem
-   manda "ontem dormi 6h" às 7h da manhã está nomeando a noite pelo dia em que
-   FOI DEITAR, que é como todo mundo fala. O registro nascia em ontem, a tela
-   Hoje perguntava por hoje, e o convite de check-in reaparecia para quem
-   acabara de registrar: o registro existia e a interface dizia que não.
-
-   A CORREÇÃO É ESTREITA DE PROPÓSITO. Só desloca "ontem" → "hoje", e só de
-   manhã. De manhã as duas leituras de "ontem à noite" colapsam na mesma noite,
-   a que acabou de terminar. À tarde não colapsam ("ontem dormi mal" pode ser
-   a noite retrasada), e aí a data relatada é respeitada como veio. "Anteontem"
-   nunca se move: quem conta dois dias sabe o que está contando. */
-
-/** Até que hora (em SP) um relato de sono ainda fala da noite que acabou.
- *  Mesma fronteira do convite matinal de check-in, que perece ao meio-dia. */
-export const SLEEP_MORNING_UNTIL_H = 12;
-
-/** Dia anterior a um "YYYY-MM-DD", sem passar por fuso (UTC puro na conta). */
-function dayBefore(dateISO: string): string {
-  const [y, m, d] = dateISO.split("-").map(Number);
-  const prev = new Date(Date.UTC(y, m - 1, d - 1));
-  return prev.toISOString().slice(0, 10);
-}
-
-/**
- * Em que dia um registro de SONO deve nascer.
- *
- * Pura: `today` e `hourNow` (dia e hora em São Paulo) ENTRAM por parâmetro,
- * nenhuma leitura de relógio aqui dentro — mesma disciplina de `lib/insights.ts`.
- *
- * @param reportedDay dia "YYYY-MM-DD" que o relato apontou
- * @param today       dia civil de hoje em SP
- * @param hourNow     hora de agora em SP (0-23)
- */
-export function sleepWakeDay(reportedDay: string, today: string, hourNow: number): string {
-  if (hourNow >= SLEEP_MORNING_UNTIL_H) return reportedDay;
-  return reportedDay === dayBefore(today) ? today : reportedDay;
-}
+   Uma cópia da regra aqui seria pior do que nenhuma: duas cópias divergem em
+   silêncio, e aí app e WhatsApp voltam a gravar o mesmo fato de jeitos
+   diferentes — que é exatamente o bug que a regra existe para fechar. */

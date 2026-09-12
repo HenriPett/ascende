@@ -1,7 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
 import { todayISO } from "@/lib/format";
-import { hourInSP } from "@/lib/dates";
-import { sleepWakeDay } from "@/lib/sleep";
 import { localDay } from "@/lib/localDays";
 import { isPlausibleBodyWeightKg, BODY_WEIGHT_RANGE_LABEL } from "@/lib/bodyWeight";
 import { existingRecordKeys, isDuplicateError } from "@/lib/dataSources";
@@ -332,12 +330,11 @@ export interface CaptureSaveResult {
  * Grava os eventos confirmados pelo usuário. Lança erro se algum insert
  * falhar. Devolve o que entrou e o que foi recusado.
  *
- * `today` e `hourNow` são injetáveis só para teste; em produção são o dia e a
- * hora em São Paulo. A hora importa por causa do sono (ver `lib/sleep.ts`).
+ * `today` é injetável só para teste; em produção é o dia em São Paulo.
  */
 export async function saveProposedEvents(
   userId: string, events: ProposedEvent[], sleepSchedule?: SleepScheduleCtx | null,
-  today: string = todayISO(), hourNow: number = hourInSP(),
+  today: string = todayISO(),
 ): Promise<CaptureSaveResult> {
   const warnings: string[] = [];
   const savedEvents: ProposedEvent[] = [];
@@ -346,15 +343,11 @@ export async function saveProposedEvents(
     const refusal = transactionRefusal(ev);
     if (refusal) { warnings.push(refusal); continue; }
 
-    // Sono nomeado pelo dia em que a pessoa foi DEITAR ("ontem dormi 6h", às
-    // 7h da manhã) pertence ao dia em que ela ACORDOU — ver `lib/sleep.ts`.
-    // Só carimbo de data pura entra na regra: carimbo com hora é um instante
-    // explícito, e instante explícito manda.
-    const reportedDay = ev.kind === "sleep" && DATE_ONLY.test(String(ev.occurred_at ?? ""))
-      ? sleepWakeDay(ev.occurred_at, today, hourNow)
-      : ev.occurred_at;
-
-    const date = checkCaptureDate(reportedDay, today);
+    // O dia da proposta é escrito COMO VEIO. A resolução semântica (inclusive a
+    // regra do sono) acontece na extração, antes do cartão: a pessoa confirma
+    // exatamente o que vai para o banco (POSICIONAMENTO H.4). Aqui só mora a
+    // checagem de PLAUSIBILIDADE, que é outra coisa — ver o bloco acima.
+    const date = checkCaptureDate(ev.occurred_at, today);
     if (date.reason) { warnings.push(dateRefusal(ev, date.reason)); continue; }
 
     if (ev.kind === "transaction") {

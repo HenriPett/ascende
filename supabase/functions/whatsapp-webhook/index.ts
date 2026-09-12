@@ -35,7 +35,7 @@ import {
   waSendText, waSendButtons, verifyWaSignature, saveEventsServer, xpForKind, appUrl,
   waDownloadMedia, groqTranscribe, toBase64,
   classifyDocument, extractDocumentText,
-  textForExtraction, CAPTURE_OUTCOME_PREFIX, type HistoryTurn,
+  textForExtraction, CAPTURE_OUTCOME_PREFIX, isPendingExpired, type HistoryTurn,
 } from "../_shared/whatsapp.ts";
 
 const PENDING_TTL_MIN = 60;     // proposta sem resposta expira em 1h
@@ -202,6 +202,37 @@ async function proposeEvents(
     `${preface ? preface + "\n\n" : ""}Entendi assim:\n\n${lines}${events.length > WA_STATEMENT_MAX_ITEMS ? `\n… e mais ${events.length - WA_STATEMENT_MAX_ITEMS}` : ""}\n\nConfirmo?  Para ajustar detalhes, revise no app: ${url}/app`,
     [{ id: "wa_confirm", title: "✓ Confirmar" }, { id: "wa_discard", title: "✗ Descartar" }]);
   return userMsgId;
+}
+
+/* ─── A proposta que ninguém respondeu também precisa de um DESFECHO ─────
+
+   BUG (auditoria 12/09/2026): a fronteira que impede o item descartado de
+   voltar só se fechava por BOTÃO. Quem simplesmente ignora o cartão — o caso
+   mais comum de todos — não gerava linha de desfecho nenhuma, e aí:
+   • o relato ignorado continuava sendo herdado por toda mensagem curta
+     seguinte, re-extraído no modelo e re-proposto, sem fim;
+   • pior, a pendente velha nunca era apagada (não há limpeza por TTL no
+     banco: só o delete do botão e o `unlink_whatsapp`), então ela travava o
+     `if (!pending)` da rota conversacional PARA SEMPRE — nenhuma proposta
+     nova e legítima voltava a aparecer.
+
+   O TTL de 1h já existia, mas só era consultado quando a pessoa apertava
+   "Confirmar". Agora ele é aplicado na chegada de qualquer mensagem: a
+   pendente vencida é apagada E ganha a linha "expirado", a MESMA que o botão
+   escreveria. Assim uma correção fecha as duas pontas — `textForExtraction`
+   já sabe parar nessa linha, e o `if (!pending)` volta a ver campo livre.
+
+   Roda ANTES de qualquer rota que leia o histórico, para a linha de desfecho
+   já estar lá quando a herança de contexto for decidida. */
+// deno-lint-ignore no-explicit-any
+async function expireStalePending(supabase: any, userId: string): Promise<void> {
+  const { data: pending } = await supabase.from("whatsapp_pending")
+    .select("created_at").eq("user_id", userId).maybeSingle();
+  if (!pending || !isPendingExpired(pending.created_at, Date.now(), PENDING_TTL_MIN)) return;
+  await supabase.from("whatsapp_pending").delete().eq("user_id", userId);
+  // Sem aviso ativo: a pessoa não pediu nada e uma mensagem "sua proposta
+  // expirou" seria cobrança. O histórico registra, a conversa segue.
+  await pushHistory(supabase, userId, "assistant", captureOutcomeLine("expirado"));
 }
 
 const HELP = (url: string) =>
@@ -405,7 +436,10 @@ async function counselorTurn(
     await attachMemorySources(supabase, userId, learned.map((m) => m.id), "chat_message", userMsgId);
 
     // Uma proposta pendente por vez: sobrescrever a que a pessoa ainda não
-    // respondeu faria o botão "Confirmar" gravar outra coisa.
+    // respondeu faria o botão "Confirmar" gravar outra coisa. A pendente
+    // VENCIDA já foi varrida na entrada da requisição (expireStalePending),
+    // então o que sobra aqui é proposta viva de verdade — antes, uma pendente
+    // esquecida bloqueava esta guarda para sempre.
     if (ok && events.length) {
       const { data: pending } = await supabase.from("whatsapp_pending")
         .select("user_id").eq("user_id", userId).maybeSingle();
@@ -469,6 +503,13 @@ Deno.serve(async (req) => {
     if (msg.type === "interactive" && msg.interactive?.type === "button_reply") {
       if (!link) return new Response("ok", { status: 200 });
       const btn = String(msg.interactive.button_reply?.id ?? "");
+      // Botão que não é nosso sai ANTES de tocar na pendente. Antes ele caía
+      // aqui, apagava a proposta e voltava sem escrever desfecho nenhum: o
+      // relato ficava órfão no histórico e a próxima mensagem curta o herdava
+      // e o re-propunha — ressurreição por engano, com o cartão já apagado.
+      if (btn !== "wa_confirm" && btn !== "wa_discard") {
+        return new Response("ok", { status: 200 });
+      }
       const { data: pending } = await supabase.from("whatsapp_pending")
         .select("events, created_at").eq("user_id", link.user_id).maybeSingle();
 
@@ -486,8 +527,7 @@ Deno.serve(async (req) => {
         return new Response("ok", { status: 200 });
       }
       if (btn === "wa_confirm") {
-        const expired = Date.now() - new Date(String(pending.created_at)).getTime() > PENDING_TTL_MIN * 60_000;
-        if (expired) {
+        if (isPendingExpired(pending.created_at, Date.now(), PENDING_TTL_MIN)) {
           await pushHistory(supabase, link.user_id, "assistant", captureOutcomeLine("expirado"));
           await waSendText(from, "Essa proposta já tinha expirado (1h). Me manda a frase de novo que eu refaço na hora.");
           return new Response("ok", { status: 200 });
@@ -509,6 +549,12 @@ Deno.serve(async (req) => {
       }
       return new Response("ok", { status: 200 });
     }
+
+    // ── Proposta vencida morre aqui, antes de qualquer rota ──
+    //    Depois do ramo dos botões de propósito: quem aperta "Confirmar" numa
+    //    proposta de 2h merece "essa proposta expirou", e não o genérico
+    //    "não achei nada pendente" que uma varredura antes produziria.
+    if (link) await expireStalePending(supabase, link.user_id);
 
     // ── Mídia sem vínculo: não dá para processar sem saber de quem é ──
     const isMedia = ["image", "audio", "voice", "document"].includes(String(msg.type));

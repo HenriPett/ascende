@@ -172,10 +172,15 @@ function Bloco({
         ))}
       </ul>
 
+      {/* O rodapé mandava "apague em Ajustes" — que era exatamente a viagem
+          que o bloco agora poupa. Com as ações aqui dentro, ele passa a dizer
+          o que dá para fazer NESTA tela, e Ajustes vira o que de fato é: o
+          histórico completo, para a revisão fria. */}
       <p className="text-[11px] text-muted-foreground">
-        Vou lembrar disso nas próximas conversas.{" "}
+        Vou lembrar disso nas próximas conversas. Toque em qualquer linha para corrigir ou
+        tirar do seu retrato.{" "}
         <Link to="/app/ajustes" className="underline underline-offset-2 hover:text-foreground">
-          Veja e apague o que sei sobre você em Ajustes.
+          Tudo o que sei sobre você fica em Ajustes.
         </Link>
       </p>
     </div>

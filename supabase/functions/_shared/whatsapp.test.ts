@@ -2,15 +2,15 @@
  *
  * Rode com:  deno test --allow-env --allow-net --allow-read supabase/functions/
  *
- * Os dois bugs cobertos aqui foram relatados pelo fundador e têm a mesma
- * assinatura: o sistema afirma para a pessoa algo diferente do que aconteceu.
- * Num, um item que ela DESCARTOU volta a ser proposto; no outro, um sono que
- * ela REGISTROU some da tela Hoje. Os dois moram em funções puras de propósito
- * — é o que permite provar a correção sem banco e sem relógio.
+ * O bug coberto aqui foi relatado pelo fundador: um item que a pessoa não
+ * confirmou volta a ser proposto em toda mensagem curta seguinte. A fronteira
+ * que o impede tem DUAS pontas — o desfecho por botão e o desfecho por TEMPO —
+ * e as duas moram em funções puras, o que permite prová-las sem banco e sem
+ * relógio. (A regra do dia do sono vive em lib.ts e tem teste em lib.test.ts.)
  */
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
-  textForExtraction, sleepWakeDay, CAPTURE_OUTCOME_PREFIX, SHORT_REPLY_CHARS,
+  textForExtraction, isPendingExpired, CAPTURE_OUTCOME_PREFIX, SHORT_REPLY_CHARS,
 } from "./whatsapp.ts";
 
 /** Histórico como o webhook o lê: DECRESCENTE, mais recente primeiro. */
@@ -76,71 +76,45 @@ Deno.test("textForExtraction · histórico vazio e fala repetida não duplicam",
   assertEquals(textForExtraction("Foi jantar", h(["user", "Foi jantar"])), "Foi jantar");
 });
 
-/* ─── A regra do dia do sono ──────────────────────────────────────────── */
+/* ─── A segunda ponta da fronteira: o desfecho por TEMPO ──────────────
 
-Deno.test("sleepWakeDay · 'ontem dormi 6h' às 7h é a noite que acabou: hoje", () => {
-  assertEquals(sleepWakeDay("2026-09-11", "2026-09-12", 7), "2026-09-12");
+   Fechar só por botão deixava de fora o caso mais comum de todos: a pessoa
+   simplesmente ignora o cartão. Sem desfecho, o relato era herdado para
+   sempre E a pendente velha travava a guarda `if (!pending)` — nenhuma
+   proposta nova voltava a aparecer na rota conversacional. */
+
+const MIN = 60_000;
+const AGORA = Date.parse("2026-09-12T12:00:00-03:00");
+const TTL = 60;
+
+Deno.test("isPendingExpired · proposta recente está viva", () => {
+  assertEquals(isPendingExpired(new Date(AGORA - 5 * MIN).toISOString(), AGORA, TTL), false);
+  assertEquals(isPendingExpired(new Date(AGORA).toISOString(), AGORA, TTL), false);
 });
 
-Deno.test("sleepWakeDay · à tarde 'ontem' é ontem mesmo", () => {
-  // Depois do meio-dia as duas leituras de "ontem à noite" deixam de
-  // colapsar, e chutar seria pior que respeitar o que a pessoa disse.
-  assertEquals(sleepWakeDay("2026-09-11", "2026-09-12", 12), "2026-09-11");
-  assertEquals(sleepWakeDay("2026-09-11", "2026-09-12", 22), "2026-09-11");
+Deno.test("isPendingExpired · depois do TTL, venceu", () => {
+  assertEquals(isPendingExpired(new Date(AGORA - 61 * MIN).toISOString(), AGORA, TTL), true);
+  assertEquals(isPendingExpired(new Date(AGORA - 26 * 60 * MIN).toISOString(), AGORA, TTL), true);
 });
 
-Deno.test("sleepWakeDay · anteontem nunca se move", () => {
-  assertEquals(sleepWakeDay("2026-09-10", "2026-09-12", 7), "2026-09-10");
+Deno.test("isPendingExpired · a fronteira é exatamente o TTL", () => {
+  // Exatamente 60min ainda vale (o botão desta proposta grava). Um ms depois, não.
+  assertEquals(isPendingExpired(new Date(AGORA - 60 * MIN).toISOString(), AGORA, TTL), false);
+  assertEquals(isPendingExpired(new Date(AGORA - 60 * MIN - 1).toISOString(), AGORA, TTL), true);
 });
 
-Deno.test("sleepWakeDay · hoje continua hoje", () => {
-  assertEquals(sleepWakeDay("2026-09-12", "2026-09-12", 7), "2026-09-12");
-});
-
-Deno.test("sleepWakeDay · atravessa a virada do mês e do ano", () => {
-  assertEquals(sleepWakeDay("2026-08-31", "2026-09-01", 6), "2026-09-01");
-  assertEquals(sleepWakeDay("2025-12-31", "2026-01-01", 6), "2026-01-01");
-  assertEquals(sleepWakeDay("2026-02-28", "2026-03-01", 6), "2026-03-01");
-});
-
-/* ─── A FRONTEIRA É UM CONTRATO ENTRE DOIS ARQUIVOS ──────────────────────
- *
- * `textForExtraction` só sabe onde parar porque reconhece o prefixo das linhas
- * de desfecho de captura. Quem ESCREVE essas linhas são dois arquivos, e só um
- * deles usa a constante:
- *
- *   whatsapp-webhook/index.ts  → monta a partir de CAPTURE_OUTCOME_PREFIX ✓
- *   capture/index.ts:65        → repete o literal à mão                   ✗
- *
- * Se alguém "melhorar" o texto do capture (trocar "registro no diário" por
- * outra coisa, tirar o "· ", mudar o colchete), a fronteira deixa de casar
- * NAQUELE caminho e o bug do item que volta ressuscita — sem nenhum teste
- * ficar vermelho, porque a lógica pura continua correta.
- *
- * Importar a constante no capture arrastaria este módulo inteiro (e as
- * dependências de WhatsApp) para dentro do bundle de uma função que não fala
- * WhatsApp. Então o acoplamento é garantido aqui, olhando o FONTE — mesmo
- * remédio grosseiro que lib.test.ts já usa para as leituras de memória.
- */
-Deno.test("toda linha de desfecho escrita no histórico casa com a fronteira", async () => {
-  const alvos = ["../capture/index.ts", "../whatsapp-webhook/index.ts"];
-
-  for (const alvo of alvos) {
-    const fonte = await Deno.readTextFile(new URL(alvo, import.meta.url));
-    // Toda montagem de "[registro no diário ..." no fonte, literal ou não.
-    const literais = [...fonte.matchAll(/\[registro no di[áa]rio[^`"']*/g)];
-
-    for (const m of literais) {
-      const trecho = m[0];
-      // Linhas de PROMPT (instruções ao modelo sobre como ler o histórico)
-      // não são escrita: elas descrevem o formato, não o produzem.
-      if (/foram escritas pelo SISTEMA|data hora/.test(trecho)) continue;
-      assert(
-        trecho.startsWith(CAPTURE_OUTCOME_PREFIX),
-        `${alvo}: a linha de desfecho não começa com CAPTURE_OUTCOME_PREFIX `
-        + `(${JSON.stringify(CAPTURE_OUTCOME_PREFIX)}). Achei: ${JSON.stringify(trecho.slice(0, 60))}. `
-        + `Mudar esse texto sem mudar a constante quebra textForExtraction em silêncio.`,
-      );
-    }
+Deno.test("isPendingExpired · data ilegível conta como VENCIDA", () => {
+  // Falha para o lado de liberar campo: uma pendente que ninguém consegue
+  // datar não pode bloquear proposta nova para o resto da vida da conta.
+  for (const lixo of [null, undefined, "", "nem data", {}]) {
+    assertEquals(isPendingExpired(lixo, AGORA, TTL), true, String(lixo));
   }
+});
+
+Deno.test("a linha de expirado é a MESMA fronteira que textForExtraction conhece", () => {
+  // É este acoplamento que faz uma correção fechar as duas pontas: a varredura
+  // por tempo escreve captureOutcomeLine("expirado"), e a herança para nela.
+  const expirado = `${CAPTURE_OUTCOME_PREFIX}12/09 08:30] A proposta expirou sem confirmação: NADA foi registrado.`;
+  const hist = h(["assistant", expirado], ["user", "Comi 3 pães franceses"]);
+  assertEquals(textForExtraction("E hoje?", hist), "E hoje?");
 });
