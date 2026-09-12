@@ -396,14 +396,20 @@ function Linha({
      crescer com `min-h-11` direto, sem margem negativa. */
   const recusando = salvando && row.pending === "recusar";
   return (
-    <li>
+    // O `-mx-1.5` mora no <li>, e não no botão, pelo mesmo motivo dos outros
+    // dois estados — mas aqui ele também conserta uma assimetria: `w-full`
+    // dentro do <li> mede a largura do <ul>, então margem negativa no BOTÃO
+    // deslizava a caixa 6px para a esquerda em vez de alargá-la 12, e o realce
+    // sobrava de um lado e faltava do outro. No <li>, o `w-full` já nasce com
+    // a largura certa.
+    <li className="-mx-1.5">
       <DropdownMenu open={menuAberto} onOpenChange={onMenu}>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
             disabled={recusando || !rowAceitaMenu(row)}
             aria-label={`Corrigir ou recusar: ${row.content}`}
-            className="w-full flex items-start gap-2 min-h-11 px-1.5 -mx-1.5 py-2 rounded-lg text-left text-sm hover:bg-primary/10 data-[state=open]:bg-primary/10 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="w-full flex items-start gap-2 min-h-11 px-1.5 py-2 rounded-lg text-left text-sm hover:bg-primary/10 data-[state=open]:bg-primary/10 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {recusando
               ? <Loader2 className="mt-1 w-3 h-3 shrink-0 animate-spin text-primary" />
