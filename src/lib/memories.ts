@@ -7,6 +7,11 @@
 
 /** Uma nuance que a IA acabou de aprender sobre o usuário (vinda do backend). */
 export interface LearnedMemory {
+  /** Id da linha em `ai_memories`. O backend sempre mandou (lib.ts monta
+   *  `learned` como { id, content, category }); faltava DECLARAR — e sem o
+   *  campo no tipo, o bloco do chat não tinha como corrigir nem recusar o que
+   *  a IA acabou de aprender, porque não sabia em qual memória mexer. */
+  id: string;
   content: string;
   category: string;
 }
