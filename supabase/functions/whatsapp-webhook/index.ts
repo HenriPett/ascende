@@ -35,6 +35,7 @@ import {
   waSendText, waSendButtons, verifyWaSignature, saveEventsServer, xpForKind, appUrl,
   waDownloadMedia, groqTranscribe, toBase64,
   classifyDocument, extractDocumentText,
+  textForExtraction, CAPTURE_OUTCOME_PREFIX, type HistoryTurn,
 } from "../_shared/whatsapp.ts";
 
 const PENDING_TTL_MIN = 60;     // proposta sem resposta expira em 1h
@@ -125,14 +126,16 @@ const eventBullets = (events: any[]) => events.slice(0, 12)
  *  distinguir "isto aconteceu de fato" de "isto eu disse". */
 // deno-lint-ignore no-explicit-any
 function captureOutcomeLine(outcome: "registrado" | "descartado" | "expirado", events: any[] = []): string {
-  const when = spStamp();
+  // Montado a partir da constante compartilhada, e não de um literal repetido
+  // três vezes: é este prefixo que `textForExtraction` reconhece como fronteira.
+  const head = `${CAPTURE_OUTCOME_PREFIX}${spStamp()}]`;
   if (outcome === "registrado") {
-    return `[registro no diário · ${when}] Registrei para você:\n${eventBullets(events)}`;
+    return `${head} Registrei para você:\n${eventBullets(events)}`;
   }
   if (outcome === "descartado") {
-    return `[registro no diário · ${when}] Você descartou a proposta: NADA foi registrado.`;
+    return `${head} Você descartou a proposta: NADA foi registrado.`;
   }
-  return `[registro no diário · ${when}] A proposta expirou sem confirmação: NADA foi registrado.`;
+  return `${head} A proposta expirou sem confirmação: NADA foi registrado.`;
 }
 
 /** Grava uma linha no histórico compartilhado com o app. Best-effort: falhar
@@ -392,17 +395,9 @@ async function counselorTurn(
      do produto ("responde a pergunta e registra ao mesmo tempo") passa a
      valer nos dois canais, não só no app. */
   try {
-    // "Foi jantar" sozinho não tem evento nenhum: o relato estava na mensagem
-    // anterior. Respostas curtas herdam a última fala da pessoa como contexto,
-    // senão o complemento de uma pergunta do Conselheiro se perde.
-    const SHORT_REPLY_CHARS = 60;
-    let forExtraction = text;
-    if (text.length <= SHORT_REPLY_CHARS) {
-      // deno-lint-ignore no-explicit-any
-      const prevUser = ((history ?? []) as any[]).find((m) => m.role === "user");
-      const prev = String(prevUser?.content ?? "").trim();
-      if (prev && prev !== text) forExtraction = `${prev}\n${text}`;
-    }
+    // A regra de herança (e a fronteira do desfecho que impede o item
+    // descartado de voltar) vive em _shared/whatsapp.ts, onde é testável.
+    const forExtraction = textForExtraction(text, (history ?? []) as HistoryTurn[]);
 
     const { ok, events, learned } = await extractEventsAndMemories(
       supabase, userId, forExtraction, "chat-extracao", ent.limits.memory_cap,

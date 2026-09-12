@@ -503,7 +503,11 @@ describe("saveProposedEvents · o cenario exato do Sentinela", () => {
   });
 
   it("sono de ONTEM grava no dia de ontem, e nao anteontem", async () => {
-    await saveProposedEvents(USER, [ontem()[1]], null, HOJE);
+    // A hora entra fixa (16h) porque desde a regra do dia do sono ela IMPORTA:
+    // de manhã, "sono de ontem" é a noite que acabou e vai para hoje (ver o
+    // bloco "a noite que atravessa a virada", abaixo). À tarde, não — e é o
+    // caso à tarde que este teste do Sentinela sempre quis provar.
+    await saveProposedEvents(USER, [ontem()[1]], null, HOJE, 16);
     const ev = state.rows.find((x) => x.__table === "life_events");
     expect(ev?.occurred_at).toBe("2026-09-01T12:00:00-03:00");
     // Meia-noite UTC cairia em 31/08 no fuso do app: o bug irmao deste.
@@ -511,7 +515,7 @@ describe("saveProposedEvents · o cenario exato do Sentinela", () => {
   });
 
   it("gasto + sono na mesma frase entram os DOIS, no dia certo", async () => {
-    const r = await saveProposedEvents(USER, ontem(), null, HOJE);
+    const r = await saveProposedEvents(USER, ontem(), null, HOJE, 16);
     expect(r.saved).toBe(2);
     expect(r.savedEvents).toHaveLength(2);
     expect(state.rows.map((x) => x.__table).sort()).toEqual(["life_events", "transactions"]);
@@ -549,6 +553,69 @@ describe("saveProposedEvents · o cenario exato do Sentinela", () => {
       undefined, { dataSourceId: SOURCE });
     expect(r).toEqual({ total: 2, accepted: 2, duplicates: 0 });
     expect(state.rows).toHaveLength(2);
+  });
+});
+
+describe("saveProposedEvents · a noite que atravessa a virada", () => {
+  /* BUG relatado pelo fundador: "mando mensagem para registrar o sono e às
+     vezes ele não conta como registrado na interface".
+
+     O "às vezes" era a frase. "Dormi 6h" → sem data → nasce agora, hoje, e a
+     tela Hoje enxerga. "Ontem dormi 6h", dito às 7h da manhã sobre a MESMA
+     noite → nascia em ontem, e a tela Hoje (que pergunta por hoje) dizia que
+     não havia sono nenhum. Registro feito, interface negando, convite matinal
+     de volta para quem tinha acabado de responder.
+
+     A regra que fecha isso está em `lib/sleep.ts`: o dia de um sono é o dia em
+     que a pessoa ACORDOU. Aqui ela é provada ponta a ponta, no que chega ao
+     banco — que é o que a tela lê depois. */
+  const sono = (occurred_at?: string): ProposedEvent => ({
+    kind: "sleep", pillar: "vitalidade", hours: 6,
+    summary: "Sono: 6 horas", occurred_at,
+  });
+
+  const gravado = () => state.rows.find((x) => x.__table === "life_events")?.occurred_at;
+
+  it("de manhã, 'ontem dormi 6h' entra em HOJE", async () => {
+    const r = await saveProposedEvents(USER, [sono("2026-09-01")], null, HOJE, 7);
+    expect(r.saved).toBe(1);
+    expect(gravado()).toBe("2026-09-02T12:00:00-03:00");
+  });
+
+  it("à tarde, 'ontem' continua sendo ontem", async () => {
+    // Depois do meio-dia as duas leituras deixam de colapsar numa só noite, e
+    // mexer na data viraria chute. Respeita o que a pessoa disse.
+    await saveProposedEvents(USER, [sono("2026-09-01")], null, HOJE, 13);
+    expect(gravado()).toBe("2026-09-01T12:00:00-03:00");
+  });
+
+  it("anteontem nunca se move, nem de manhã", async () => {
+    // Quem conta dois dias sabe o que está contando.
+    await saveProposedEvents(USER, [sono("2026-08-31")], null, HOJE, 7);
+    expect(gravado()).toBe("2026-08-31T12:00:00-03:00");
+  });
+
+  it("a regra é SÓ do sono: refeição de ontem continua em ontem", async () => {
+    // Almoço não atravessa a meia-noite, então não tem ambiguidade para
+    // resolver. Alargar a regra para todo evento apagaria registros retroativos.
+    await saveProposedEvents(USER, [{
+      kind: "meal", pillar: "alimentacao", summary: "Almoço", calories: 600,
+      occurred_at: "2026-09-01",
+    }], null, HOJE, 7);
+    expect(gravado()).toBe("2026-09-01T12:00:00-03:00");
+  });
+
+  it("carimbo COM HORA é instante explícito e não se move", async () => {
+    // Só "YYYY-MM-DD" é um dia nomeado por gente. Um instante completo veio de
+    // importação ou do próprio relato e manda sozinho.
+    await saveProposedEvents(USER, [sono("2026-09-01T23:30:00-03:00")], null, HOJE, 7);
+    expect(gravado()).toBe("2026-09-01T23:30:00-03:00");
+  });
+
+  it("sem carimbo nenhum, o banco usa now() — o caminho que sempre funcionou", async () => {
+    const r = await saveProposedEvents(USER, [sono(undefined)], null, HOJE, 7);
+    expect(r.saved).toBe(1);
+    expect(gravado()).toBeUndefined();
   });
 });
 

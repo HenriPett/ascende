@@ -515,6 +515,66 @@ export async function extractDocumentText(
   }
 }
 
+/* ─── Contexto herdado por resposta curta (rota conversacional) ──────────
+
+   "Foi jantar" sozinho não tem evento nenhum: o relato estava na mensagem
+   anterior. Por isso uma resposta curta herda a última fala da pessoa antes
+   de ir para a extração — senão o complemento de uma pergunta do Conselheiro
+   se perde.
+
+   BUG DE PRODUÇÃO: a heurística não olhava o que aconteceu ENTRE as duas
+   falas. Quem descartava a proposta ("✗ Descartar") via o MESMO item voltar a
+   cada mensagem curta seguinte: o relato antigo era herdado de novo,
+   re-extraído de novo, re-proposto de novo. O `if (!pending)` do webhook só
+   protege proposta VIVA; assim que ela é resolvida, o laço recomeça — e um
+   "não" da pessoa que volta como pergunta é exatamente o que corrói a
+   confiança no canal.
+
+   A fronteira já existia no histórico: todo desfecho de captura (registrado,
+   descartado, expirado) grava uma linha de assistant começando por
+   CAPTURE_OUTCOME_PREFIX. Tudo que vem ANTES dela já teve seu destino
+   decidido e não pode ser ressuscitado. Então a varredura para ali. */
+
+/** Prefixo das linhas de DESFECHO de captura no histórico — escritas por
+ *  `captureOutcomeLine` (whatsapp-webhook) e por `capture`. Mora aqui porque
+ *  é a FRONTEIRA que `textForExtraction` respeita: quem mudar o formato lá
+ *  tem de mudar esta constante junto, ou o laço do bug volta em silêncio. */
+export const CAPTURE_OUTCOME_PREFIX = "[registro no diário · ";
+
+/** Até quantos caracteres uma mensagem conta como "resposta curta" — o único
+ *  caso em que faz sentido herdar contexto. Frase inteira se explica sozinha. */
+export const SHORT_REPLY_CHARS = 60;
+
+/** Uma linha do histórico compartilhado (chat_messages). */
+export interface HistoryTurn { role: string; content: string }
+
+/**
+ * O texto que vai para a extração: a mensagem, sozinha ou precedida da fala
+ * anterior da pessoa quando ela é curta o bastante para ser um complemento.
+ *
+ * `history` vem em ordem DECRESCENTE (mais recente primeiro), como o webhook
+ * lê de chat_messages, e NÃO inclui a mensagem atual.
+ *
+ * Função pura, sem relógio e sem banco, porque é ela que carrega a regra: o
+ * teste que prova que o item descartado não volta é um teste de unidade.
+ */
+export function textForExtraction(
+  text: string, history: readonly HistoryTurn[] = [],
+): string {
+  if (text.length > SHORT_REPLY_CHARS) return text;
+  for (const turn of history) {
+    // Desfecho de captura: daqui para trás está tudo resolvido. Para.
+    if (turn?.role === "assistant" && String(turn.content ?? "").startsWith(CAPTURE_OUTCOME_PREFIX)) {
+      return text;
+    }
+    if (turn?.role !== "user") continue;
+    const prev = String(turn.content ?? "").trim();
+    // Repetir a mesma frase não acrescenta contexto, só duplica o relato.
+    return prev && prev !== text ? `${prev}\n${text}` : text;
+  }
+  return text;
+}
+
 /* ─── Gravação de eventos confirmados (versão servidor) ──────────────────
    Espelha src/lib/captureEvents.ts (saveProposedEvents): se mudar lá, mude
    aqui. Transações vão para `transactions` (o banco cria o evento derivado);
@@ -530,12 +590,36 @@ const XP_BY_KIND: Record<string, number> = {
 };
 export const xpForKind = (kind: string) => XP_BY_KIND[kind] ?? 3;
 
+/* O DIA DE UM REGISTRO DE SONO — espelha src/lib/sleep.ts (`sleepWakeDay`).
+   Se mudar lá, mude aqui: o motivo inteiro está escrito naquele arquivo, e a
+   promessa deste canal é que app e WhatsApp gravam o MESMO fato do mesmo
+   jeito. Resumo: o dia de um sono é o dia em que a pessoa ACORDOU, então
+   "ontem dormi 6h" dito de manhã é a noite que acabou — hoje, não ontem. */
+const SLEEP_MORNING_UNTIL_H = 12;
+
+function dayBefore(dateISO: string): string {
+  const [y, m, d] = dateISO.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+}
+
+/** Pura de propósito (dia e hora de SP entram por parâmetro): é o que deixa a
+ *  regra testável sem banco e sem relógio. */
+export function sleepWakeDay(reportedDay: string, today: string, hourNow: number): string {
+  if (hourNow >= SLEEP_MORNING_UNTIL_H) return reportedDay;
+  return reportedDay === dayBefore(today) ? today : reportedDay;
+}
+
 export async function saveEventsServer(
   supabase: SupabaseClient, userId: string, events: AnyEvent[],
   sleepHoursFallback?: number | null,
 ): Promise<{ saved: number; xp: number }> {
   let saved = 0, xp = 0;
   const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  // Hora de SP, não do servidor: o Deno roda em UTC e a regra do sono depende
+  // de ser manhã PARA A PESSOA.
+  const hourNow = Number(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Sao_Paulo", hour: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date()).find((x) => x.type === "hour")?.value ?? "12");
   for (const ev of events) {
     if (!ev || typeof ev.kind !== "string" || typeof ev.pillar !== "string") continue;
     if (ev.kind === "transaction" && Number(ev.amount) > 0) {
@@ -587,7 +671,14 @@ export async function saveEventsServer(
     // serve, e 12:00 nunca escorrega para o dia vizinho ao ser lido em SP
     // (o Brasil não usa mais horário de verão desde 2019).
     const evDay = String(ev.occurred_at ?? "").slice(0, 10);
-    const retroDay = /^\d{4}-\d{2}-\d{2}$/.test(evDay) && evDay < todayIso ? evDay : null;
+    // Sono: a noite que acabou de terminar é de HOJE, mesmo que a pessoa a
+    // chame de "ontem" (ver `sleepWakeDay` acima). Sem isto o registro nascia
+    // em ontem e a tela Hoje, que pergunta por hoje, dizia que não havia sono
+    // — e o convite matinal voltava para quem tinha acabado de registrar.
+    const reportedDay = /^\d{4}-\d{2}-\d{2}$/.test(evDay) && ev.kind === "sleep"
+      ? sleepWakeDay(evDay, todayIso, hourNow)
+      : evDay;
+    const retroDay = /^\d{4}-\d{2}-\d{2}$/.test(reportedDay) && reportedDay < todayIso ? reportedDay : null;
     const { error } = await supabase.from("life_events").insert({
       user_id: userId, pillar: ev.pillar, kind: ev.kind, payload, source: "whatsapp",
       ...(retroDay ? { occurred_at: `${retroDay}T12:00:00-03:00` } : {}),
