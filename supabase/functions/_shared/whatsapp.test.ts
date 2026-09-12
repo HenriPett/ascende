@@ -8,7 +8,7 @@
  * ela REGISTROU some da tela Hoje. Os dois moram em funções puras de propósito
  * — é o que permite provar a correção sem banco e sem relógio.
  */
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   textForExtraction, sleepWakeDay, CAPTURE_OUTCOME_PREFIX, SHORT_REPLY_CHARS,
 } from "./whatsapp.ts";
@@ -101,4 +101,46 @@ Deno.test("sleepWakeDay · atravessa a virada do mês e do ano", () => {
   assertEquals(sleepWakeDay("2026-08-31", "2026-09-01", 6), "2026-09-01");
   assertEquals(sleepWakeDay("2025-12-31", "2026-01-01", 6), "2026-01-01");
   assertEquals(sleepWakeDay("2026-02-28", "2026-03-01", 6), "2026-03-01");
+});
+
+/* ─── A FRONTEIRA É UM CONTRATO ENTRE DOIS ARQUIVOS ──────────────────────
+ *
+ * `textForExtraction` só sabe onde parar porque reconhece o prefixo das linhas
+ * de desfecho de captura. Quem ESCREVE essas linhas são dois arquivos, e só um
+ * deles usa a constante:
+ *
+ *   whatsapp-webhook/index.ts  → monta a partir de CAPTURE_OUTCOME_PREFIX ✓
+ *   capture/index.ts:65        → repete o literal à mão                   ✗
+ *
+ * Se alguém "melhorar" o texto do capture (trocar "registro no diário" por
+ * outra coisa, tirar o "· ", mudar o colchete), a fronteira deixa de casar
+ * NAQUELE caminho e o bug do item que volta ressuscita — sem nenhum teste
+ * ficar vermelho, porque a lógica pura continua correta.
+ *
+ * Importar a constante no capture arrastaria este módulo inteiro (e as
+ * dependências de WhatsApp) para dentro do bundle de uma função que não fala
+ * WhatsApp. Então o acoplamento é garantido aqui, olhando o FONTE — mesmo
+ * remédio grosseiro que lib.test.ts já usa para as leituras de memória.
+ */
+Deno.test("toda linha de desfecho escrita no histórico casa com a fronteira", async () => {
+  const alvos = ["../capture/index.ts", "../whatsapp-webhook/index.ts"];
+
+  for (const alvo of alvos) {
+    const fonte = await Deno.readTextFile(new URL(alvo, import.meta.url));
+    // Toda montagem de "[registro no diário ..." no fonte, literal ou não.
+    const literais = [...fonte.matchAll(/\[registro no di[áa]rio[^`"']*/g)];
+
+    for (const m of literais) {
+      const trecho = m[0];
+      // Linhas de PROMPT (instruções ao modelo sobre como ler o histórico)
+      // não são escrita: elas descrevem o formato, não o produzem.
+      if (/foram escritas pelo SISTEMA|data hora/.test(trecho)) continue;
+      assert(
+        trecho.startsWith(CAPTURE_OUTCOME_PREFIX),
+        `${alvo}: a linha de desfecho não começa com CAPTURE_OUTCOME_PREFIX `
+        + `(${JSON.stringify(CAPTURE_OUTCOME_PREFIX)}). Achei: ${JSON.stringify(trecho.slice(0, 60))}. `
+        + `Mudar esse texto sem mudar a constante quebra textForExtraction em silêncio.`,
+      );
+    }
+  }
 });
