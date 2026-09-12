@@ -343,6 +343,10 @@ export async function saveProposedEvents(
     const refusal = transactionRefusal(ev);
     if (refusal) { warnings.push(refusal); continue; }
 
+    // O dia da proposta é escrito COMO VEIO. A resolução semântica (inclusive a
+    // regra do sono) acontece na extração, antes do cartão: a pessoa confirma
+    // exatamente o que vai para o banco (POSICIONAMENTO H.4). Aqui só mora a
+    // checagem de PLAUSIBILIDADE, que é outra coisa — ver o bloco acima.
     const date = checkCaptureDate(ev.occurred_at, today);
     if (date.reason) { warnings.push(dateRefusal(ev, date.reason)); continue; }
 

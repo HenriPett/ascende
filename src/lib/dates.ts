@@ -43,6 +43,22 @@ export const isSundayInSP = (d: Date = new Date()) => spParts(d).weekday === "Su
 /** Hora local de São Paulo (0-23), para saudações. */
 export const hourInSP = (d: Date = new Date()) => spParts(d).hour;
 
+/** Instante ISO (UTC) da MEIA-NOITE de um dia civil de São Paulo — o corte
+ *  para perguntar ao banco "o que aconteceu nesse dia?".
+ *
+ *  Existe porque `new Date(); setHours(0,0,0,0)` devolve a meia-noite do
+ *  NAVEGADOR, e o resto do app conta o dia em SP: duas réguas para o mesmo
+ *  fato. Quem está fora do fuso (viagem, aparelho em UTC) recebia respostas
+ *  que contradiziam a própria tela.
+ *
+ *  O offset é fixo em -03:00 porque o Brasil não usa horário de verão desde
+ *  2019 — a mesma premissa que `captureEvents` já assume nos seus carimbos. */
+export const startOfDayInSP = (dateIso: string) =>
+  new Date(`${dateIso}T00:00:00-03:00`).toISOString();
+
+/** Instante ISO (UTC) da meia-noite de HOJE em São Paulo. */
+export const startOfTodayInSP = () => startOfDayInSP(todayISOInSP());
+
 /** Formata um instante UTC/ISO para exibição em pt-BR no fuso de SP. */
 export function formatSP(iso: string, opts: Intl.DateTimeFormatOptions = { day: "2-digit", month: "2-digit", year: "numeric" }) {
   try {

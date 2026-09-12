@@ -1236,6 +1236,94 @@ O conteúdo abaixo inclui um arquivo enviado pela pessoa. Aqui, tabela e CSV SÃ
 • TETO RÍGIDO: no máximo ${EXTRACTION_MAX_EVENTS} eventos nesta resposta. Se o arquivo tiver mais, extraia os ${EXTRACTION_MAX_EVENTS} MAIS RECENTES (datas mais novas primeiro) e ignore o resto — o app avisa a pessoa que sobrou dado, isso não é sua responsabilidade e não é motivo para resumir ou agrupar linhas.
 • NUNCA invente linhas, datas ou valores que não estejam no arquivo, e nunca agregue várias linhas num evento só.`;
 
+/* ─── O DIA DE UM REGISTRO DE SONO ───────────────────────────────
+
+   Sono é o único registro cujo dia é ambíguo por natureza: a noite atravessa
+   a virada. "Dormi 6h" dito às 7h da manhã fala de um sono que começou ONTEM
+   e terminou HOJE, e as duas respostas para "que dia foi isso?" são defensáveis.
+
+   A REGRA DA CASA, agora escrita: o dia de um registro de sono é o dia em que
+   a pessoa ACORDOU.
+
+   Não é invenção — é o que o app já fazia sem dizer. O check-in matinal
+   (SleepCheckin) pergunta de manhã sobre a noite que acabou e grava com o
+   `now()` do banco, ou seja, HOJE. É também a leitura que faz os Indicadores
+   valerem alguma coisa: correlacionar "o sono do dia D" com "o treino do dia
+   D" só diz algo se o sono for a noite que ANTECEDE aquele dia.
+
+   O BUG QUE ISTO CORRIGE. A extração resolve datas com a regra genérica de
+   qualquer evento: "ontem" é hoje menos um. Para um almoço está certo; para a
+   noite que a pessoa acabou de dormir, não — quem manda "ontem dormi 6h" às 7h
+   da manhã está nomeando a noite pelo dia em que FOI DEITAR, que é como todo
+   mundo fala. O registro nascia em ontem, a tela Hoje perguntava por hoje, e o
+   convite de check-in reaparecia para quem acabara de registrar: o registro
+   existia e a interface dizia que não.
+
+   POR QUE AQUI, NA EXTRAÇÃO, E NÃO NO GRAVADOR. Primeiro tentamos deslocar o
+   dia na hora de salvar, e estava errado por dois motivos.
+   • POSICIONAMENTO H.4: "o resultado final é proposta confirmável". Deslocar
+     depois do sim da pessoa faz ela confirmar um cartão e o banco guardar
+     outro dia. A proposta tem de ser exatamente o que vai ser gravado.
+   • E o resultado passava a depender de QUANDO ela apertou o botão: proposta
+     feita às 11h50 e confirmada às 12h10 (a pendente do WhatsApp vive 1h, o
+     cartão do app vive enquanto a tela estiver aberta) caía do outro lado da
+     fronteira das 12h e gravava um dia diferente do de uma confirmação
+     imediata. Mesma frase, mesma noite, dia diferente por causa da demora.
+   Resolvendo aqui, o dia nasce junto com a proposta e não muda mais.
+
+   A CORREÇÃO É ESTREITA DE PROPÓSITO. Só desloca "ontem" → "hoje", e só de
+   manhã. De manhã as duas leituras de "ontem à noite" colapsam na mesma noite,
+   a que acabou de terminar. À tarde não colapsam ("ontem dormi mal" pode ser
+   a noite retrasada), e aí a data relatada é respeitada como veio. "Anteontem"
+   nunca se move: quem conta dois dias sabe o que está contando.
+
+   ESPELHO NO APP: src/lib/sleep.ts aponta para cá. A regra vive AQUI porque é
+   aqui que toda proposta nasce — app (capture, ai-chat) e WhatsApp. */
+
+/** Até que hora (em SP) um relato de sono ainda fala da noite que acabou.
+ *  Mesma fronteira do convite matinal de check-in, que perece ao meio-dia. */
+export const SLEEP_MORNING_UNTIL_H = 12;
+
+/** Dia anterior a um "YYYY-MM-DD", sem passar por fuso (UTC puro na conta). */
+function dayBefore(dateISO: string): string {
+  const [y, m, d] = dateISO.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * Em que dia um registro de SONO deve nascer.
+ *
+ * Pura: `today` e `hourNow` (dia e hora em São Paulo) ENTRAM por parâmetro,
+ * nenhuma leitura de relógio aqui dentro — mesma disciplina de `lib/insights.ts`.
+ */
+export function sleepWakeDay(reportedDay: string, today: string, hourNow: number): string {
+  if (hourNow >= SLEEP_MORNING_UNTIL_H) return reportedDay;
+  return reportedDay === dayBefore(today) ? today : reportedDay;
+}
+
+const SLEEP_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Aplica a regra do dia do sono à lista de eventos recém-extraída, ANTES de
+ * ela virar proposta.
+ *
+ * Só mexe em `kind: "sleep"` com carimbo de DATA PURA: carimbo com hora é um
+ * instante explícito e manda sozinho. Soneca (`nap`) fica de fora — cochilo
+ * não atravessa a meia-noite e não tem ambiguidade para resolver.
+ *
+ * Devolve uma lista NOVA: a entrada continua sendo o que o modelo respondeu.
+ */
+// deno-lint-ignore no-explicit-any
+export function resolveSleepDays(events: any[], today: string, hourNow: number): any[] {
+  return (events ?? []).map((ev) => {
+    if (!ev || ev.kind !== "sleep") return ev;
+    const day = String(ev.occurred_at ?? "");
+    if (!SLEEP_DATE_ONLY.test(day)) return ev;
+    const wake = sleepWakeDay(day, today, hourNow);
+    return wake === day ? ev : { ...ev, occurred_at: wake };
+  });
+}
+
 export async function extractEventsAndMemories(
   supabase: SupabaseClient, userId: string, text: string,
   feature: string, memoryCap = 150,
@@ -1297,7 +1385,17 @@ export async function extractEventsAndMemories(
     const rawEvents = Array.isArray(tu?.input?.events) ? tu.input.events : [];
     // Teto aplicado também aqui: o schema pede maxItems, mas quem garante é
     // o servidor (o modelo pode passar do teto e não é o usuário que paga).
-    const events = rawEvents.slice(0, EXTRACTION_MAX_EVENTS);
+    // A noite que a pessoa chama de "ontem" de manhã é a que terminou hoje (ver
+    // o bloco acima). Resolvido AQUI, o dia entra na proposta — ela confirma
+    // exatamente o que vai ser gravado. Arquivo (`bulk`) fica de fora: ali a
+    // data vem do próprio CSV, não de alguém falando, e 555 noites exportadas
+    // são dado histórico que ninguém está nomeando por "ontem".
+    const sp = spParts();
+    const events = bulk
+      ? rawEvents.slice(0, EXTRACTION_MAX_EVENTS)
+      : resolveSleepDays(
+        rawEvents.slice(0, EXTRACTION_MAX_EVENTS), sp.dateIso, Number(sp.timeHm.slice(0, 2)),
+      );
     const rawMems = Array.isArray(tu?.input?.memories) ? tu.input.memories : [];
     const learned = await persistMemories(supabase, userId, rawMems, known, memoryCap);
     return { ok: true, events, learned, capped: rawEvents.length >= EXTRACTION_MAX_EVENTS };

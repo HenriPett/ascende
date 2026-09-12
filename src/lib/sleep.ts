@@ -68,3 +68,18 @@ export function pointToMinutes(x: number, y: number, cx: number, cy: number): nu
   const raw = (norm / (Math.PI * 2)) * 1440;
   return (Math.round(raw / 15) * 15) % 1440; // snap de 15 min (estilo iPhone)
 }
+
+/* ─── E O DIA DE UM REGISTRO DE SONO? ─────────────────────────────
+
+   Não mora aqui, e isso é deliberado. A regra ("o dia de um sono é o dia em
+   que a pessoa ACORDOU") está escrita por extenso em
+   supabase/functions/_shared/lib.ts, junto de `sleepWakeDay`/`resolveSleepDays`.
+
+   Ela vive lá porque é lá que toda proposta nasce — app (capture, ai-chat) e
+   WhatsApp passam pela MESMA extração. O dia chega ao front já resolvido, e
+   `captureEvents.saveProposedEvents` escreve o que a pessoa confirmou sem
+   reinterpretar nada.
+
+   Uma cópia da regra aqui seria pior do que nenhuma: duas cópias divergem em
+   silêncio, e aí app e WhatsApp voltam a gravar o mesmo fato de jeitos
+   diferentes — que é exatamente o bug que a regra existe para fechar. */

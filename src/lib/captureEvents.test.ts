@@ -552,6 +552,60 @@ describe("saveProposedEvents · o cenario exato do Sentinela", () => {
   });
 });
 
+describe("saveProposedEvents · grava o dia PROPOSTO, sem reinterpretar", () => {
+  /* POSICIONAMENTO H.4: "o resultado final é proposta confirmável". O dia que
+     a pessoa confirmou no cartão tem de ser o dia que entra no banco.
+
+     Isto já foi violado uma vez: a regra do dia do sono ("a noite que a pessoa
+     chama de ontem, de manhã, é a que terminou hoje") chegou a rodar AQUI
+     dentro, depois do sim dela. Além de contradizer o cartão, o resultado
+     passava a depender de QUANDO o botão foi apertado: proposta das 11h50
+     confirmada às 12h10 atravessava a fronteira das 12h e gravava outro dia.
+     A regra mudou de lugar (vive na extração, antes do cartão); estes testes
+     são a trava que a impede de voltar para cá. */
+  const sono = (occurred_at?: string): ProposedEvent => ({
+    kind: "sleep", pillar: "vitalidade", hours: 6,
+    summary: "Sono: 6 horas", occurred_at,
+  });
+
+  const gravado = () => state.rows.find((x) => x.__table === "life_events")?.occurred_at;
+
+  it("sono proposto para ONTEM entra em ontem — em qualquer hora do dia", async () => {
+    // Nenhuma leitura de relógio decide isto: o gravador não tem mais hora.
+    const r = await saveProposedEvents(USER, [sono("2026-09-01")], null, HOJE);
+    expect(r.saved).toBe(1);
+    expect(gravado()).toBe("2026-09-01T12:00:00-03:00");
+  });
+
+  it("sono proposto para HOJE entra em hoje", async () => {
+    await saveProposedEvents(USER, [sono(HOJE)], null, HOJE);
+    expect(gravado()).toBe("2026-09-02T12:00:00-03:00");
+  });
+
+  it("carimbo COM HORA é respeitado como veio", async () => {
+    await saveProposedEvents(USER, [sono("2026-09-01T23:30:00-03:00")], null, HOJE);
+    expect(gravado()).toBe("2026-09-01T23:30:00-03:00");
+  });
+
+  it("sem carimbo nenhum, o banco usa now() — o caminho que sempre funcionou", async () => {
+    const r = await saveProposedEvents(USER, [sono(undefined)], null, HOJE);
+    expect(r.saved).toBe(1);
+    expect(gravado()).toBeUndefined();
+  });
+
+  it("sono e refeição do mesmo dia caem no MESMO dia", async () => {
+    // Se algum dia alguém reintroduzir um deslocamento só para o sono aqui
+    // dentro, os dois se separam e este teste fica vermelho.
+    await saveProposedEvents(USER, [
+      sono("2026-09-01"),
+      { kind: "meal", pillar: "alimentacao", summary: "Almoço", calories: 600, occurred_at: "2026-09-01" },
+    ], null, HOJE);
+    const dias = state.rows.filter((x) => x.__table === "life_events").map((x) => x.occurred_at);
+    expect(dias).toHaveLength(2);
+    expect(new Set(dias).size).toBe(1);
+  });
+});
+
 describe("saveProposedEvents · pesagem de exatamente 20,0 kg (bug da fronteira)", () => {
   it("o valor que o cartao mostrou e o valor que o payload guarda", async () => {
     /* O bug fechado: 20,0 kg aparecia no cartao de revisao, a pessoa

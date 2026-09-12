@@ -18,6 +18,7 @@
 import { assert, assertEquals, assertFalse } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   extractEventsAndMemories, isMemoryReadable, isUserOwnedMemory, type MemoryRow,
+  sleepWakeDay, resolveSleepDays, SLEEP_MORNING_UNTIL_H,
 } from "./lib.ts";
 
 const USER = "11111111-1111-1111-1111-111111111111";
@@ -355,4 +356,167 @@ Deno.test("nenhuma leitura de memória escapa da regra de status", async () => {
     fonte.includes("MEMORY_COLS_LEGACY"),
     "MEMORY_COLS_LEGACY voltou: era a leitura sem status nem validade",
   );
+});
+
+/* ═══ O DIA DE UM REGISTRO DE SONO ═══════════════════════════════
+
+   Bug relatado pelo fundador: "mando mensagem para registrar o sono e às vezes
+   ele não conta como registrado na interface". O "às vezes" era a frase —
+   "dormi 6h" funcionava, "ONTEM dormi 6h" (a mesma noite, dita de manhã) caía
+   em ontem e a tela Hoje, que pergunta por hoje, dizia que não havia sono.
+
+   A regra vive na EXTRAÇÃO e não no gravador, para o dia entrar na proposta:
+   a pessoa confirma exatamente o que vai ser gravado (POSICIONAMENTO H.4), e o
+   resultado deixa de depender de quando ela apertou o botão. */
+
+const HOJE = "2026-09-12";
+const ONTEM = "2026-09-11";
+
+Deno.test("sleepWakeDay · de manhã, 'ontem' é a noite que acabou: hoje", () => {
+  for (const hora of [0, 6, 7, 11]) {
+    assertEquals(sleepWakeDay(ONTEM, HOJE, hora), HOJE, `${hora}h`);
+  }
+});
+
+Deno.test("sleepWakeDay · do meio-dia em diante, 'ontem' é ontem", () => {
+  // Aqui as duas leituras deixam de colapsar: "ontem dormi mal" pode ser a
+  // noite retrasada. Mexer na data seria trocar um chute por outro.
+  for (const hora of [SLEEP_MORNING_UNTIL_H, 13, 20, 23]) {
+    assertEquals(sleepWakeDay(ONTEM, HOJE, hora), ONTEM, `${hora}h`);
+  }
+});
+
+Deno.test("sleepWakeDay · só 'ontem' se move", () => {
+  assertEquals(sleepWakeDay(HOJE, HOJE, 7), HOJE);
+  assertEquals(sleepWakeDay("2026-09-10", HOJE, 7), "2026-09-10");  // anteontem
+  assertEquals(sleepWakeDay("2026-08-12", HOJE, 7), "2026-08-12");
+});
+
+Deno.test("sleepWakeDay · a fronteira é a mesma do convite matinal", () => {
+  // SleepCheckin some às 12h em SP (`hourInSP() < 12`). Se as duas fronteiras
+  // andarem separadas, volta a existir uma hora do dia em que a tela pergunta
+  // por uma noite que a proposta mandou para outro dia.
+  assertEquals(SLEEP_MORNING_UNTIL_H, 12);
+  assertEquals(sleepWakeDay(ONTEM, HOJE, SLEEP_MORNING_UNTIL_H - 1), HOJE);
+  assertEquals(sleepWakeDay(ONTEM, HOJE, SLEEP_MORNING_UNTIL_H), ONTEM);
+});
+
+Deno.test("sleepWakeDay · atravessa mês, ano e 29 de fevereiro", () => {
+  assertEquals(sleepWakeDay("2026-08-31", "2026-09-01", 6), "2026-09-01");
+  assertEquals(sleepWakeDay("2025-12-31", "2026-01-01", 6), "2026-01-01");
+  assertEquals(sleepWakeDay("2024-02-29", "2024-03-01", 6), "2024-03-01");
+});
+
+Deno.test("resolveSleepDays · desloca o sono e nada mais", () => {
+  const eventos = [
+    { kind: "sleep", occurred_at: ONTEM, summary: "Sono: 6h" },
+    { kind: "meal", occurred_at: ONTEM, summary: "Almoço" },
+    { kind: "nap", occurred_at: ONTEM, summary: "Soneca" },
+  ];
+  const out = resolveSleepDays(eventos, HOJE, 7);
+  assertEquals(out[0].occurred_at, HOJE);
+  // Almoço não atravessa a meia-noite; cochilo tampouco. Sem ambiguidade,
+  // sem deslocamento — alargar a regra apagaria registro retroativo legítimo.
+  assertEquals(out[1].occurred_at, ONTEM);
+  assertEquals(out[2].occurred_at, ONTEM);
+});
+
+Deno.test("resolveSleepDays · carimbo com HORA é instante explícito e não se move", () => {
+  const out = resolveSleepDays(
+    [{ kind: "sleep", occurred_at: `${ONTEM}T23:30:00-03:00` }], HOJE, 7);
+  assertEquals(out[0].occurred_at, `${ONTEM}T23:30:00-03:00`);
+});
+
+Deno.test("resolveSleepDays · sono SEM carimbo continua sem carimbo", () => {
+  // Data omitida = "foi agora", e o banco usa now(). É o caminho de "dormi 6h",
+  // que sempre funcionou: a regra não pode inventar uma data para ele.
+  const out = resolveSleepDays([{ kind: "sleep", summary: "Sono: 6h" }], HOJE, 7);
+  assertEquals(out[0].occurred_at, undefined);
+});
+
+Deno.test("resolveSleepDays · não muta a resposta do modelo", () => {
+  const original = { kind: "sleep", occurred_at: ONTEM };
+  const out = resolveSleepDays([original], HOJE, 7);
+  assertEquals(original.occurred_at, ONTEM);   // entrada intacta
+  assertEquals(out[0].occurred_at, HOJE);
+});
+
+Deno.test("resolveSleepDays · lista vazia e evento nulo não derrubam a extração", () => {
+  assertEquals(resolveSleepDays([], HOJE, 7), []);
+  assertEquals(resolveSleepDays([null], HOJE, 7), [null]);
+});
+
+/* ─── E a regra chega à PROPOSTA, que é o ponto inteiro ───────────────
+
+   Testar `resolveSleepDays` sozinho não pegaria a regressão que importa: se
+   alguém remover a chamada de dentro de extractEventsAndMemories, a função
+   continua verde e o bug volta inteiro. Estes testes dirigem o caminho real.
+
+   O relógio é congelado porque a regra depende da hora em SP: sem isso o
+   teste só provaria o deslocamento se a suíte rodasse antes do meio-dia — e
+   uma suíte que só pega o bug de manhã não pega o bug. */
+
+/** Fixa `new Date()` e `Date.now()` num instante, e devolve como desfazer. */
+// deno-lint-ignore no-explicit-any
+function freezeClock(iso: string): () => void {
+  const Real = Date;
+  const t = Real.parse(iso);
+  // deno-lint-ignore no-explicit-any
+  const Fake: any = function (...args: any[]) {
+    // deno-lint-ignore no-explicit-any
+    return args.length === 0 ? new Real(t) : new (Real as any)(...args);
+  };
+  Fake.now = () => t;
+  Fake.parse = Real.parse;
+  Fake.UTC = Real.UTC;
+  Fake.prototype = Real.prototype;
+  // deno-lint-ignore no-explicit-any
+  (globalThis as any).Date = Fake;
+  // deno-lint-ignore no-explicit-any
+  return () => { (globalThis as any).Date = Real; };
+}
+
+const NOITE_DE_ONTEM = "2026-09-11";
+const HOJE_SP = "2026-09-12";
+
+Deno.test("extração · de manhã, o sono de 'ontem' já sai resolvido na PROPOSTA", async () => {
+  // 07:30 em São Paulo: a pessoa acabou de acordar e conta a noite que teve.
+  const unfreeze = freezeClock("2026-09-12T07:30:00-03:00");
+  const { db } = fakeDb();
+  const stub = stubAnthropic([], [
+    { kind: "sleep", pillar: "vitalidade", summary: "Sono: 6h", hours: 6, occurred_at: NOITE_DE_ONTEM },
+    { kind: "meal", pillar: "alimentacao", summary: "Jantar", occurred_at: NOITE_DE_ONTEM },
+  ]);
+  try {
+    const r = await extractEventsAndMemories(db, USER, "ontem dormi 6h e jantei tarde", "teste");
+    assertEquals(r.events[0].occurred_at, HOJE_SP, "o sono não foi resolvido na proposta");
+    assertEquals(r.events[1].occurred_at, NOITE_DE_ONTEM, "o jantar não pode se mexer");
+  } finally { stub.restore(); unfreeze(); }
+});
+
+Deno.test("extração · à tarde, 'ontem' continua sendo ontem", async () => {
+  const unfreeze = freezeClock("2026-09-12T15:00:00-03:00");
+  const { db } = fakeDb();
+  const stub = stubAnthropic([], [
+    { kind: "sleep", pillar: "vitalidade", summary: "Sono: 6h", hours: 6, occurred_at: NOITE_DE_ONTEM },
+  ]);
+  try {
+    const r = await extractEventsAndMemories(db, USER, "ontem dormi mal", "teste");
+    assertEquals(r.events[0].occurred_at, NOITE_DE_ONTEM);
+  } finally { stub.restore(); unfreeze(); }
+});
+
+Deno.test("extração · ARQUIVO (bulk) nunca tem o dia deslocado", async () => {
+  // A data vem do CSV, não de alguém falando: 555 noites exportadas são dado
+  // histórico, e ninguém está chamando nenhuma delas de "ontem". Mesma hora da
+  // manhã do primeiro teste, para isolar que o que muda é só o `bulk`.
+  const unfreeze = freezeClock("2026-09-12T07:30:00-03:00");
+  const { db } = fakeDb();
+  const stub = stubAnthropic([], [
+    { kind: "sleep", pillar: "vitalidade", summary: "11/09: 7h de sono", hours: 7, occurred_at: NOITE_DE_ONTEM },
+  ]);
+  try {
+    const r = await extractEventsAndMemories(db, USER, "planilha de sono", "teste", 150, { bulk: true });
+    assertEquals(r.events[0].occurred_at, NOITE_DE_ONTEM);
+  } finally { stub.restore(); unfreeze(); }
 });

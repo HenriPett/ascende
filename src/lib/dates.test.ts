@@ -5,7 +5,7 @@
 import { describe, it, expect } from "vitest";
 import {
   spParts, todayISOInSP, dateISOInSP, daysAgoISOInSP,
-  monthStartISOInSP, isSundayInSP,
+  monthStartISOInSP, isSundayInSP, startOfDayInSP, startOfTodayInSP,
 } from "@/lib/dates";
 
 // São Paulo = UTC−3 (sem horário de verão desde 2019).
@@ -63,5 +63,27 @@ describe("fronteiras de dia no fuso de São Paulo", () => {
   it("monthStartISOInSP devolve o dia 1 do mês corrente em SP", () => {
     const { y, m } = spParts();
     expect(monthStartISOInSP()).toBe(`${y}-${String(m).padStart(2, "0")}-01`);
+  });
+});
+
+describe("startOfDayInSP", () => {
+  it("meia-noite de SP é 03:00 UTC do mesmo dia", () => {
+    // O Brasil não usa horário de verão desde 2019: o offset é fixo em -03:00.
+    expect(startOfDayInSP("2026-09-12")).toBe("2026-09-12T03:00:00.000Z");
+    expect(startOfDayInSP("2026-01-15")).toBe("2026-01-15T03:00:00.000Z");
+  });
+
+  it("o corte independe do fuso do dispositivo", () => {
+    // É esta a diferença para `new Date(); setHours(0,0,0,0)`, que devolvia a
+    // meia-noite do NAVEGADOR — outra régua de dia para o mesmo fato.
+    const corte = startOfDayInSP("2026-09-12");
+    // 23:30 de 11/09 em SP ainda é o dia ANTERIOR: fica fora do corte.
+    expect(new Date("2026-09-11T23:30:00-03:00") >= new Date(corte)).toBe(false);
+    // 00:30 de 12/09 em SP já é hoje, mesmo sendo 03:30 UTC.
+    expect(new Date("2026-09-12T00:30:00-03:00") >= new Date(corte)).toBe(true);
+  });
+
+  it("startOfTodayInSP é o corte do dia de hoje em SP", () => {
+    expect(startOfTodayInSP()).toBe(startOfDayInSP(todayISOInSP()));
   });
 });

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { todayISO } from "@/lib/format";
-import { daysAgoISOInSP } from "@/lib/dates";
+import { daysAgoISOInSP, startOfTodayInSP } from "@/lib/dates";
 import type { Battle, BattleCheckin } from "@/lib/battles";
 
 /* Queries compartilhadas pelas zonas da Hoje que vivem em componentes próprios.
@@ -35,11 +35,14 @@ export function useSleepTodayQuery(enabled: boolean) {
     enabled: enabled && !!user,
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
-      const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+      // Meia-noite de SÃO PAULO, não do navegador: `setHours(0,0,0,0)` num
+      // aparelho fora do fuso cortava o dia noutro lugar, e esta pergunta
+      // passava a discordar de `todayISO()` — que é a própria chave do cache
+      // logo acima. Duas réguas de dia para o mesmo fato.
       const { count, error } = await supabase.from("life_events")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user!.id).eq("kind", "sleep")
-        .gte("occurred_at", dayStart.toISOString());
+        .gte("occurred_at", startOfTodayInSP());
       // Sem isto, a falha respondia "não dormiu" e o check-in matinal
       // reaparecia para quem já tinha respondido. Com o throw, `data` fica
       // undefined e quem consome compara com `=== false`: a zona some.
