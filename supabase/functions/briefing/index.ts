@@ -89,8 +89,20 @@ Deno.serve(async (req) => {
     const { res, data } = await anthropicCall(supabase, user.id, sunday ? "retrospectiva" : "briefing", {
       model,
       max_tokens: 400,
+      /* SEM cache_control aqui, de propósito — não reponha.
+         Escrever cache custa 1,25x a entrada e ler custa 0,1x, então cache que
+         não é lido é ágio puro. Nos dados reais de produção:
+           briefing        36,8% escrito / 1,3% lido → 108,0  (8,0% MAIS caro)
+           retrospectiva   35,5% escrito / 5,3% lido → 104,1  (4,1% MAIS caro)
+         contra 100 de não cachear nada. E não adianta afinar: o TTL do cache
+         da Anthropic é de 5 minutos, e estas duas rotas rodam uma vez por DIA
+         (briefing) e uma vez por SEMANA (retrospectiva). O cache nunca tem
+         como estar quente na hora em que a chamada acontece — os 1,3% e 5,3%
+         de leitura são a pessoa abrindo o app duas vezes no mesmo minuto.
+         O caminho para baratear aqui é o roteamento de modelo logo acima, não
+         o cache. */
       system: [
-        { type: "text", text: sunday ? RETRO_SYSTEM : SYSTEM, cache_control: { type: "ephemeral" } },
+        { type: "text", text: sunday ? RETRO_SYSTEM : SYSTEM },
         { type: "text", text: `━━━ RETRATO ATUAL DA PESSOA ━━━\n${snapshot}` },
       ],
       messages: [{ role: "user", content: `Escreva ${sunday ? "a retrospectiva da semana" : "o briefing"} de hoje (${today}).` }],

@@ -13,12 +13,18 @@
  * Anthropic dublada — é o mais perto do comportamento de produção que se
  * consegue sem PostgREST.
  *
- * Rode com:  deno test --allow-env --allow-net supabase/functions/
+ * Rode com:  deno test --allow-env --allow-net --allow-read supabase/functions/
+ *
+ * O --allow-read não é opcional: os testes que provam uma regra olhando o
+ * FONTE (a regra de status das memórias, o acoplamento da fronteira de
+ * desfecho) leem os arquivos com Deno.readTextFile. Sem a flag são 6
+ * reprovações que não têm nada a ver com o código.
  */
 import { assert, assertEquals, assertFalse } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   extractEventsAndMemories, isMemoryReadable, isUserOwnedMemory, type MemoryRow,
   sleepWakeDay, resolveSleepDays, SLEEP_MORNING_UNTIL_H,
+  trendLines, INSIGHT_PILARES, type InsightRow,
 } from "./lib.ts";
 
 const USER = "11111111-1111-1111-1111-111111111111";
@@ -519,4 +525,484 @@ Deno.test("extração · ARQUIVO (bulk) nunca tem o dia deslocado", async () => 
     const r = await extractEventsAndMemories(db, USER, "planilha de sono", "teste", 150, { bulk: true });
     assertEquals(r.events[0].occurred_at, NOITE_DE_ONTEM);
   } finally { stub.restore(); unfreeze(); }
+});
+
+/* ══ TENDÊNCIAS VERIFICADAS NO RETRATO ══════════════════════════════════════
+ *
+ * O cruzamento entre pilares é a promessa do produto, e era a única coisa que
+ * o Conselheiro não recebia. Agora recebe — e junto vieram três regras que
+ * ninguém percebe quebradas olhando a tela, porque quem lê este bloco é um
+ * modelo, em silêncio, dentro de um prompt:
+ *
+ *   1. ESCOPO. Uma tendência atravessa dois pilares. Quem fechou um deles não
+ *      pode vê-la vazar pelo lado aberto.
+ *   2. O QUE ELA CONFIRMOU. Verdade validada por ela vale mais que dedução da
+ *      IA — inclusive (e principalmente) quando a resposta dela foi "não bate".
+ *   3. OS TRÊS ESTADOS. "Não encontrei padrão" precisa chegar como resposta,
+ *      senão o modelo procura um — e procurar padrão sem dado é inventar a
+ *      vida da pessoa.
+ *
+ * Tudo aqui é função pura: sem banco, sem relógio, sem rede.
+ */
+
+const TODOS_OS_ESCOPOS = {
+  prosperidade: true, vitalidade: true, alimentacao: true, mente: true, diario: true,
+};
+
+/** Uma linha de `insights` como o banco a devolve. */
+const ins = (over: Partial<InsightRow> & { kind: string }): InsightRow => ({
+  status: "tendencia",
+  sample_size: 28,
+  period_start: "2026-08-15",
+  period_end: "2026-09-12",
+  result: { high_group_median: 41, low_group_median: 74 },
+  computed_at: "2026-09-12T10:00:00Z",
+  ...over,
+});
+
+/* O BRL do retrato usa espaço NÃO SEPARÁVEL entre "R$" e o número (é o que o
+   Intl devolve em pt-BR, e vale para o retrato inteiro, não só para este
+   bloco). Normalizar aqui deixa a asserção legível sem esconder o formato
+   real de quem lê o prompt. */
+const bloco = (linhas: string[]) => linhas.join("\n").replace(/\u00a0/g, " ");
+
+Deno.test("tendências · escopo fechado não vaza pelo pilar que ficou aberto", () => {
+  const insights = [
+    ins({ kind: "sono_gasto_seguinte" }),                      // vitalidade × prosperidade
+    ins({ kind: "refeicao_gasto_comida" }),                    // alimentacao × prosperidade
+    ins({ kind: "treino_sono", result: { high_group_median: 7.4, low_group_median: 6.8 } }),
+  ];
+  // Ela desligou a análise de prosperidade em Ajustes.
+  const texto = bloco(trendLines(insights, [], { ...TODOS_OS_ESCOPOS, prosperidade: false }));
+
+  // As duas que tocam dinheiro somem INTEIRAS — não basta esconder o valor.
+  assertFalse(texto.includes("Sono × gasto"), "tendência com dinheiro vazou");
+  assertFalse(texto.includes("gasto com comida"), "tendência com dinheiro vazou");
+  assertFalse(texto.includes("R$"), "valor em reais vazou num pilar fechado");
+  // A que vive inteira dentro de vitalidade continua valendo.
+  assert(texto.includes("Treino × sono"), "tendência de um pilar só foi escondida à toa");
+});
+
+Deno.test("tendências · o que o escopo esconde não vira 'ainda sem leitura'", () => {
+  /* A regressão que este teste pega: listar a análise escondida entre as que
+     "ainda não têm leitura" parece inofensivo e é o vazamento mais fácil de
+     cometer — entrega que existe uma análise sobre o pilar que ela fechou. */
+  const texto = bloco(trendLines(
+    [ins({ kind: "treino_sono", result: { high_group_median: 7.4, low_group_median: 6.8 } })],
+    [],
+    { ...TODOS_OS_ESCOPOS, prosperidade: false },
+  ));
+  assertFalse(texto.includes("Sono × gasto do dia seguinte"));
+  assertFalse(texto.includes("Refeições × gasto com comida"));
+  assert(texto.includes("Treino × sono"));
+});
+
+Deno.test("tendências · com todos os pilares fechados, o bloco não existe", () => {
+  const linhas = trendLines(
+    [ins({ kind: "sono_gasto_seguinte" })],
+    [],
+    { prosperidade: false, vitalidade: false, alimentacao: false, mente: false, diario: false },
+  );
+  // Nem o cabeçalho, nem a linha de "nenhuma leitura": silêncio é a resposta.
+  assertEquals(linhas, []);
+});
+
+Deno.test("tendências · tipo desconhecido nunca chega ao prompt", () => {
+  /* Pilar desconhecido é escopo indecidível. Uma quarta análise que chegue ao
+     banco antes de chegar ao mapa INSIGHT_PILARES fica de fora até alguém
+     declarar quais pilares ela atravessa. */
+  const texto = bloco(trendLines(
+    [ins({ kind: "humor_gasto_seguinte" }), ins({ kind: "treino_sono", result: { high_group_median: 7.4, low_group_median: 6.8 } })],
+    [], TODOS_OS_ESCOPOS,
+  ));
+  assertFalse(texto.includes("humor_gasto_seguinte"));
+  assert(texto.includes("Treino × sono"));
+});
+
+Deno.test("tendências · o 'sim' dela entra marcado, e vale mais que dedução da IA", () => {
+  const texto = bloco(trendLines(
+    [ins({ kind: "sono_gasto_seguinte" })],
+    [{ kind: "sono_gasto_seguinte", answer: "sim", asked_status: "tendencia" }],
+    TODOS_OS_ESCOPOS,
+  ));
+  assert(texto.includes("A PESSOA CONFIRMOU"), "a confirmação dela não chegou ao modelo");
+  assert(texto.includes("vale mais que qualquer dedução sua"));
+});
+
+Deno.test("tendências · o 'não' dela pesa: o número fica, a afirmação não", () => {
+  /* O caso que mais importa. O cálculo continua verdadeiro (aquilo aconteceu),
+     mas ela disse que não descreve a vida dela — e repetir aquilo como verdade
+     sobre ela é o mesmo erro de contradizer uma memória confirmada. */
+  const texto = bloco(trendLines(
+    [ins({ kind: "sono_gasto_seguinte" })],
+    [{ kind: "sono_gasto_seguinte", answer: "nao", asked_status: "tendencia" }],
+    TODOS_OS_ESCOPOS,
+  ));
+  assert(texto.includes("NÃO BATE"), "a recusa dela não chegou ao modelo");
+  assert(texto.includes("pergunte antes de concluir"));
+  assert(texto.includes("R$ 41,00"), "o número medido não pode sumir junto com a recusa");
+});
+
+Deno.test("tendências · resposta dada sobre OUTRO estado não é carregada", () => {
+  /* O insight é atualizado no lugar a cada recálculo. Se ela confirmou um
+     padrão e hoje o cálculo diz "ficou parecido", a concordância dela é sobre
+     outra frase — usá-la seria colocar na boca dela algo que ela não disse. */
+  const texto = bloco(trendLines(
+    [ins({ kind: "sono_gasto_seguinte", status: "sem_tendencia" })],
+    [{ kind: "sono_gasto_seguinte", answer: "sim", asked_status: "tendencia" }],
+    TODOS_OS_ESCOPOS,
+  ));
+  assert(texto.includes("ficou parecido"));
+  assertFalse(texto.includes("A PESSOA CONFIRMOU"), "confirmação migrou para outro estado");
+});
+
+Deno.test("tendências · perguntamos e ela não respondeu: nenhuma marca", () => {
+  const texto = bloco(trendLines(
+    [ins({ kind: "sono_gasto_seguinte" })],
+    [{ kind: "sono_gasto_seguinte", answer: null, asked_status: "tendencia" }],
+    TODOS_OS_ESCOPOS,
+  ));
+  assertFalse(texto.includes("A PESSOA CONFIRMOU"));
+  assertFalse(texto.includes("NÃO BATE"));
+});
+
+Deno.test("tendências · os três estados chegam, cada um como ele é", () => {
+  const texto = bloco(trendLines([
+    ins({ kind: "sono_gasto_seguinte" }),
+    ins({ kind: "refeicao_gasto_comida", status: "sem_tendencia", sample_size: 24, result: { high_group_median: 18, low_group_median: 19 } }),
+    // treino_sono não tem linha nenhuma: é o estado que persistRun nunca grava.
+  ], [], TODOS_OS_ESCOPOS));
+
+  assert(texto.includes("após as noites em que dormiu mais"), "a tendência não foi dita");
+  assert(texto.includes("ficou parecido"), "'não encontrei padrão' precisa chegar como resposta");
+  assert(texto.includes("Ainda sem leitura: Treino × sono"), "o que não foi calculado precisa ser declarado");
+  // E nunca o contrário: ausência de leitura não pode virar "não há padrão".
+  assertFalse(/Treino × sono[^\n]*parecido/.test(texto));
+});
+
+Deno.test("tendências · 'dados_insuficientes' diz quantos dias faltam", () => {
+  const texto = bloco(trendLines(
+    [ins({
+      kind: "treino_sono", status: "dados_insuficientes", sample_size: 12,
+      result: { reason: "overlap", days_missing: 9 },
+    })],
+    [], TODOS_OS_ESCOPOS,
+  ));
+  assert(texto.includes("faltam 9 dias"), "a contagem que a tela mostra não chegou ao modelo");
+});
+
+Deno.test("tendências · o rótulo é preso ao GRUPO, nunca ao maior número", () => {
+  /* O erro mais caro possível: `high_group_median` é a mediana do lado direito
+     no grupo ALTO do lado esquerdo — NÃO é o maior número da linha. Ordenar
+     para o maior aparecer primeiro inverteria a leitura sem nenhum aviso. */
+  const texto = bloco(trendLines(
+    [ins({ kind: "sono_gasto_seguinte", result: { high_group_median: 90, low_group_median: 30 } })],
+    [], TODOS_OS_ESCOPOS,
+  ));
+  const dormiuMais = texto.indexOf("dormiu mais");
+  const noventa = texto.indexOf("R$ 90,00");
+  const trinta = texto.indexOf("R$ 30,00");
+  assert(dormiuMais < noventa && noventa < trinta,
+    "o valor do grupo alto precisa vir logo depois do rótulo do grupo alto");
+});
+
+Deno.test("tendências · número ilegível vira 'sem leitura', nunca número fantasma", () => {
+  /* A pessoa confere esse valor olhando a própria vida. Linha com número
+     quebrado é pior que linha nenhuma — é a mesma lição do "você usou as
+     undefined mensagens desta semana". */
+  const texto = bloco(trendLines(
+    [ins({ kind: "sono_gasto_seguinte", result: { high_group_median: null, low_group_median: 74 } })],
+    [], TODOS_OS_ESCOPOS,
+  ));
+  assertFalse(texto.includes("NaN"));
+  assertFalse(texto.includes("R$ 74,00"), "meia linha com um lado só engana mais que silêncio");
+  assert(texto.includes("Ainda sem leitura") || texto.includes("nenhuma leitura"));
+});
+
+Deno.test("tendências · conta sem leitura nenhuma gasta uma linha, não um bloco", () => {
+  const linhas = trendLines([], [], TODOS_OS_ESCOPOS);
+  assertEquals(linhas.length, 1, "conta nova não paga o cabeçalho inteiro por nada");
+  assert(linhas[0].includes("ainda não concluiu nenhuma leitura"));
+  assert(linhas[0].includes("Não afirme que uma área influencia outra"));
+});
+
+Deno.test("tendências · o cabeçalho proíbe causa com as palavras da tela", () => {
+  const texto = bloco(trendLines([ins({ kind: "sono_gasto_seguinte" })], [], TODOS_OS_ESCOPOS));
+  for (const banida of ['"porque"', '"faz com que"', '"leva a"']) {
+    assert(texto.includes(banida), `o prompt precisa banir ${banida} explicitamente`);
+  }
+  assert(texto.includes("ASSOCIAÇÕES"));
+});
+
+/* ── O ESPELHO COM A TELA ────────────────────────────────────────────────────
+ *
+ * Duas superfícies dizendo a mesma coisa de jeitos diferentes confunde, e aqui
+ * a divergência seria pior que confusão: os pontinhos de pilar do card são a
+ * mesma informação que decide o ESCOPO deste bloco. Se alguém acrescentar um
+ * pilar a uma análise na tela e esquecer do mapa aqui, a tela passa a dizer que
+ * a análise toca dinheiro e a IA continua mostrando-a para quem fechou
+ * dinheiro. O teste olha o FONTE das duas pontas, de propósito.
+ */
+Deno.test("tendências · espelho da tela: pilares e frase de limite não podem divergir", async () => {
+  const tela = await Deno.readTextFile(
+    new URL("../../../src/components/core/TrendInsights.tsx", import.meta.url),
+  );
+
+  // 1. Os pilares de cada análise, lidos do COPY da tela.
+  const blocos = [...tela.matchAll(
+    /(sono_gasto_seguinte|refeicao_gasto_comida|treino_sono):\s*\{\s*pillars:\s*\[([^\]]*)\]/g,
+  )];
+  assertEquals(blocos.length, 3, "não achei os três COPY da tela — o espelho precisa ser reescrito");
+
+  for (const [, kind, lista] of blocos) {
+    const naTela = [...lista.matchAll(/"--([a-z]+)"/g)].map((m) => m[1]).sort();
+    const noPrompt = [...(INSIGHT_PILARES[kind] ?? [])].sort();
+    assertEquals(
+      noPrompt, naTela,
+      `os pilares de ${kind} divergem entre a tela e o retrato — ` +
+      "a IA passaria a mostrar esta análise para quem fechou um desses pilares",
+    );
+  }
+
+  // 2. A frase de limite. A pessoa não pode ler uma coisa no card e ouvir
+  //    outra do Conselheiro.
+  const frase = /const LIMIT_PHRASE = "([^"]+)"/.exec(tela)?.[1] ?? "";
+  assert(frase.length > 0, "não achei LIMIT_PHRASE na tela");
+  const semTravessao = frase.replace(/\s*—\s*/g, ", ").replace(/\.$/, "").toLowerCase();
+  const fonte = await Deno.readTextFile(new URL("./lib.ts", import.meta.url));
+  assert(
+    fonte.toLowerCase().includes(semTravessao),
+    `a frase de limite da tela ("${frase}") não aparece no retrato`,
+  );
+});
+
+/* ══ O PREFIXO CACHEÁVEL DA EXTRAÇÃO ═══════════════════════════════════════
+
+   A extração é a chamada de maior volume do produto e era o maior bloco sem
+   cache que existia (28,6% do gasto, cache_read = 0 nas duas features). O
+   desenho está explicado no comentário longo acima de extractEventsAndMemories
+   em lib.ts; aqui trancamos as quatro propriedades das quais a economia
+   depende — e que são exatamente as que alguém quebra sem perceber, porque
+   NADA nelas falha em voz alta: cache que para de funcionar não dá erro, não
+   muda a resposta e não aparece em teste nenhum. Só na fatura, meses depois.
+
+   O teste lê o CORPO da requisição, não o fonte: é o que a Anthropic recebe
+   que decide se houve reaproveitamento. */
+
+// deno-lint-ignore no-explicit-any
+const corpoDaChamada = (body: string): any => JSON.parse(body);
+const blocosCacheados = (b: string) =>
+  // deno-lint-ignore no-explicit-any
+  (corpoDaChamada(b).system as any[]).filter((x) => x.cache_control);
+const textoDoUsuario = (b: string) => {
+  const c = corpoDaChamada(b).messages[0].content;
+  // deno-lint-ignore no-explicit-any
+  return typeof c === "string" ? c : (c as any[]).map((x) => x.text ?? "").join("\n");
+};
+const HORA = "AGORA (fuso do app";
+
+Deno.test("prefixo · o bloco global é byte a byte igual entre pessoas diferentes", async () => {
+  /* É o que faz UMA entrada de cache servir o produto inteiro. Basta alguém
+     interpolar o nome, o plano ou o id da pessoa nesse bloco para cada usuário
+     passar a ter a sua própria entrada — e, no volume de hoje, uma entrada por
+     pessoa quase nunca é relida dentro dos 5 minutos de TTL. */
+  const corpos: string[] = [];
+  for (const memoria of ["Treina de manhã", "Trabalha em escala 12x36"]) {
+    const { db } = fakeDb([mem({ id: memoria, content: memoria })]);
+    const stub = stubAnthropic([]);
+    try {
+      await extractEventsAndMemories(db, USER, "corri 5km hoje cedo", "teste");
+      corpos.push(stub.seen.body);
+    } finally { stub.restore(); }
+  }
+  const [a, b] = corpos.map(corpoDaChamada);
+  assertEquals(a.system[0].text, b.system[0].text,
+    "o bloco global da extração deixou de ser global: virou prefixo por pessoa");
+  assertEquals(JSON.stringify(a.tools), JSON.stringify(b.tools),
+    "tools é renderizado ANTES do system: se variar, nenhum bloco do system cacheia");
+  // E o que muda entre as duas é só o bloco de memória, como tem que ser.
+  assert(a.system[1].text !== b.system[1].text);
+});
+
+Deno.test("prefixo · arquivo e conversa compartilham o MESMO prefixo cacheado", async () => {
+  /* As regras de arquivo já foram concatenadas no MEIO do system. Isso dava à
+     chamada com arquivo um prefixo diferente da chamada normal desde o byte
+     ~5.700: duas entradas que nunca se leem. Elas agora vão no FIM, depois de
+     todo bloco cacheado. Se voltarem para o meio, este teste cai. */
+  const corpos: boolean[] = [];
+  const textos: string[][] = [];
+  for (const bulk of [false, true]) {
+    const { db } = fakeDb([mem({ id: "m1", content: "Treina de manhã" })]);
+    const stub = stubAnthropic([]);
+    try {
+      await extractEventsAndMemories(db, USER, "planilha de sono", "teste", 150, { bulk });
+      const c = corpoDaChamada(stub.seen.body);
+      // deno-lint-ignore no-explicit-any
+      textos.push((c.system as any[]).filter((x) => x.cache_control).map((x) => x.text));
+      corpos.push(bulk);
+    } finally { stub.restore(); }
+  }
+  assertEquals(textos[0], textos[1],
+    "a chamada com arquivo deixou de ler o cache que a captura escreve");
+});
+
+Deno.test("prefixo · a hora nunca entra num bloco cacheado", async () => {
+  /* nowInSpForPrompt() muda a cada minuto. Um relógio dentro do prefixo faria
+     cada chamada escrever uma entrada nova e não ler nenhuma — o pior dos dois
+     mundos, porque escrever custa 1,25x e a leitura nunca viria. Ela precisa
+     continuar abrindo a MENSAGEM, que é renderizada depois de todo o system. */
+  const { db } = fakeDb([mem({ id: "m1", content: "Treina de manhã" })]);
+  const stub = stubAnthropic([]);
+  try {
+    await extractEventsAndMemories(db, USER, "dormi 7h", "teste");
+    for (const bloco of blocosCacheados(stub.seen.body)) {
+      assertFalse(String(bloco.text).includes(HORA),
+        "a hora entrou num bloco cacheado: o cache da extração virou ágio puro");
+    }
+    assert(textoDoUsuario(stub.seen.body).includes(HORA),
+      "a hora sumiu da mensagem — sem ela o modelo erra o tipo da refeição");
+  } finally { stub.restore(); }
+});
+
+Deno.test("prefixo · dois marcadores com memória, um só sem memória", async () => {
+  /* Dois breakpoints é o que faz o desenho funcionar dos DOIS lados da
+     estimativa dos ~4.015 tokens do bloco global contra o mínimo de 4.096 do
+     haiku-4-5: se o global não cruzar o mínimo, o segundo (global + memórias)
+     cruza e carrega sozinho. Quem não tem memória nenhuma não tem o que
+     reaproveitar, e aí um marcador a mais só ocuparia lugar. */
+  const comMemoria = fakeDb([mem({ id: "m1", content: "Treina de manhã" })]);
+  let stub = stubAnthropic([]);
+  try {
+    await extractEventsAndMemories(comMemoria.db, USER, "corri 5km", "teste");
+    assertEquals(blocosCacheados(stub.seen.body).length, 2);
+  } finally { stub.restore(); }
+
+  const semMemoria = fakeDb([]);
+  stub = stubAnthropic([]);
+  try {
+    await extractEventsAndMemories(semMemoria.db, USER, "corri 5km", "teste");
+    assertEquals(blocosCacheados(stub.seen.body).length, 1);
+  } finally { stub.restore(); }
+});
+
+Deno.test("prefixo · as memórias saíram da mensagem e entraram no system", async () => {
+  /* Elas viajavam na mensagem do usuário, atrás da hora — ou seja, atrás de um
+     invalidador. No system elas ficam num bloco estável por pessoa, e de
+     quebra deixam de ser texto de usuário (que qualquer coisa pode forjar)
+     para virar canal do operador. O que NÃO pode mudar é o modelo continuar
+     vendo cada uma, e vendo quais são intocáveis. */
+  const { db } = fakeDb([
+    mem({ id: "ok", content: "Treina de manhã", status: "confirmada", created_by: "usuario" }),
+    mem({ id: "rej", content: "Odeia academia lotada", status: "rejeitada" }),
+  ]);
+  const stub = stubAnthropic([]);
+  try {
+    await extractEventsAndMemories(db, USER, "corri 5km hoje", "teste");
+    const c = corpoDaChamada(stub.seen.body);
+    assert(String(c.system[1].text).includes("Treina de manhã"),
+      "a memória não está no bloco cacheável por pessoa");
+    assert(String(c.system[1].text).includes("CONFIRMADA"),
+      "a IA precisa continuar vendo quais memórias são intocáveis");
+    assertFalse(textoDoUsuario(stub.seen.body).includes("Treina de manhã"),
+      "a memória voltou para a mensagem, atrás da hora que invalida o prefixo");
+    assertFalse(stub.seen.body.includes("Odeia academia"),
+      "a regra de leitura vale igual no system: memória rejeitada não volta");
+  } finally { stub.restore(); }
+});
+
+Deno.test("prefixo · o bloco por pessoa é estável entre chamadas seguidas", async () => {
+  /* A economia vem da rajada: os vários turnos de uma mesma sessão, dentro dos
+     5 minutos de TTL. Se o bloco da pessoa mudar de uma chamada para a outra
+     (uma ordenação instável, um contador, um "memórias em DD/MM"), cada turno
+     escreve de novo e a rajada não paga nada. */
+  const { db } = fakeDb([
+    mem({ id: "a", content: "Treina de manhã", created_at: "2026-09-01T10:00:00Z" }),
+    mem({ id: "b", content: "Não come lactose", created_at: "2026-09-02T10:00:00Z" }),
+    mem({ id: "c", content: "Trabalha em escala 12x36", status: "confirmada", created_by: "usuario" }),
+  ]);
+  const vistos: string[] = [];
+  for (const frase of ["corri 5km hoje", "almocei arroz e frango"]) {
+    const stub = stubAnthropic([]);
+    try {
+      await extractEventsAndMemories(db, USER, frase, "teste");
+      vistos.push(corpoDaChamada(stub.seen.body).system[1].text);
+    } finally { stub.restore(); }
+  }
+  assertEquals(vistos[0], vistos[1],
+    "o bloco de memórias mudou entre dois turnos da mesma sessão");
+});
+
+/* ── O FURO DO ESCOPO: universo podado não afirma ausência ───────────────────
+ *
+ * Achado na revisão de 13/09/2026, e é o pior tipo de bug que este bloco podia
+ * ter, porque ele MENTE em vez de falhar:
+ *
+ * Esconder tipos por escopo encolhe a lista. Quando o que sobrava não tinha
+ * leitura, o bloco escrevia "o app ainda não concluiu nenhuma leitura de padrão
+ * entre as áreas desta pessoa" — falso: as leituras existiam, escondidas.
+ *
+ * E o agravante que fecha o caso: a TELA não consulta `ai_scopes`. A pessoa vê
+ * o card do padrão, pergunta ao Conselheiro, e ele nega que exista. Das duas
+ * superfícies que se contradizem sobre a vida dela, a que mente é justamente a
+ * que ela não tem como conferir.
+ *
+ * A regra que estes testes travam: o bloco afirma PRESENÇA sempre; AUSÊNCIA,
+ * só quando enxerga o universo completo.
+ */
+
+Deno.test("tendências · escopo podou e nada sobrou: silêncio, nunca 'não há leitura'", () => {
+  /* O caso exato do furo: prosperidade fechada esconde as duas análises de
+     dinheiro — uma delas COM tendência calculada — e a que sobra não tem
+     leitura nenhuma. */
+  const linhas = trendLines(
+    [ins({ kind: "sono_gasto_seguinte" })],          // existe, e está escondida
+    [],
+    { ...TODOS_OS_ESCOPOS, prosperidade: false },
+  );
+  assertEquals(linhas, [], "o bloco negou uma leitura que a pessoa vê na tela");
+});
+
+Deno.test("tendências · o mesmo vale quando o escondido também não tem leitura", () => {
+  /* Não dá para condicionar a correção a "existe linha escondida?": decidir
+     isso já é olhar o dado que o escopo mandou não olhar. Podou, cala. */
+  const linhas = trendLines([], [], { ...TODOS_OS_ESCOPOS, prosperidade: false });
+  assertEquals(linhas, []);
+});
+
+Deno.test("tendências · universo podado mostra o que TEM e cala sobre o que falta", () => {
+  /* `alimentacao: false` esconde exatamente uma análise (refeições × gasto).
+     Sobram duas: uma com tendência, outra sem leitura. A com tendência aparece;
+     a lista de ausências, que se lê como exaustiva, não. */
+  const texto = bloco(trendLines(
+    [ins({ kind: "sono_gasto_seguinte" })],
+    [],
+    { ...TODOS_OS_ESCOPOS, alimentacao: false },
+  ));
+  assert(texto.includes("Sono × gasto do dia seguinte"), "a leitura verdadeira sumiu junto");
+  assertFalse(texto.includes("Ainda sem leitura"), "afirmou ausência sobre um universo podado");
+  assertFalse(texto.includes("Refeições"), "nomeou a análise escondida");
+  // E o cabeçalho não pode ensinar a dizer o que o bloco parou de afirmar.
+  assertFalse(texto.includes('"ainda sem leitura" são respostas'));
+  assert(texto.includes('"Ficou parecido" é resposta completa'));
+});
+
+Deno.test("tendências · sem poda, a ausência continua sendo dita (e com a contagem)", () => {
+  /* A correção não pode virar "calar sempre": com o universo inteiro à vista,
+     "o app olhou e não concluiu" é informação que impede o modelo de inventar
+     padrão — o item 3 do pedido. */
+  const comTudo = bloco(trendLines([ins({ kind: "sono_gasto_seguinte" })], [], TODOS_OS_ESCOPOS));
+  assert(comTudo.includes("Ainda sem leitura: Refeições × gasto com comida; Treino × sono"));
+
+  const vazio = trendLines([], [], TODOS_OS_ESCOPOS);
+  assertEquals(vazio.length, 1);
+  assert(vazio[0].includes("ainda não concluiu nenhuma leitura"));
+
+  const contagem = bloco(trendLines(
+    [ins({
+      kind: "treino_sono", status: "dados_insuficientes", sample_size: 12,
+      result: { reason: "overlap", days_missing: 9 },
+    })],
+    [], TODOS_OS_ESCOPOS,
+  ));
+  assert(contagem.includes("faltam 9 dias"));
 });

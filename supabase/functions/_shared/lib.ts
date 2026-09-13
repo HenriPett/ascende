@@ -33,7 +33,30 @@ export const corsHeaders: Record<string, string> = ALLOWED_ORIGINS.length
 
 export const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 export const ANTHROPIC_VERSION = "2023-06-01";
-export const MODEL_SMART = "claude-sonnet-4-6";  // chat e briefing
+/* Mais novo E mais barato que o sonnet-4-6 que estava aqui: US$ 2/US$ 10 por
+   MTok contra US$ 3/US$ 15 — 33% a menos em entrada e em saída, sem troca de
+   qualidade para baixo. O sonnet-4-6 foi a única mudança de modelo desta
+   rodada; o MODEL_FAST continua no Haiku, que segue sendo o mais barato.
+
+   DUAS COISAS QUE VÊM JUNTO COM A TROCA, e que não são opcionais:
+
+   1. O PREÇO PRECISA ENTRAR EM usage.ts NO MESMO COMMIT. A tabela de preços
+      de lá tem um fallback, e o fallback é o preço do modelo ANTIGO — trocar
+      aqui sem acrescentar a linha lá faz o estimated_cost_usd superestimar em
+      50%, em silêncio, para sempre. A telemetria é o que decide as próximas
+      otimizações; uma telemetria inflada decide errado.
+
+   2. NO SONNET 5, OMITIR `thinking` LIGA O RACIOCÍNIO ADAPTATIVO — o inverso
+      do sonnet-4-6, onde omitir significava não pensar. E token de raciocínio
+      conta dentro do max_tokens. As rotas daqui têm teto apertado (o briefing
+      tem 400, a análise corporal 700): ligar raciocínio sem mexer nos tetos
+      produziria resposta truncada ou vazia. Por isso anthropicCall desliga
+      explicitamente — ver a nota longa lá.
+
+   Raciocínio adaptativo e output_config.effort são a PRÓXIMA alavanca, de
+   qualidade, e pedem max_tokens maior e um eval antes. Começar pelo Blueprint,
+   que roda uma vez na vida e é caro de errar. */
+export const MODEL_SMART = "claude-sonnet-5";    // chat e briefing
 export const MODEL_FAST = "claude-haiku-4-5";    // extração de eventos (captura)
 
 export function serviceClient(): SupabaseClient {
@@ -215,6 +238,369 @@ export function nowInSpForPrompt(): string {
   return `AGORA (fuso do app, America/Sao_Paulo): hoje é ${dia}, ${n.dateIso}, e são ${n.timeHm}.`;
 }
 
+/* ═══ TENDÊNCIAS VERIFICADAS NO RETRATO ═══════════════════════════════════
+
+   O CRUZAMENTO ENTRE PILARES É A RAZÃO DE EXISTIR DO PRODUTO — e até aqui ele
+   era a única coisa que o Conselheiro NÃO recebia.
+
+   O app já calcula o cruzamento: `daily_metrics` pareia os dias, src/lib/
+   insights.ts compara as medianas e a tabela `insights` guarda o resultado com
+   período, amostra e versão da regra. A tela mostra tudo isso. O retrato lia
+   nove tabelas e nenhuma das três.
+
+   O efeito disso no prompt era uma contradição que nascia do CONTEXTO, não do
+   modelo: o system manda "SEMPRE cruze pilares" e, vinte linhas abaixo, proíbe
+   "completar uma lacuna com o detalhe mais plausível". Só dá para obedecer aos
+   dois se o cruzamento CHEGAR PRONTO. Sem ele, sobravam duas saídas ruins —
+   cruzar com número inventado, ou não cruzar. É este bloco que abre a terceira.
+
+   A REGRA DA CASA, que vale aqui na íntegra (cabeçalho de src/lib/insights.ts):
+   O MODELO EXPLICA, O CÓDIGO CALCULA. Nenhum número deste bloco passou por um
+   LLM: todos vêm do cálculo puro e versionado. O modelo recebe o número pronto
+   e a proibição de mexer nele.
+
+   ─── AS QUATRO DECISÕES QUE ALGUÉM VAI QUERER "CONSERTAR" ───────────────
+
+   1. ESCOPO: SÓ ENTRA QUEM TEM TODOS OS PILARES AUTORIZADOS.
+      Uma tendência é cruzada por natureza: "sono × gasto do dia seguinte" toca
+      vitalidade E prosperidade. Quem desligou prosperidade em Ajustes fechou
+      uma porta, e uma tendência que atravessa a porta fechada é um vazamento —
+      o dado sai pelo lado que continua aberto. Por isso a regra é a mais
+      restritiva possível: TODOS os pilares que a análise toca precisam estar
+      autorizados, não "pelo menos um".
+      E quando uma tendência é escondida, este bloco fica EM SILÊNCIO sobre
+      ela: nada de "há uma leitura que não posso mostrar". Dizer que existe algo
+      escondido já entrega que existe dado daquele lado — e o retrato já instrui
+      o modelo a não especular sobre área desativada nem pedir para reativar.
+
+      E A REGRA QUE NASCEU DE UM FURO REAL (revisão de 13/09/2026):
+      UNIVERSO PODADO NÃO AFIRMA AUSÊNCIA. Esconder por escopo encolhe a lista
+      de tipos, e a versão anterior seguia adiante afirmando sobre o que sobrou:
+      quando nada do que sobrou tinha leitura, o bloco escrevia "o app ainda não
+      concluiu nenhuma leitura de padrão entre as áreas desta pessoa". Falso —
+      as leituras existiam, só estavam escondidas. E o agravante que fecha o
+      caso: a TELA não consulta `ai_scopes` (nem TrendInsights.tsx nem
+      useTrendInsights.tsx). A pessoa VÊ o card, pergunta ao Conselheiro, e ele
+      nega que exista. Duas superfícies do mesmo produto se contradizendo sobre
+      a vida dela — e quem mente é justamente a que ela não tem como conferir.
+
+      É a mesma doutrina do `insightErr` lá embaixo (leitura que falhou não vira
+      "não há padrão"), que eu havia escrito e deixado furada por este caminho.
+      Então, sempre que QUALQUER tipo for escondido por escopo:
+        • nenhuma frase de ausência é emitida (nem a linha curta de "nenhuma
+          leitura", nem o "Ainda sem leitura: …", que lista ausências de um
+          universo já podado e se lê como exaustivo);
+        • se não sobrar nenhuma leitura de verdade para mostrar, o bloco INTEIRO
+          devolve vazio.
+      O bloco passa a afirmar só PRESENÇA, que é sempre verdade, e reserva a
+      afirmação de ausência para quando enxerga o universo completo. Silêncio
+      não vaza e não mente; a frase de ausência fazia as duas coisas.
+      O preço, dito por extenso: conta com algum pilar fechado perde a guarda
+      anti-invenção deste bloco. Está coberto pelo "NUNCA INVENTE" do system e
+      pela linha de PRIVACIDADE do próprio retrato, e é barato perto de negar à
+      pessoa uma leitura que ela está vendo na tela.
+      Os pilares de cada análise são os MESMOS pontinhos que a tela pinta no
+      card (COPY[].pillars, em TrendInsights.tsx). Se um dia divergirem, a tela
+      e a IA passam a discordar sobre o que a análise toca — e é a IA que erra
+      em segredo.
+
+   2. TIPO DESCONHECIDO NUNCA APARECE.
+      `kind` que não esteja em INSIGHT_PILARES é ignorado, mesmo válido no
+      banco. Não é preciosismo: pilar desconhecido é escopo indecidível, e a
+      falha segura de uma regra de privacidade é calar. Uma quarta análise que
+      chegue ao banco antes de chegar a este mapa fica de fora até alguém
+      declarar aqui quais pilares ela atravessa. Barulhento de propósito.
+
+   3. O QUE ELA CONFIRMOU VALE MAIS QUE O QUE A IA DEDUZIU.
+      `insight_feedback` é a coisa mais rara do banco: verdade sobre a vida dela
+      validada POR ELA, com um toque. Uma memória que o modelo econômico inferiu
+      de uma frase entrava no retrato desde sempre; um padrão que ela confirmou,
+      não entrava. Este bloco inverte isso, com a mesma palavra que o retrato já
+      usa para memória revisada: CONFIRMOU.
+      O "não" recebe o mesmo peso, e é o caso que mais importa: o número
+      continua verdadeiro (aconteceu), mas ela disse que aquilo não descreve a
+      vida dela — então o modelo não pode repetir aquilo como verdade sobre
+      ela. Mesma disciplina da memória confirmada: na divergência, pergunte, não
+      conclua.
+      A resposta só é carregada quando `asked_status` bate com o status ATUAL.
+      O insight é atualizado no lugar a cada recálculo (é o que o comentário da
+      migration avisa): se ela respondeu "bate" sobre um padrão e hoje o cálculo
+      diz "ficou parecido", a confirmação dela é sobre outra frase. Aproveitá-la
+      seria colocar na boca dela uma concordância que ela nunca deu.
+
+   4. OS TRÊS ESTADOS CHEGAM, E "NÃO ENCONTREI" CHEGA COMO RESPOSTA.
+      Se o modelo não souber que o app olhou e não achou padrão, ele procura um
+      — e procurar padrão sem dado é exatamente inventar a vida da pessoa.
+      "Ficou parecido" e "ainda sem leitura" entram como respostas completas,
+      para o Conselheiro poder devolvê-las de cabeça erguida.
+
+   ─── O QUE ESTE BLOCO **NÃO** FAZ, E POR QUÊ ────────────────────────────
+   • Não filtra por `tracking_prefs`. Escopo de IA (`ai_scopes`) é contrato de
+     privacidade — o que o Conselheiro pode analisar. `tracking_prefs` é outra
+     coisa: o que o app pede para ela registrar. Quem desligou o tracker de sono
+     não apagou as noites que já registrou, e sumir com uma leitura verdadeira
+     por causa disso seria apagar a vida dela de um jeito que ela não pediu. O
+     risco real (o modelo cobrar registro daquela área) já tem dono: a linha
+     "NÃO ACOMPANHA", no mesmo retrato, algumas linhas acima.
+   • Não lê `calc_version`. Fixar a versão aqui faria o bloco sumir em silêncio
+     no dia em que a fórmula mudasse para `insights/2`. Pegar a linha mais
+     recente por tipo segue a regra nova sozinho, sem nada para lembrar depois.
+   • Não usa a coluna `headline`. Ela é sempre null na prática (quem grava não
+     a preenche — ver persistRun, em useTrendInsights.tsx). Compor a frase aqui
+     também mantém a língua deste bloco colada à da tela, que é o ponto 4 do
+     pedido: duas superfícies dizendo a mesma coisa de dois jeitos confunde.   */
+
+/** As três análises da Fase 3 e os pilares que cada uma ATRAVESSA.
+ *  ESPELHO de COPY[].pillars em src/components/core/TrendInsights.tsx
+ *  (se mudar lá, mude aqui). Exportado porque é contrato de PRIVACIDADE, e o
+ *  teste do espelho compara este mapa com os pontinhos que a tela pinta: se os
+ *  dois divergirem, a tela e a IA passam a discordar sobre o que cada análise
+ *  toca — e é a IA que erra em segredo. */
+export const INSIGHT_PILARES: Record<string, string[]> = {
+  sono_gasto_seguinte: ["vitalidade", "prosperidade"],
+  refeicao_gasto_comida: ["alimentacao", "prosperidade"],
+  treino_sono: ["vitalidade"],
+};
+
+/** Como cada análise é dita ao modelo.
+ *
+ *  ATENÇÃO — o mesmo aviso em maiúsculas que a tela carrega, e pela mesma
+ *  razão: `high_group_median` é a mediana do lado DIREITO dentro do grupo ALTO
+ *  do lado esquerdo. NÃO é "o maior dos dois números". Quando a associação é
+ *  invertida, ele é o menor. Os rótulos abaixo estão presos ao GRUPO ("em que
+ *  dormiu mais" acompanha sempre o alto), nunca ao valor: ordenar para o maior
+ *  aparecer primeiro inverteria a leitura sem nenhum aviso. */
+const INSIGHT_COPY: Record<string, {
+  titulo: string;
+  tendencia: (alto: string, baixo: string) => string;
+  parecido: (alto: string, baixo: string) => string;
+  fmt: (v: number) => string;
+}> = {
+  sono_gasto_seguinte: {
+    titulo: "Sono × gasto do dia seguinte",
+    tendencia: (a, b) => `após as noites em que dormiu mais, ${a} no dia; após as em que dormiu menos, ${b}`,
+    parecido: (a, b) => `dormindo mais ou menos, o gasto do dia seguinte ficou parecido (${a} e ${b})`,
+    fmt: (v) => BRL(v),
+  },
+  refeicao_gasto_comida: {
+    titulo: "Refeições × gasto com comida",
+    tendencia: (a, b) => `nos dias em que registrou o que comeu, ${a}; nos dias sem registro, ${b}`,
+    parecido: (a, b) => `registrando ou não as refeições, o gasto com comida ficou parecido (${a} e ${b})`,
+    fmt: (v) => BRL(v),
+  },
+  treino_sono: {
+    titulo: "Treino × sono",
+    tendencia: (a, b) => `nas noites dos dias em que treinou, ${a}; nos dias sem treino, ${b}`,
+    parecido: (a, b) => `com treino ou sem treino, o sono daquelas noites ficou parecido (${a} e ${b})`,
+    fmt: (v) => `${String(v).replace(".", ",")} h`,
+  },
+};
+
+/** Linha da tabela `insights`, como o retrato precisa dela. */
+export interface InsightRow {
+  kind: string;
+  status: string;
+  sample_size?: number | null;
+  period_start?: string | null;
+  period_end?: string | null;
+  // deno-lint-ignore no-explicit-any
+  result?: Record<string, any> | null;
+  computed_at?: string | null;
+}
+
+/** Linha da tabela `insight_feedback`: a resposta dela ao "isso te ajudou?". */
+export interface InsightFeedbackRow {
+  kind: string;
+  /** null = perguntamos e ela não respondeu · 'sim' · 'nao'. */
+  answer?: string | null;
+  /** O estado do card no momento da pergunta. Ver decisão 3 acima. */
+  asked_status?: string | null;
+}
+
+/** "2026-08-15" → "15/08". Formato brasileiro, como manda SAFETY_RULES. */
+function diaMes(iso: unknown): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ""));
+  return m ? `${m[3]}/${m[2]}` : null;
+}
+
+/** Número utilizável, ou null. Número fantasma numa linha de tendência é pior
+ *  que linha nenhuma: a pessoa confere esse valor olhando a própria vida.
+ *
+ *  `null` e `""` são barrados ANTES do Number(): `Number(null)` é 0, e um 0 que
+ *  na verdade é "não medido" viraria "R$ 0,00" no prompt, com cara de medição.
+ *  É a mesma distinção que atravessa toda a Fase 3 (null = não medido, 0 =
+ *  medido e deu zero), e perdê-la aqui reintroduz no retrato exatamente a
+ *  mentira que a view `daily_metrics` toma o cuidado de não contar. */
+function numeroOuNull(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** A evidência que a tela mostra sem clique: quantos dias e de quando a quando.
+ *  É o que dá (ou tira) o peso da frase. */
+function evidencia(row: InsightRow): string {
+  const dias = Number(row.sample_size) || 0;
+  const de = diaMes(row.period_start);
+  const ate = diaMes(row.period_end);
+  const periodo = de && ate ? `, ${de} a ${ate}` : "";
+  return ` ${dias} ${dias === 1 ? "dia" : "dias"}${periodo}.`;
+}
+
+/**
+ * O bloco de TENDÊNCIAS do retrato. Puro de propósito: recebe as linhas já
+ * lidas, os escopos já resolvidos, e devolve as linhas do prompt. Toda a regra
+ * que decide o que a pessoa vê (escopo, confirmação, estado) é testável sem
+ * banco, sem relógio e sem rede.
+ *
+ * Devolve [] quando não há nada que possa ser dito — inclusive quando tudo o
+ * que existe está atrás de um pilar que ela fechou.
+ */
+export function trendLines(
+  insights: InsightRow[],
+  feedback: InsightFeedbackRow[],
+  scopes: Record<string, boolean>,
+): string[] {
+  // Pilar sem resposta explícita conta como autorizado — a mesma leitura que o
+  // resto do retrato faz de `ai_scopes` (`!== false`).
+  const autorizada = (kind: string) => {
+    const pilares = INSIGHT_PILARES[kind];
+    if (!pilares) return false;                       // tipo desconhecido: decisão 2
+    return pilares.every((p) => scopes[p] !== false);  // TODOS, nunca "algum"
+  };
+
+  const tiposVisiveis = Object.keys(INSIGHT_PILARES).filter(autorizada);
+  if (!tiposVisiveis.length) return [];
+
+  /* O escopo podou alguma coisa? Então nada aqui pode AFIRMAR AUSÊNCIA: o que
+     este bloco enxerga deixou de ser o universo. Ver a regra no contrato acima
+     — é o furo que a revisão de 13/09/2026 encontrou. */
+  const universoPodado = tiposVisiveis.length < Object.keys(INSIGHT_PILARES).length;
+
+  // A leitura mais recente de cada tipo. A lista chega ordenada por
+  // `computed_at` desc, então a primeira de cada tipo é a que vale.
+  const maisRecente = new Map<string, InsightRow>();
+  for (const row of insights ?? []) {
+    const kind = String(row?.kind ?? "");
+    if (!tiposVisiveis.includes(kind) || maisRecente.has(kind)) continue;
+    maisRecente.set(kind, row);
+  }
+
+  const respostaDela = new Map<string, InsightFeedbackRow>();
+  for (const f of feedback ?? []) {
+    const kind = String(f?.kind ?? "");
+    if (tiposVisiveis.includes(kind) && !respostaDela.has(kind)) respostaDela.set(kind, f);
+  }
+
+  /** A marca da resposta dela, só quando ela respondeu SOBRE ESTE estado. */
+  const marcaDela = (kind: string, status: string): string => {
+    const f = respostaDela.get(kind);
+    if (!f || f.asked_status !== status) return "";
+    if (f.answer === "sim") {
+      return " A PESSOA CONFIRMOU que isso bate com a vida dela: vale mais que qualquer dedução sua.";
+    }
+    if (f.answer === "nao") {
+      return " A PESSOA DISSE QUE ISSO NÃO BATE com a vida dela: não repita como verdade sobre ela, pergunte antes de concluir.";
+    }
+    return "";
+  };
+
+  const bullets: string[] = [];
+  /** O que ainda não tem resposta. `faltam` só existe quando o cálculo disse
+   *  quantos dias faltam — número inventado aqui seria pior que silêncio. */
+  const semLeitura: { titulo: string; faltam: string | null }[] = [];
+
+  for (const kind of tiposVisiveis) {
+    const copy = INSIGHT_COPY[kind];
+    const row = maisRecente.get(kind);
+    if (!row || !copy) {
+      semLeitura.push({ titulo: copy?.titulo ?? kind, faltam: null });
+      continue;
+    }
+
+    const alto = numeroOuNull(row.result?.high_group_median);
+    const baixo = numeroOuNull(row.result?.low_group_median);
+    const temNumeros = alto !== null && baixo !== null;
+
+    if (row.status === "tendencia" && temNumeros) {
+      bullets.push(
+        `• ${copy.titulo}: ${copy.tendencia(copy.fmt(alto!), copy.fmt(baixo!))}.` +
+        evidencia(row) + marcaDela(kind, row.status),
+      );
+      continue;
+    }
+    if (row.status === "sem_tendencia" && temNumeros) {
+      bullets.push(
+        `• ${copy.titulo}: ${copy.parecido(copy.fmt(alto!), copy.fmt(baixo!))}.` +
+        evidencia(row) + marcaDela(kind, row.status),
+      );
+      continue;
+    }
+
+    /* Sobrou: `dados_insuficientes`, estado que o cálculo conhece mas que hoje
+       ninguém grava (persistRun pula), e a linha corrompida (status estranho ou
+       mediana ilegível). Os dois viram "ainda sem leitura" — nunca "não há
+       padrão", que é conclusão que não temos. Quando o motivo e a conta de dias
+       existirem, eles entram: "faltam 9 dias" é serviço; inventar essa conta,
+       não. */
+    const faltam = numeroOuNull(row.result?.days_missing);
+    const contagem = row.status === "dados_insuficientes"
+      && row.result?.reason === "overlap" && faltam !== null && faltam > 0
+      ? `faltam ${faltam} dias com os dois lados registrados`
+      : null;
+    semLeitura.push({ titulo: copy.titulo, faltam: contagem });
+  }
+
+  /* Nenhuma leitura ainda: uma linha só, sem a aula sobre causalidade — não há
+     número para citar, e o que precisa ser dito é apenas que o app não concluiu
+     nada. Vale ~1/4 dos tokens do bloco completo, e é o estado da maioria das
+     contas novas.
+     A contagem regressiva, quando existe, VEM JUNTO: "faltam 9 dias" é o único
+     número desta situação, e número é a última coisa que este bloco corta. Os
+     tipos sem contagem ficam sem nome — a frase já diz que não há leitura, e
+     repetir os três títulos seria pagar tokens para dizer "nada" três vezes. */
+  if (!bullets.length) {
+    /* Sem nenhuma leitura para mostrar E com o universo podado, a única saída
+       honesta é não existir: qualquer frase aqui seria sobre o que foi
+       escondido. */
+    if (universoPodado) return [];
+    const contagens = semLeitura
+      .filter((s) => s.faltam)
+      .map((s) => `${s.titulo}: ${s.faltam}`);
+    return [
+      `TENDÊNCIAS: o app ainda não concluiu nenhuma leitura de padrão entre as áreas desta pessoa` +
+      (contagens.length ? ` (${contagens.join("; ")})` : "") + `. ` +
+      `Não afirme que uma área influencia outra na vida dela, nem para ilustrar.`,
+    ];
+  }
+
+  /* A lista de ausências se lê como exaustiva ("é isto que ainda não temos"), e
+     num universo podado ela é uma meia-verdade que o modelo completa sozinho.
+     Com poda, o bloco mostra o que TEM e cala sobre o que não tem. */
+  if (semLeitura.length && !universoPodado) {
+    bullets.push(`• Ainda sem leitura: ${
+      semLeitura.map((s) => s.faltam ? `${s.titulo} (${s.faltam})` : s.titulo).join("; ")
+    }.`);
+  }
+
+  /* O cabeçalho existe por causa de UM risco: número bonito na mão do modelo
+     vira relação de causa em uma frase ("você gastou mais PORQUE dormiu mal").
+     As palavras banidas e a frase de limite são as MESMAS da tela
+     (LIMIT_PHRASE, em TrendInsights.tsx): a pessoa não pode ler uma coisa no
+     card e ouvir outra do Conselheiro. */
+  return [
+    `TENDÊNCIAS VERIFICADAS (cálculo do app, não seu). ` +
+    `São ASSOCIAÇÕES: nunca diga que um lado causou o outro ("porque", "faz com que", "leva a") — ` +
+    `a tela dela diz "isso aconteceu junto, não quer dizer que um causou o outro". ` +
+    `Não invente tendência nem altere número. Abaixo de 30 dias, leitura provisória. ` +
+    (universoPodado
+      // Sem a lista de ausências, convidar o modelo a dizer "ainda sem leitura"
+      // seria ensiná-lo a afirmar exatamente o que este bloco parou de afirmar.
+      ? `"Ficou parecido" é resposta completa: diga-a em vez de procurar padrão sozinho.`
+      : `"Ficou parecido" e "ainda sem leitura" são respostas completas: diga-as em vez de procurar padrão sozinho.`),
+    ...bullets,
+  ];
+}
 
 /**
  * Monta um retrato compacto do usuário cruzando todos os pilares.
@@ -226,7 +612,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   const todaySpIso = spParts().dateIso;
   const monthStartSpIso = spMonthStartUtc().slice(0, 10);
 
-  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, xpTotalRes, { data: battles }, { data: bCheckins }, { data: plans }, memoriesRaw, { data: estimates }, { data: recurrings }] =
+  const [{ data: profile }, { data: events }, { data: txs }, { data: habits }, xpTotalRes, { data: battles }, { data: bCheckins }, { data: plans }, memoriesRaw, { data: estimates }, { data: recurrings }, { data: insightRows, error: insightErr }, { data: insightFeedback }] =
     await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       supabase.from("life_events").select("pillar,kind,occurred_at,payload")
@@ -248,6 +634,13 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       supabase.from("category_estimates").select("category,amount").eq("user_id", userId),
       supabase.from("recurring_transactions").select("kind,amount,category,description,active")
         .eq("user_id", userId).eq("active", true),
+      /* As tendências que o app JÁ calculou (ver o bloco acima de trendLines).
+         Limite 12 = as 3 análises com folga para versões antigas da regra
+         convivendo; a ordenação por `computed_at` faz a primeira de cada tipo
+         ser a mais recente, que é a que a pessoa viu por último. */
+      supabase.from("insights").select("kind,status,sample_size,period_start,period_end,result,computed_at")
+        .eq("user_id", userId).order("computed_at", { ascending: false }).limit(12),
+      supabase.from("insight_feedback").select("kind,answer,asked_status").eq("user_id", userId),
     ]);
 
   const lines: string[] = [];
@@ -707,6 +1100,27 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       (relTriggers ? ` (gatilhos das recaídas: ${relTriggers})` : "") +
       `. Últimos check-ins (recentes primeiro): ${cks.slice(0, 7).map((c) => c.status).join(", ")}.`
     );
+  }
+
+  /* Tendências verificadas — o cruzamento entre pilares, que é a promessa do
+     produto, chegando ao modelo pronto e conferível. Fica aqui, no fim dos
+     FATOS e antes dos blocos administrativos (o que falta preencher, metas sem
+     valor): é dado sobre a vida dela, não recado nosso.
+
+     LEITURA QUE FALHOU NÃO VIRA "NÃO HÁ PADRÃO". Se a consulta der erro, o
+     bloco inteiro sai de cena em silêncio — porque o caminho vazio deste bloco
+     AFIRMA algo ("o app ainda não tem nenhuma leitura"), e afirmar isso por
+     causa de um erro de banco é dizer à pessoa que não encontramos padrão
+     quando na verdade não conseguimos olhar. Mesma disciplina de selectMemories:
+     na dúvida, o retrato fica mais pobre, nunca mentiroso. */
+  if (insightErr) {
+    console.error("tendências: leitura indisponível, bloco omitido", insightErr.message ?? insightErr);
+  } else {
+    lines.push(...trendLines(
+      (insightRows ?? []) as InsightRow[],
+      (insightFeedback ?? []) as InsightFeedbackRow[],
+      scopes,
+    ));
   }
 
     if (!kinds["weight"]?.length) missing.push("peso atual (registrar na aba Alimentação)");
@@ -1324,6 +1738,108 @@ export function resolveSleepDays(events: any[], today: string, hourNow: number):
   });
 }
 
+/* ─── O PREFIXO CACHEÁVEL DA EXTRAÇÃO ────────────────────────────────────
+
+   A extração é a chamada de MAIOR VOLUME do produto: roda em TODA captura e
+   em TODO turno de conversa. Até aqui ela mandava ~4.000 tokens de instrução
+   idênticos a cada chamada, sempre a preço cheio. Nos 30 dias reais medidos:
+
+     capture        69 chamadas · 371.235 tokens de entrada · cache_read = 0
+     chat-extracao  75 chamadas · 393.964 tokens de entrada · cache_read = 0
+
+   Juntas, 28,6% do gasto de IA do produto — e o maior bloco sem cache que
+   existia. Daí a montagem em TRÊS blocos, do mais estável para o mais
+   volátil. O cache da Anthropic é casamento de PREFIXO (tools → system →
+   messages): tudo depois do primeiro byte diferente deixa de ser reusado.
+
+     1. EXTRACTION_SYSTEM_GLOBAL — idêntico para toda pessoa e toda chamada.
+        Breakpoint 1: UMA entrada para o produto inteiro, que fica quente com
+        o tráfego somado de todo mundo.
+     2. memoriesBlock(known)     — estável POR PESSOA; só muda quando ela
+        ganha uma memória nova. Breakpoint 2.
+     3. BULK_EXTRACTION_RULES    — só quando vem arquivo. SEM breakpoint.
+
+   A HORA FICA DE FORA, e isso não é detalhe: nowInSpForPrompt() muda a cada
+   minuto, e um relógio dentro do prefixo invalidaria tudo o que viesse depois
+   dele — cada chamada escreveria uma entrada nova e não leria nenhuma. Ela
+   abre a mensagem do usuário, que é renderizada DEPOIS de todo o system, e
+   precisa continuar assim. Se um dia a hora voltar para o system, os dois
+   marcadores acima viram ágio puro.
+
+   POR QUE AS REGRAS DE ARQUIVO FORAM PARA O FIM. Elas eram concatenadas no
+   MEIO do system (logo após o CAPTURE_SYSTEM), o que dava à chamada com
+   arquivo e à chamada normal prefixos diferentes desde o byte ~5.700: duas
+   entradas de cache que nunca se leem. É o clássico "seção condicional no
+   meio do prefixo". No fim, os blocos 1 e 2 ficam byte a byte iguais nos dois
+   casos, e a chamada com arquivo lê a entrada que a captura acabou de
+   escrever. O texto continua correto ali: ele diz "o conteúdo ABAIXO inclui
+   um arquivo" — e agora está de fato mais perto do arquivo.
+
+   POR QUE DOIS BREAKPOINTS, E NÃO UM ─────────────────────────────────────
+   O mínimo cacheável do haiku-4-5 é 4.096 tokens. Abaixo disso a API ignora o
+   marcador EM SILÊNCIO: devolve cache_creation_tokens 0, sem erro e sem
+   aviso. O bloco 1 foi ESTIMADO em ~4.015 tokens (13.251 caracteres ÷ 3,3), e
+   essa razão caractere/token carrega ±12% de erro em português. Ou seja: 81
+   tokens da fronteira, DENTRO da própria margem. Ninguém aqui sabe de que
+   lado ele cai — e nada neste desenho pode depender disso.
+
+   Por isso o segundo marcador. Ele cobre bloco 1 + bloco 2 (4.900 a 7.400
+   tokens, conforme o tamanho da memória da pessoa) e cruza o mínimo com
+   folga. Os três cenários terminam bem:
+
+     • bloco 1 ACIMA do mínimo → todo mundo compartilha a entrada global, e o
+       marcador 2 ainda poupa a releitura das memórias de cada pessoa;
+     • bloco 1 ABAIXO do mínimo → o marcador 1 vira no-op silencioso e o
+       marcador 2 carrega sozinho. Continua valendo a pena;
+     • pessoa SEM memória alguma e prefixo abaixo do mínimo → nada é escrito e
+       nada é cobrado, idêntico ao que já era. O pior caso é empate.
+
+   Empilhar os dois não custa: a escrita é cobrada pelo DELTA além do ponto
+   mais alto que deu hit, nunca uma vez por marcador.
+
+   O ROTEAMENTO DE MODELO PARTE O CACHE AO MEIO — e tudo bem. Cache é escopado
+   por MODELO, então a extração mantém duas entradas (uma Haiku, uma Sonnet).
+   Esse é o custo escondido de rotear entre modelos, e aqui ele é aceito de
+   olhos abertos: no caminho Sonnet o mínimo é 1.024 e o bloco 1 cacheia com
+   folga, então a incerteza dos 4.015 é SÓ do caminho Haiku — exatamente onde
+   o bloco 2 cobre.
+
+   POR QUE ACREDITAMOS QUE HÁ RELEITURA (a pergunta que matou o cache do
+   briefing). Cache escrito e nunca lido é ÁGIO: escrever custa 1,25x a
+   entrada e ler custa 0,1x, então quem escreve e não lê paga 25% A MAIS do
+   que não cachear. Foi o que aconteceu com briefing (1x/dia) e retrospectiva
+   (1x/semana), e por isso o cache saiu de lá.
+
+   ONDE FICA O EMPATE, com a conta à vista para quem vier conferir. Sendo W os
+   tokens escritos e R os lidos, cachear custa 1,25W + 0,1R e não cachear
+   custa (W + R). Igualando: 0,25W = 0,9R, ou seja R/W = 0,28. Abaixo disso o
+   cache é prejuízo; acima, lucro. (A conta fecha com o número real da
+   chat-principal: 22,3% da entrada escrita, 36,6% lida, 41,1% a preço cheio →
+   índice 72,6 contra 100, os mesmos 27% mais barato que a telemetria mostrou.)
+
+   Aqui é o oposto do briefing: a extração dispara nos MESMOS turnos da
+   chat-principal, que em produção faz R/W = 1,65 — quase seis vezes o empate.
+   A rajada existe e está medida. Se um dia a telemetria mostrar R/W abaixo de
+   0,28 NESTAS features, o certo é TIRAR os marcadores, não afiná-los.
+
+   COMO MEDIR QUANDO HOUVER UMA CHAVE DE API ──────────────────────────────
+   É o que tira o número acima do terreno da estimativa, e é barato: POST
+   /v1/messages/count_tokens com o MESMO model, os MESMOS tools e só o
+   system[0] desta chamada devolve o tamanho exato do bloco 1.
+     • Veio >= 4.096 → nada a fazer: o bloco 1 já cacheia sozinho no Haiku.
+     • Veio < 4.096 → NÃO mexa no bloco 2, que já cobre. As saídas são
+       (a) rotear a extração para um modelo de mínimo 1.024 (sonnet-5), ou
+       (b) trazer instrução estável de VOLTA para o bloco 1 até cruzar.
+       O que NUNCA se faz é encher o prompt de texto inútil só para bater no
+       mínimo: instrução que não serve ao modelo é token pago para sempre.
+   A verdade do dia a dia continua sendo a telemetria: cache_read_tokens e
+   cache_creation_tokens por feature e por modelo em ai_usage — é de lá que
+   sai o R/W acima, e é ele que decide se estes marcadores ficam. */
+const EXTRACTION_SYSTEM_GLOBAL =
+  `${CAPTURE_SYSTEM}\n\n━━━ MEMÓRIA DE LONGO PRAZO ━━━\n${
+    MEMORY_SYSTEM.split("Use SEMPRE a ferramenta")[0]
+  }\nUse SEMPRE a ferramenta extrair_registros_e_memorias, preenchendo events E memories (vazios quando não houver).`;
+
 export async function extractEventsAndMemories(
   supabase: SupabaseClient, userId: string, text: string,
   feature: string, memoryCap = 150,
@@ -1365,13 +1881,24 @@ export async function extractEventsAndMemories(
        manhã" (achado de QA nº 9) simplesmente porque nada na entrada dizia que
        horas eram. spParts() já dá a hora local; era só passá-la adiante. */
     const userText =
-      `${nowInSpForPrompt()}\n` +
-      `${memoriesBlock(known)}\n\nRELATO DO USUÁRIO (se houver pergunta junto, ignore-a e extraia só o que foi relatado como já acontecido):\n${t.slice(0, inputCap)}`;
+      `${nowInSpForPrompt()}\n\nRELATO DO USUÁRIO (se houver pergunta junto, ignore-a e extraia só o que foi relatado como já acontecido):\n${t.slice(0, inputCap)}`;
+
+    /* Os três blocos do prefixo — ver o comentário longo acima desta função
+       antes de mexer na ordem, nos marcadores ou no que entra em cada um. */
+    const systemBlocks: Record<string, unknown>[] = [
+      { type: "text", text: EXTRACTION_SYSTEM_GLOBAL, cache_control: { type: "ephemeral" } },
+    ];
+    // Sem memória não há o que reaproveitar, e um marcador aqui só ocuparia
+    // um dos quatro lugares sem nunca virar leitura.
+    systemBlocks.push(known.length
+      ? { type: "text", text: memoriesBlock(known), cache_control: { type: "ephemeral" } }
+      : { type: "text", text: memoriesBlock(known) });
+    if (bulk) systemBlocks.push({ type: "text", text: BULK_EXTRACTION_RULES });
 
     const { res, data } = await anthropicCall(supabase, userId, feature, {
       model: hasQuestion ? MODEL_SMART : MODEL_FAST,
       max_tokens: bulk ? 8000 : 1800,
-      system: `${CAPTURE_SYSTEM}${bulk ? `\n${BULK_EXTRACTION_RULES}` : ""}\n\n━━━ MEMÓRIA DE LONGO PRAZO ━━━\n${MEMORY_SYSTEM.split("Use SEMPRE a ferramenta")[0]}\nUse SEMPRE a ferramenta extrair_registros_e_memorias, preenchendo events E memories (vazios quando não houver).`,
+      system: systemBlocks,
       tools: [COMBINED_TOOL],
       tool_choice: { type: "tool", name: "extrair_registros_e_memorias" },
       messages: [{

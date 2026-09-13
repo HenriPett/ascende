@@ -751,19 +751,89 @@ update public.app_settings
  where key = 'pricing'
    and (value->>'monthly_label') like '%19,90%';
 
+-- ─── 16-A. RESERVA DE COTA: VALIDADE, LIQUIDAÇÃO E VARREDURA ────
+-- Estes cinco objetos nasceram na migração
+-- 20260913140000_reserva_orfa_nao_pode_cobrar_cota.sql, e é LÁ que está o
+-- porquê inteiro (inclusive a justificativa dos 15 minutos). Estão repetidos
+-- aqui, contra a regra geral do supabase/migrations/README.md ("objeto novo
+-- fica só na migração"), por um motivo que a regra não previa: a seção 17
+-- logo abaixo — que é objeto DE BASE — passou a DEPENDER deles. Sem esta
+-- cópia, um ambiente criado pelo setup.sql (o caminho documentado no README
+-- da raiz, e o que um staging ou um reset usa) sobe com toda reserva de cota
+-- estourando "function does not exist": TODO recurso com limite morre, e o
+-- settleUsage falha em silêncio para sempre — o teto do Conselheiro no
+-- WhatsApp deixa de existir de forma permanente naquele ambiente.
+-- As duas cópias têm de ficar IDÊNTICAS. Mudou aqui, mude lá (e vice-versa);
+-- como a migração roda DEPOIS, é a versão dela que prevalece na prática.
+--
+-- Em uma frase: uma reserva só sai da conta por código (sucesso → UPDATE da
+-- linha; falha → releaseUsage), e código nenhum roda quando a função de borda
+-- é MORTA em vez de lançar. Por isso reserva aberta tem prazo de validade.
+
+-- Janela de graça. Espelho em TypeScript: RESERVATION_GRACE_MS,
+-- em supabase/functions/_shared/usage.ts (countUsage roda via PostgREST,
+-- fora do banco, e precisa da MESMA regra).
+create or replace function public.ai_reservation_grace()
+returns interval language sql immutable as $$ select interval '15 minutes' $$;
+
+-- As reservas ABERTAS são um punhado de linhas numa tabela que só cresce, e a
+-- varredura roda no caminho quente, segurando o advisory lock.
+create index if not exists ai_usage_reservas_abertas
+  on public.ai_usage (user_id, feature, created_at)
+  where model = 'reserva';
+
+-- O QUE CONTA CONTRA O TETO — uma definição só, usada por todas as janelas.
+-- A cláusula do `model` é a correção: reserva ABERTA e velha não é uso, é
+-- entulho de uma função morta.
+create or replace function public.ai_usage_counted(uid uuid, feat text, since timestamptz)
+returns int language sql stable security definer set search_path = public as $$
+  select count(*)::int from public.ai_usage
+   where user_id = uid and feature = feat and success and created_at >= since
+     and (model <> 'reserva' or created_at >= now() - public.ai_reservation_grace());
+$$;
+revoke all on function public.ai_usage_counted(uuid, text, timestamptz) from anon, authenticated;
+
+-- AUTO-CURA. Apagar é o que release_ai_usage já faz com uma reserva nunca
+-- usada, e pelo mesmo motivo: a linha não carrega informação nenhuma (zero
+-- tokens, zero custo, nenhum request id). Não é telemetria perdida, é lixo
+-- removido. Quem chama já está sob o advisory lock do par usuário+feature.
+create or replace function public.sweep_ai_reservations(uid uuid, feat text)
+returns void language sql security definer set search_path = public as $$
+  delete from public.ai_usage
+   where user_id = uid and feature = feat and model = 'reserva'
+     and created_at < now() - public.ai_reservation_grace();
+$$;
+revoke all on function public.sweep_ai_reservations(uuid, text) from anon, authenticated;
+
+-- LIQUIDAÇÃO. Chamada por quem consome a cota SEM passar a reserva para o
+-- anthropicCall (o Conselheiro do WhatsApp registra sob 'wa-conselheiro'; a
+-- análise de documento é lida dentro do turno do Conselheiro). A linha
+-- continua contando — ela É o marcador da cota — mas deixa de parecer uma
+-- chamada em voo, que é o que a tornava indistinguível de uma órfã.
+create or replace function public.settle_ai_usage(reservation_id bigint)
+returns void language sql security definer set search_path = public as $$
+  update public.ai_usage set model = 'reserva-consumida'
+   where id = reservation_id and model = 'reserva';
+$$;
+revoke all on function public.settle_ai_usage(bigint) from anon, authenticated;
+
 -- ─── 17. LIMITES DE IA ATÔMICOS (reserva antes da chamada) ──────
 -- Duas requisições simultâneas não passam mais juntas pela verificação:
 -- a função reserva a unidade de cota sob advisory lock (por usuário+feature)
 -- e a função de borda devolve a reserva se a chamada de IA falhar.
+-- A contagem e a varredura de reserva ÓRFÃ (a função de borda foi MORTA entre
+-- a reserva e a devolução, e a linha cobrava a pessoa para sempre) vivem em
+-- ai_usage_counted/sweep_ai_reservations — criadas na migração
+-- 20260913140000_reserva_orfa_nao_pode_cobrar_cota.sql, que explica o porquê
+-- e o número da janela de graça.
 create or replace function public.reserve_ai_usage(uid uuid, feat text, cap int, since timestamptz)
 returns bigint language plpgsql security definer set search_path = public as $$
-declare n int; new_id bigint;
+declare new_id bigint;
 begin
   perform pg_advisory_xact_lock(hashtext(uid::text || ':' || feat));
-  if cap is not null then
-    select count(*) into n from public.ai_usage
-     where user_id = uid and feature = feat and success and created_at >= since;
-    if n >= cap then return null; end if;
+  perform public.sweep_ai_reservations(uid, feat);
+  if cap is not null and public.ai_usage_counted(uid, feat, since) >= cap then
+    return null;
   end if;
   insert into public.ai_usage (user_id, feature, model, success)
   values (uid, feat, 'reserva', true)
@@ -1124,32 +1194,28 @@ revoke all on function public.release_ai_usage(bigint) from anon, authenticated;
 -- simultâneas passarem juntas. Aqui a decisão inteira acontece sob o mesmo
 -- advisory lock e devolve QUAL janela barrou (o app precisa da mensagem e do
 -- reset_at corretos). cap null = janela sem limite.
+-- A contagem passa por ai_usage_counted (ignora reserva ABERTA e velha, que é
+-- entulho de função morta) e a varredura por sweep_ai_reservations — as duas
+-- nascem na migração 20260913140000_reserva_orfa_nao_pode_cobrar_cota.sql.
 create or replace function public.reserve_ai_usage_windows(
   uid uuid, feat text,
   cap_day int, since_day timestamptz,
   cap_week int, since_week timestamptz,
   cap_month int, since_month timestamptz
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare n int; new_id bigint;
+declare new_id bigint;
 begin
   perform pg_advisory_xact_lock(hashtext(uid::text || ':' || feat));
+  perform public.sweep_ai_reservations(uid, feat);
 
-  if cap_day is not null then
-    select count(*) into n from public.ai_usage
-     where user_id = uid and feature = feat and success and created_at >= since_day;
-    if n >= cap_day then return jsonb_build_object('id', null, 'window', 'daily'); end if;
+  if cap_day is not null and public.ai_usage_counted(uid, feat, since_day) >= cap_day then
+    return jsonb_build_object('id', null, 'window', 'daily');
   end if;
-
-  if cap_week is not null then
-    select count(*) into n from public.ai_usage
-     where user_id = uid and feature = feat and success and created_at >= since_week;
-    if n >= cap_week then return jsonb_build_object('id', null, 'window', 'weekly'); end if;
+  if cap_week is not null and public.ai_usage_counted(uid, feat, since_week) >= cap_week then
+    return jsonb_build_object('id', null, 'window', 'weekly');
   end if;
-
-  if cap_month is not null then
-    select count(*) into n from public.ai_usage
-     where user_id = uid and feature = feat and success and created_at >= since_month;
-    if n >= cap_month then return jsonb_build_object('id', null, 'window', 'monthly'); end if;
+  if cap_month is not null and public.ai_usage_counted(uid, feat, since_month) >= cap_month then
+    return jsonb_build_object('id', null, 'window', 'monthly');
   end if;
 
   insert into public.ai_usage (user_id, feature, model, success)
