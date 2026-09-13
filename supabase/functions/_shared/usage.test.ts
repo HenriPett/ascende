@@ -155,21 +155,46 @@ Deno.test("liquidar e devolver são operações DIFERENTES no banco", async () =
 });
 
 /* ─── O acoplamento entre o TypeScript e o SQL ───────────────────────────
-   A janela de graça existe em DOIS lugares por necessidade: o teto atômico é
-   decidido em SQL (sob advisory lock) e countUsage roda via PostgREST, fora
-   do banco. Se as duas divergirem, a tela mostra um número e o servidor cobra
-   outro — e ninguém descobre por erro nenhum. */
-Deno.test("a janela de graça é a MESMA no TypeScript e no SQL", async () => {
+   A janela de graça vive em TRÊS lugares, todos por necessidade:
+     • usage.ts       — countUsage roda via PostgREST, fora do banco;
+     • a migração     — para quem já tem banco;
+     • o setup.sql    — porque a reserva (objeto DE BASE) depende dela, e a
+                        linha de base precisa ficar de pé sozinha; um
+                        ambiente novo é criado só com ele.
+   Divergir é silencioso nos três sentidos: a tela mostra um número e o
+   servidor cobra outro, ou o ambiente novo se comporta diferente do de
+   produção. Nada disso dá erro — por isso está preso aqui. */
+Deno.test("a janela de graça é a MESMA no TypeScript, na migração e no setup.sql", async () => {
   const ts = await Deno.readTextFile(new URL("./usage.ts", import.meta.url));
-  const sql = await Deno.readTextFile(new URL(
+  const migracao = await Deno.readTextFile(new URL(
     "../../migrations/20260913140000_reserva_orfa_nao_pode_cobrar_cota.sql", import.meta.url));
+  const setup = await Deno.readTextFile(new URL("../../setup.sql", import.meta.url));
 
   const minutosTs = Number(ts.match(/RESERVATION_GRACE_MS = (\d+) \* 60 \* 1000;/)?.[1]);
   assert(minutosTs > 0, "RESERVATION_GRACE_MS sumiu (ou mudou de forma) em _shared/usage.ts");
 
-  const minutosSql = Number(sql.match(/interval '(\d+) minutes'/)?.[1]);
-  assertEquals(minutosTs, minutosSql,
-    "a janela de graça divergiu entre usage.ts e a migração que a define");
+  const naFuncao = (src: string) =>
+    Number(src.match(/function public\.ai_reservation_grace\(\)[\s\S]{0,200}?interval '(\d+) minutes'/)?.[1]);
+  assertEquals(minutosTs, naFuncao(migracao), "usage.ts divergiu da migração");
+  assertEquals(minutosTs, naFuncao(setup), "usage.ts divergiu do setup.sql");
+});
+
+/* O setup.sql é a linha de base: `supabase db reset`, um staging novo e o
+   passo 2 do README da raiz passam SÓ por ele, sem nenhuma migração. Quando
+   ele usa uma função que só a migração cria, toda reserva de cota estoura
+   "function does not exist" naquele ambiente — ou seja, todo recurso com
+   limite morre — e o settleUsage falha em silêncio para sempre. Foi o que
+   aconteceu na primeira versão desta branch. */
+Deno.test("o setup.sql CRIA tudo o que usa no caminho da cota", async () => {
+  const setup = await Deno.readTextFile(new URL("../../setup.sql", import.meta.url));
+  for (const fn of ["ai_reservation_grace", "ai_usage_counted", "sweep_ai_reservations", "settle_ai_usage"]) {
+    const criada = setup.indexOf(`create or replace function public.${fn}(`);
+    assert(criada >= 0, `o setup.sql usa public.${fn} mas não cria — ambiente novo nasce quebrado`);
+    // A primeira menção no arquivo tem de ser a própria criação: um uso antes
+    // dela quebraria o bootstrap, que roda o arquivo de cima para baixo.
+    assert(setup.indexOf(`public.${fn}(`) >= criada,
+      `public.${fn} é usada no setup.sql ANTES de ser criada`);
+  }
 });
 
 /* ─── O ágio de cache ────────────────────────────────────────────────────
@@ -253,4 +278,31 @@ Deno.test("todo modelo em uso tem preço próprio — senão a telemetria mente 
       + `faz o custo estimado cair no fallback e mentir em silêncio — acrescente a linha.`,
     );
   }
+});
+
+
+Deno.test("a trava de raciocínio conhece o modelo QUE ESTÁ EM USO — literal não pode envelhecer", async () => {
+  /* applyModelDefaults compara com uma string literal, e não com MODEL_SMART,
+   * porque usage.ts não pode importar de lib.ts: lib.ts já importa daqui, e o
+   * ciclo tornaria a constante frágil justo no caminho mais quente do produto.
+   *
+   * O preço de usar literal é que ele envelhece calado. Numa próxima troca de
+   * modelo, a trava deixaria de casar e o raciocínio adaptativo voltaria a
+   * ligar sozinho — devolvendo exatamente o briefing truncado de 400 tokens
+   * que este guarda existe para impedir. Este teste é o que faz o literal
+   * doer na hora, em vez de doer na manhã seguinte ao deploy. */
+  const lib = await Deno.readTextFile(new URL("./lib.ts", import.meta.url));
+  const usage = await Deno.readTextFile(new URL("./usage.ts", import.meta.url));
+
+  const smart = lib.match(/export const MODEL_SMART\s*=\s*"([^"]+)"/)?.[1];
+  assert(smart, "não achei MODEL_SMART em lib.ts");
+
+  const guarda = usage.slice(usage.indexOf("export function applyModelDefaults"));
+  assert(
+    guarda.includes(`"${smart}"`),
+    `applyModelDefaults não conhece o MODEL_SMART atual ("${smart}"). Sem isso o `
+    + `raciocínio adaptativo liga sozinho e os max_tokens apertados (briefing: 400) `
+    + `truncam a resposta. Acrescente o modelo à trava — ou, se este modelo não `
+    + `liga raciocínio ao omitir o campo, diga isso num comentário ao lado.`,
+  );
 });

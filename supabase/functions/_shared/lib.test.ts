@@ -931,3 +931,78 @@ Deno.test("prefixo · o bloco por pessoa é estável entre chamadas seguidas", a
   assertEquals(vistos[0], vistos[1],
     "o bloco de memórias mudou entre dois turnos da mesma sessão");
 });
+
+/* ── O FURO DO ESCOPO: universo podado não afirma ausência ───────────────────
+ *
+ * Achado na revisão de 13/09/2026, e é o pior tipo de bug que este bloco podia
+ * ter, porque ele MENTE em vez de falhar:
+ *
+ * Esconder tipos por escopo encolhe a lista. Quando o que sobrava não tinha
+ * leitura, o bloco escrevia "o app ainda não concluiu nenhuma leitura de padrão
+ * entre as áreas desta pessoa" — falso: as leituras existiam, escondidas.
+ *
+ * E o agravante que fecha o caso: a TELA não consulta `ai_scopes`. A pessoa vê
+ * o card do padrão, pergunta ao Conselheiro, e ele nega que exista. Das duas
+ * superfícies que se contradizem sobre a vida dela, a que mente é justamente a
+ * que ela não tem como conferir.
+ *
+ * A regra que estes testes travam: o bloco afirma PRESENÇA sempre; AUSÊNCIA,
+ * só quando enxerga o universo completo.
+ */
+
+Deno.test("tendências · escopo podou e nada sobrou: silêncio, nunca 'não há leitura'", () => {
+  /* O caso exato do furo: prosperidade fechada esconde as duas análises de
+     dinheiro — uma delas COM tendência calculada — e a que sobra não tem
+     leitura nenhuma. */
+  const linhas = trendLines(
+    [ins({ kind: "sono_gasto_seguinte" })],          // existe, e está escondida
+    [],
+    { ...TODOS_OS_ESCOPOS, prosperidade: false },
+  );
+  assertEquals(linhas, [], "o bloco negou uma leitura que a pessoa vê na tela");
+});
+
+Deno.test("tendências · o mesmo vale quando o escondido também não tem leitura", () => {
+  /* Não dá para condicionar a correção a "existe linha escondida?": decidir
+     isso já é olhar o dado que o escopo mandou não olhar. Podou, cala. */
+  const linhas = trendLines([], [], { ...TODOS_OS_ESCOPOS, prosperidade: false });
+  assertEquals(linhas, []);
+});
+
+Deno.test("tendências · universo podado mostra o que TEM e cala sobre o que falta", () => {
+  /* `alimentacao: false` esconde exatamente uma análise (refeições × gasto).
+     Sobram duas: uma com tendência, outra sem leitura. A com tendência aparece;
+     a lista de ausências, que se lê como exaustiva, não. */
+  const texto = bloco(trendLines(
+    [ins({ kind: "sono_gasto_seguinte" })],
+    [],
+    { ...TODOS_OS_ESCOPOS, alimentacao: false },
+  ));
+  assert(texto.includes("Sono × gasto do dia seguinte"), "a leitura verdadeira sumiu junto");
+  assertFalse(texto.includes("Ainda sem leitura"), "afirmou ausência sobre um universo podado");
+  assertFalse(texto.includes("Refeições"), "nomeou a análise escondida");
+  // E o cabeçalho não pode ensinar a dizer o que o bloco parou de afirmar.
+  assertFalse(texto.includes('"ainda sem leitura" são respostas'));
+  assert(texto.includes('"Ficou parecido" é resposta completa'));
+});
+
+Deno.test("tendências · sem poda, a ausência continua sendo dita (e com a contagem)", () => {
+  /* A correção não pode virar "calar sempre": com o universo inteiro à vista,
+     "o app olhou e não concluiu" é informação que impede o modelo de inventar
+     padrão — o item 3 do pedido. */
+  const comTudo = bloco(trendLines([ins({ kind: "sono_gasto_seguinte" })], [], TODOS_OS_ESCOPOS));
+  assert(comTudo.includes("Ainda sem leitura: Refeições × gasto com comida; Treino × sono"));
+
+  const vazio = trendLines([], [], TODOS_OS_ESCOPOS);
+  assertEquals(vazio.length, 1);
+  assert(vazio[0].includes("ainda não concluiu nenhuma leitura"));
+
+  const contagem = bloco(trendLines(
+    [ins({
+      kind: "treino_sono", status: "dados_insuficientes", sample_size: 12,
+      result: { reason: "overlap", days_missing: 9 },
+    })],
+    [], TODOS_OS_ESCOPOS,
+  ));
+  assert(contagem.includes("faltam 9 dias"));
+});

@@ -272,6 +272,33 @@ export function nowInSpForPrompt(): string {
       ela: nada de "há uma leitura que não posso mostrar". Dizer que existe algo
       escondido já entrega que existe dado daquele lado — e o retrato já instrui
       o modelo a não especular sobre área desativada nem pedir para reativar.
+
+      E A REGRA QUE NASCEU DE UM FURO REAL (revisão de 13/09/2026):
+      UNIVERSO PODADO NÃO AFIRMA AUSÊNCIA. Esconder por escopo encolhe a lista
+      de tipos, e a versão anterior seguia adiante afirmando sobre o que sobrou:
+      quando nada do que sobrou tinha leitura, o bloco escrevia "o app ainda não
+      concluiu nenhuma leitura de padrão entre as áreas desta pessoa". Falso —
+      as leituras existiam, só estavam escondidas. E o agravante que fecha o
+      caso: a TELA não consulta `ai_scopes` (nem TrendInsights.tsx nem
+      useTrendInsights.tsx). A pessoa VÊ o card, pergunta ao Conselheiro, e ele
+      nega que exista. Duas superfícies do mesmo produto se contradizendo sobre
+      a vida dela — e quem mente é justamente a que ela não tem como conferir.
+
+      É a mesma doutrina do `insightErr` lá embaixo (leitura que falhou não vira
+      "não há padrão"), que eu havia escrito e deixado furada por este caminho.
+      Então, sempre que QUALQUER tipo for escondido por escopo:
+        • nenhuma frase de ausência é emitida (nem a linha curta de "nenhuma
+          leitura", nem o "Ainda sem leitura: …", que lista ausências de um
+          universo já podado e se lê como exaustivo);
+        • se não sobrar nenhuma leitura de verdade para mostrar, o bloco INTEIRO
+          devolve vazio.
+      O bloco passa a afirmar só PRESENÇA, que é sempre verdade, e reserva a
+      afirmação de ausência para quando enxerga o universo completo. Silêncio
+      não vaza e não mente; a frase de ausência fazia as duas coisas.
+      O preço, dito por extenso: conta com algum pilar fechado perde a guarda
+      anti-invenção deste bloco. Está coberto pelo "NUNCA INVENTE" do system e
+      pela linha de PRIVACIDADE do próprio retrato, e é barato perto de negar à
+      pessoa uma leitura que ela está vendo na tela.
       Os pilares de cada análise são os MESMOS pontinhos que a tela pinta no
       card (COPY[].pillars, em TrendInsights.tsx). Se um dia divergirem, a tela
       e a IA passam a discordar sobre o que a análise toca — e é a IA que erra
@@ -445,6 +472,11 @@ export function trendLines(
   const tiposVisiveis = Object.keys(INSIGHT_PILARES).filter(autorizada);
   if (!tiposVisiveis.length) return [];
 
+  /* O escopo podou alguma coisa? Então nada aqui pode AFIRMAR AUSÊNCIA: o que
+     este bloco enxerga deixou de ser o universo. Ver a regra no contrato acima
+     — é o furo que a revisão de 13/09/2026 encontrou. */
+  const universoPodado = tiposVisiveis.length < Object.keys(INSIGHT_PILARES).length;
+
   // A leitura mais recente de cada tipo. A lista chega ordenada por
   // `computed_at` desc, então a primeira de cada tipo é a que vale.
   const maisRecente = new Map<string, InsightRow>();
@@ -528,6 +560,10 @@ export function trendLines(
      tipos sem contagem ficam sem nome — a frase já diz que não há leitura, e
      repetir os três títulos seria pagar tokens para dizer "nada" três vezes. */
   if (!bullets.length) {
+    /* Sem nenhuma leitura para mostrar E com o universo podado, a única saída
+       honesta é não existir: qualquer frase aqui seria sobre o que foi
+       escondido. */
+    if (universoPodado) return [];
     const contagens = semLeitura
       .filter((s) => s.faltam)
       .map((s) => `${s.titulo}: ${s.faltam}`);
@@ -538,7 +574,10 @@ export function trendLines(
     ];
   }
 
-  if (semLeitura.length) {
+  /* A lista de ausências se lê como exaustiva ("é isto que ainda não temos"), e
+     num universo podado ela é uma meia-verdade que o modelo completa sozinho.
+     Com poda, o bloco mostra o que TEM e cala sobre o que não tem. */
+  if (semLeitura.length && !universoPodado) {
     bullets.push(`• Ainda sem leitura: ${
       semLeitura.map((s) => s.faltam ? `${s.titulo} (${s.faltam})` : s.titulo).join("; ")
     }.`);
@@ -554,7 +593,11 @@ export function trendLines(
     `São ASSOCIAÇÕES: nunca diga que um lado causou o outro ("porque", "faz com que", "leva a") — ` +
     `a tela dela diz "isso aconteceu junto, não quer dizer que um causou o outro". ` +
     `Não invente tendência nem altere número. Abaixo de 30 dias, leitura provisória. ` +
-    `"Ficou parecido" e "ainda sem leitura" são respostas completas: diga-as em vez de procurar padrão sozinho.`,
+    (universoPodado
+      // Sem a lista de ausências, convidar o modelo a dizer "ainda sem leitura"
+      // seria ensiná-lo a afirmar exatamente o que este bloco parou de afirmar.
+      ? `"Ficou parecido" é resposta completa: diga-a em vez de procurar padrão sozinho.`
+      : `"Ficou parecido" e "ainda sem leitura" são respostas completas: diga-as em vez de procurar padrão sozinho.`),
     ...bullets,
   ];
 }

@@ -1,30 +1,50 @@
 -- ═══════════════════════════════════════════════════════════════════════
 -- A RESERVA QUE NINGUÉM USOU CONTINUAVA COBRANDO A PESSOA, PARA SEMPRE
 --
--- ┌───────────────────────────────────────────────────────────────────┐
--- │ ORDEM DE DEPLOY — OBRIGATÓRIA. LEIA ANTES DE RODAR ESTE ARQUIVO.  │
--- │                                                                   │
--- │ Publique as edge functions `ai-chat` e `whatsapp-webhook` ANTES   │
--- │ de aplicar esta migração. São as duas que consomem cota sem       │
--- │ passar a reserva para o anthropicCall e que, por isso, passam a   │
--- │ LIQUIDAR a linha (settleUsage). `briefing` e `onboarding-         │
--- │ blueprint` também mudaram, mas só no cache de prompt: podem ir a  │
--- │ qualquer momento, antes ou depois, sem efeito nenhum aqui.        │
--- │                                                                   │
--- │ NA ORDEM CERTA, a janela entre uma coisa e outra é inofensiva: o  │
--- │ settleUsage chama uma função que ainda não existe no banco, o     │
--- │ erro cai no log e a linha fica exatamente como já ficava hoje.    │
--- │ Nada é varrido, porque a varredura nasce com esta migração.       │
--- │                                                                   │
--- │ NA ORDEM INVERTIDA (migração primeiro), a regra de idade e a      │
--- │ varredura entram em vigor enquanto os marcadores novos ainda      │
--- │ nascem como 'reserva' e ninguém os liquida. Consequência, a       │
--- │ partir dos 15 minutos de cada linha e até o deploy sair: O TETO   │
--- │ DO CONSELHEIRO NO WHATSAPP DEIXA DE EXISTIR e TODA ANÁLISE DE     │
--- │ DOCUMENTO (app e WhatsApp) SAI DE GRAÇA. Não corrompe dado algum  │
--- │ e se resolve sozinho assim que as funções sobem — mas, enquanto   │
--- │ durar, o teto está aberto.                                        │
--- └───────────────────────────────────────────────────────────────────┘
+-- ┌──────────────────────────────────────────────────────────────────────┐
+-- │ ORDEM DE DEPLOY — OBRIGATÓRIA. LEIA ANTES DE RODAR ESTE ARQUIVO.     │
+-- │                                                                      │
+-- │ PUBLIQUE ANTES de aplicar esta migração:                             │
+-- │   • ai-chat e whatsapp-webhook — são as duas que consomem cota sem   │
+-- │     passar a reserva para o anthropicCall e que, por isso, passam a  │
+-- │     LIQUIDAR a linha (settleUsage). Sem elas no ar, o teto abre.     │
+-- │   • get-subscription — é quem monta a tela de cota (countUsage). Sem │
+-- │     ele a tela segue contando as órfãs NOVAS que aparecerem depois   │
+-- │     desta migração, e quem olhar conclui que a correção não pegou.   │
+-- │                                                                      │
+-- │ PODEM IR a qualquer momento, antes ou depois:                        │
+-- │   • briefing e onboarding-blueprint — mudaram só o cache de prompt,  │
+-- │     não têm relação nenhuma com cota.                                │
+-- │   • analyze-body — importa countUsage, mas conta a feature           │
+-- │     'analyze-body', que nunca passa por reserveUsage e portanto      │
+-- │     nunca teve uma linha 'reserva'. A mudança é no-op para ele.      │
+-- │                                                                      │
+-- │ NÃO EXISTE JANELA DE ARREPENDIMENTO. A ANISTIA, no fim deste         │
+-- │ arquivo, roda no INSTANTE em que você o aplica e é IRREVERSÍVEL:     │
+-- │ apaga de uma vez todo marcador antigo de WhatsApp e de documento,    │
+-- │ junto com as órfãs. Isso é intencional e acontece nos DOIS sentidos  │
+-- │ da ordem — não é dano de deploy invertido, é a decisão deste         │
+-- │ arquivo. Só não tenha a ilusão de que dá para aplicar e consertar    │
+-- │ em 15 minutos: quando o arquivo terminar, já foi.                    │
+-- │                                                                      │
+-- │ O QUE A ORDEM INVERTIDA (SQL primeiro) ACRESCENTA: os marcadores     │
+-- │ NOVOS continuam nascendo como 'reserva' enquanto as funções velhas   │
+-- │ estiverem no ar, e a varredura já está valendo — cada um some 15     │
+-- │ minutos depois de nascer. Do instante da migração até o deploy       │
+-- │ sair: O TETO DO CONSELHEIRO NO WHATSAPP DEIXA DE EXISTIR e TODA      │
+-- │ ANÁLISE DE DOCUMENTO (app e WhatsApp) SAI DE GRAÇA. Não corrompe     │
+-- │ dado e se resolve sozinho quando as funções sobem, mas cada turno    │
+-- │ dado de graça nesse intervalo é irrecuperável.                       │
+-- │                                                                      │
+-- │ NA ORDEM CERTA há uma janela benigna, entre o deploy e o SQL, que    │
+-- │ alguém vai notar e abrir chamado. Aparecem duas coisas:              │
+-- │   • settleUsage chama uma função que ainda não existe no banco; o    │
+-- │     erro cai no log e a linha fica como já ficava hoje.              │
+-- │   • countUsage (a tela) já desconta reserva órfã, mas o              │
+-- │     reserve_ai_usage antigo ainda a conta: por alguns minutos a      │
+-- │     tela diz que sobra cota e o servidor barra. É inofensivo e       │
+-- │     acaba no instante em que a migração roda.                        │
+-- └──────────────────────────────────────────────────────────────────────┘
 --
 -- Produção, 13/09/2026: 19 linhas com `model = 'reserva'` em `ai_usage`
 -- sob a feature 'chat-principal', acumuladas desde 27/08, contra 59 chamadas
