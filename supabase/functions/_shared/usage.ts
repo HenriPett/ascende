@@ -50,6 +50,10 @@ async function ensureCompletes(p: Promise<unknown>): Promise<void> {
 
 // Preços por milhão de tokens (USD). Atualize aqui quando a Anthropic mudar.
 const PRICES_PER_MTOK: Record<string, { in: number; out: number; cacheWrite: number; cacheRead: number }> = {
+  "claude-sonnet-5": { in: 2, out: 10, cacheWrite: 2.5, cacheRead: 0.2 },
+  // Continua aqui porque o histórico de ai_usage tem meses de linhas deste
+  // modelo: tirá-lo faria as consultas de custo recalcularem o PASSADO pelo
+  // fallback, e o passado ficaria errado retroativamente.
   "claude-sonnet-4-6": { in: 3, out: 15, cacheWrite: 3.75, cacheRead: 0.3 },
   "claude-haiku-4-5": { in: 1, out: 5, cacheWrite: 1.25, cacheRead: 0.1 },
 };
@@ -58,7 +62,13 @@ function estimateCostUsd(model: string, u: {
   input_tokens?: number; output_tokens?: number;
   cache_creation_input_tokens?: number; cache_read_input_tokens?: number;
 }): number {
-  const p = PRICES_PER_MTOK[model] ?? { in: 3, out: 15, cacheWrite: 3.75, cacheRead: 0.3 };
+  /* Modelo fora da tabela: o custo vira CHUTE, e um chute silencioso é pior que
+     um buraco — ele entra na mesma coluna dos números reais e ninguém distingue
+     depois. O aviso no log é o que dá chance de alguém notar que faltou
+     acrescentar a linha de preço junto com a troca de modelo. */
+  const known = PRICES_PER_MTOK[model];
+  if (!known) console.warn(`ai_usage: preço desconhecido para "${model}" — custo estimado pelo fallback`);
+  const p = known ?? { in: 3, out: 15, cacheWrite: 3.75, cacheRead: 0.3 };
   const cost =
     ((u.input_tokens ?? 0) * p.in +
       (u.output_tokens ?? 0) * p.out +
@@ -88,6 +98,32 @@ export interface AnthropicCallOptions {
  * capture, briefing, analyze-meal, analyze-body...).
  * Retorna a Response crua — o chamador decide como tratar o corpo.
  */
+/* ─── RACIOCÍNIO ADAPTATIVO: DESLIGADO POR ENQUANTO, DE PROPÓSITO ───────
+   No sonnet-5, OMITIR `thinking` liga o raciocínio adaptativo — o inverso
+   do sonnet-4-6, onde omitir significava não pensar. A migração de modelo
+   mudaria o comportamento de todas as rotas sem ninguém ter pedido.
+
+   E não seria só "respostas melhores": token de raciocínio conta DENTRO do
+   max_tokens. Os tetos daqui foram calibrados para um modelo que não pensa
+   — o briefing tem 400 e a análise corporal 700. Ligar raciocínio sem
+   mexer neles devolveria resposta truncada no meio, ou vazia.
+
+   Então a troca de modelo fica sendo o que ela se propôs a ser: o mesmo
+   comportamento, 33% mais barato. Raciocínio é a alavanca SEGUINTE, de
+   qualidade, e precisa de max_tokens maior e de um eval — começando pelo
+   Blueprint, que roda uma vez na vida e é o mais caro de errar.
+
+   Quem for ligar: passe `thinking` explicitamente na chamada (esta trava
+   respeita o que o chamador definir) e levante o max_tokens junto. Vale só
+   para o sonnet-5; o Haiku tem outra sintaxe e omitir lá já não pensa. */
+// deno-lint-ignore no-explicit-any
+export function applyModelDefaults(body: Record<string, any>): Record<string, any> {
+  if (body.model === "claude-sonnet-5" && body.thinking === undefined) {
+    return { ...body, thinking: { type: "disabled" } };
+  }
+  return body;
+}
+
 export async function anthropicCall(
   supabase: SupabaseClient,
   userId: string,
@@ -96,6 +132,7 @@ export async function anthropicCall(
   body: Record<string, any>,
   opts: AnthropicCallOptions = {},
 ): Promise<{ res: Response; data: unknown | null }> {
+  body = applyModelDefaults(body);
   const started = Date.now();
   let res: Response;
   try {

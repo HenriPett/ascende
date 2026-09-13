@@ -22,7 +22,7 @@
  * Rode com:  deno test --allow-env --allow-net --allow-read supabase/functions/
  */
 import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { countUsage, releaseUsage, settleUsage } from "./usage.ts";
+import { applyModelDefaults, countUsage, releaseUsage, settleUsage } from "./usage.ts";
 
 const USER = "11111111-1111-1111-1111-111111111111";
 
@@ -203,4 +203,54 @@ Deno.test("no ai-chat sobra UM cache: o da chat-principal, que é 27% mais barat
 
   const [, doPlanoForcadoEmDiante] = src.split('"chat-plano-forcado"');
   assertEquals(doPlanoForcadoEmDiante.includes("cache_control:"), false);
+});
+
+
+/* ─── A TROCA DE MODELO E AS DUAS COISAS QUE VÊM COLADAS NELA ───────────────
+ *
+ * O sonnet-4-6 virou sonnet-5: mais novo e 33% mais barato. Só que uma troca
+ * de modelo arrasta duas armadilhas que não avisam, e as duas custam caro de
+ * descobrir em produção. Ficam presas aqui.
+ */
+
+Deno.test("sonnet-5: raciocínio desligado por padrão (senão estoura o max_tokens de 400 do briefing)", () => {
+  // Omitir `thinking` no sonnet-5 LIGA o raciocínio adaptativo — o inverso do
+  // sonnet-4-6. E token de raciocínio conta dentro do max_tokens, que aqui foi
+  // calibrado para um modelo que não pensa.
+  const out = applyModelDefaults({ model: "claude-sonnet-5", max_tokens: 400 });
+  assertEquals(out.thinking, { type: "disabled" });
+});
+
+Deno.test("sonnet-5: quem PEDE raciocínio continua mandando", () => {
+  // A trava é um padrão, não uma proibição: ligar raciocínio numa rota é
+  // decisão de quem chama (com o max_tokens levantado junto).
+  const pedido = { type: "adaptive" };
+  const out = applyModelDefaults({ model: "claude-sonnet-5", thinking: pedido });
+  assertEquals(out.thinking, pedido);
+});
+
+Deno.test("a trava é SÓ do sonnet-5 — o Haiku tem outra sintaxe e não pode ser tocado", () => {
+  const out = applyModelDefaults({ model: "claude-haiku-4-5", max_tokens: 1800 });
+  assertEquals(out.thinking, undefined);
+});
+
+Deno.test("todo modelo em uso tem preço próprio — senão a telemetria mente 50% em silêncio", async () => {
+  /* A tabela de preços tem fallback, e o fallback é o preço de um modelo
+   * específico. Trocar o modelo em lib.ts sem acrescentar a linha de preço faz
+   * o estimated_cost_usd de TODA chamada nova sair errado, sem erro nenhum —
+   * e é essa coluna que decide as próximas otimizações. Este teste liga as
+   * duas pontas: quem mudar MODEL_SMART/MODEL_FAST e esquecer o preço, quebra. */
+  const lib = await Deno.readTextFile(new URL("./lib.ts", import.meta.url));
+  const usage = await Deno.readTextFile(new URL("./usage.ts", import.meta.url));
+
+  const emUso = [...lib.matchAll(/export const MODEL_(?:SMART|FAST)\s*=\s*"([^"]+)"/g)].map((m) => m[1]);
+  assertEquals(emUso.length, 2, "esperava encontrar MODEL_SMART e MODEL_FAST em lib.ts");
+
+  for (const modelo of emUso) {
+    assert(
+      usage.includes(`"${modelo}": { in:`),
+      `usage.ts não tem preço para "${modelo}". Trocar o modelo sem a linha de preço `
+      + `faz o custo estimado cair no fallback e mentir em silêncio — acrescente a linha.`,
+    );
+  }
 });

@@ -33,7 +33,30 @@ export const corsHeaders: Record<string, string> = ALLOWED_ORIGINS.length
 
 export const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 export const ANTHROPIC_VERSION = "2023-06-01";
-export const MODEL_SMART = "claude-sonnet-4-6";  // chat e briefing
+/* Mais novo E mais barato que o sonnet-4-6 que estava aqui: US$ 2/US$ 10 por
+   MTok contra US$ 3/US$ 15 — 33% a menos em entrada e em saída, sem troca de
+   qualidade para baixo. O sonnet-4-6 foi a única mudança de modelo desta
+   rodada; o MODEL_FAST continua no Haiku, que segue sendo o mais barato.
+
+   DUAS COISAS QUE VÊM JUNTO COM A TROCA, e que não são opcionais:
+
+   1. O PREÇO PRECISA ENTRAR EM usage.ts NO MESMO COMMIT. A tabela de preços
+      de lá tem um fallback, e o fallback é o preço do modelo ANTIGO — trocar
+      aqui sem acrescentar a linha lá faz o estimated_cost_usd superestimar em
+      50%, em silêncio, para sempre. A telemetria é o que decide as próximas
+      otimizações; uma telemetria inflada decide errado.
+
+   2. NO SONNET 5, OMITIR `thinking` LIGA O RACIOCÍNIO ADAPTATIVO — o inverso
+      do sonnet-4-6, onde omitir significava não pensar. E token de raciocínio
+      conta dentro do max_tokens. As rotas daqui têm teto apertado (o briefing
+      tem 400, a análise corporal 700): ligar raciocínio sem mexer nos tetos
+      produziria resposta truncada ou vazia. Por isso anthropicCall desliga
+      explicitamente — ver a nota longa lá.
+
+   Raciocínio adaptativo e output_config.effort são a PRÓXIMA alavanca, de
+   qualidade, e pedem max_tokens maior e um eval antes. Começar pelo Blueprint,
+   que roda uma vez na vida e é caro de errar. */
+export const MODEL_SMART = "claude-sonnet-5";    // chat e briefing
 export const MODEL_FAST = "claude-haiku-4-5";    // extração de eventos (captura)
 
 export function serviceClient(): SupabaseClient {
