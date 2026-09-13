@@ -5,7 +5,7 @@ import {
   STATEMENT_TOOL, STATEMENT_SYSTEM, normalizeStatementItems,
   ATTACHMENT_EXTRACT_MAX_CHARS, EXTRACTION_MAX_EVENTS, attachMemorySources,
 } from "../_shared/lib.ts";
-import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage } from "../_shared/usage.ts";
+import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage, settleUsage } from "../_shared/usage.ts";
 import {
   getEntitlements, limitResponse, spParts,
   spDayStartUtc, spWeekStartUtc, spMonthStartUtc,
@@ -641,8 +641,20 @@ Deno.serve(async (req) => {
         const { res: r2, data: d2 } = await anthropicCall(supabase, user.id, "chat-plano-forcado", {
           model: MODEL_SMART,
           max_tokens: 4000,
+          /* SEM cache_control aqui, de propósito — não reponha.
+             Escrever cache custa 1,25x a entrada e ler custa 0,1x. Nos dados
+             reais de produção esta rota escrevia 60,4% da entrada e lia 0%:
+             custo relativo 115,1 contra 100 de não cachear nada, ou seja
+             15,1% MAIS CARA que não ter cache nenhum.
+             E não é questão de afinar TTL: o prefixo cacheado da Anthropic é
+             tools → system → messages, e esta chamada manda outro conjunto de
+             tools (só SAVE_PLAN_TOOL) que a chat-principal logo acima. O
+             prefixo nunca bate — ela não lê nem a cache que a chat-principal
+             acabou de escrever, a poucos segundos de distância.
+             A da chat-principal (com cache_control) é outra história: 22,3%
+             escrito / 36,6% lido, 27% mais barata. Aquela fica. */
           system: [
-            { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
+            { type: "text", text: SYSTEM },
             { type: "text", text: snapshot },
           ],
           tools: [SAVE_PLAN_TOOL],
@@ -769,6 +781,14 @@ Deno.serve(async (req) => {
     if (insertErr) console.error("chat_messages insert", insertErr);
     const userMsgId = (insertedMsgs ?? []).find((m) => m.role === "user")?.id ?? null;
     chatConsumed = true; // daqui pra frente a mensagem foi entregue: cota é devida
+    /* A cota de DOCUMENTO também venceu aqui: a leitura do PDF aconteceu
+       dentro desta resposta. Essa reserva nunca passa pelo anthropicCall (o
+       custo da leitura está na linha de 'chat-principal'), então ela jamais
+       recebe o UPDATE que tira uma linha do estado 'reserva' — e, sem esta
+       liquidação, ficaria indistinguível de uma órfã e seria varrida aos 15
+       minutos: a análise de documento sairia de graça, todas as vezes.
+       O splice também a tira do refundAll: cota consumida não se estorna. */
+    for (const r of docReservations.splice(0)) await settleUsage(supabase, r);
 
     const [{ events: captured, learned }, statement] = await Promise.all([extractPromise, statementPromise]);
     await attachMemorySources(supabase, user.id, learned.map((m) => m.id), "chat_message", userMsgId);

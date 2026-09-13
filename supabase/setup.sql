@@ -755,15 +755,19 @@ update public.app_settings
 -- Duas requisições simultâneas não passam mais juntas pela verificação:
 -- a função reserva a unidade de cota sob advisory lock (por usuário+feature)
 -- e a função de borda devolve a reserva se a chamada de IA falhar.
+-- A contagem e a varredura de reserva ÓRFÃ (a função de borda foi MORTA entre
+-- a reserva e a devolução, e a linha cobrava a pessoa para sempre) vivem em
+-- ai_usage_counted/sweep_ai_reservations — criadas na migração
+-- 20260913140000_reserva_orfa_nao_pode_cobrar_cota.sql, que explica o porquê
+-- e o número da janela de graça.
 create or replace function public.reserve_ai_usage(uid uuid, feat text, cap int, since timestamptz)
 returns bigint language plpgsql security definer set search_path = public as $$
-declare n int; new_id bigint;
+declare new_id bigint;
 begin
   perform pg_advisory_xact_lock(hashtext(uid::text || ':' || feat));
-  if cap is not null then
-    select count(*) into n from public.ai_usage
-     where user_id = uid and feature = feat and success and created_at >= since;
-    if n >= cap then return null; end if;
+  perform public.sweep_ai_reservations(uid, feat);
+  if cap is not null and public.ai_usage_counted(uid, feat, since) >= cap then
+    return null;
   end if;
   insert into public.ai_usage (user_id, feature, model, success)
   values (uid, feat, 'reserva', true)
@@ -1124,32 +1128,28 @@ revoke all on function public.release_ai_usage(bigint) from anon, authenticated;
 -- simultâneas passarem juntas. Aqui a decisão inteira acontece sob o mesmo
 -- advisory lock e devolve QUAL janela barrou (o app precisa da mensagem e do
 -- reset_at corretos). cap null = janela sem limite.
+-- A contagem passa por ai_usage_counted (ignora reserva ABERTA e velha, que é
+-- entulho de função morta) e a varredura por sweep_ai_reservations — as duas
+-- nascem na migração 20260913140000_reserva_orfa_nao_pode_cobrar_cota.sql.
 create or replace function public.reserve_ai_usage_windows(
   uid uuid, feat text,
   cap_day int, since_day timestamptz,
   cap_week int, since_week timestamptz,
   cap_month int, since_month timestamptz
 ) returns jsonb language plpgsql security definer set search_path = public as $$
-declare n int; new_id bigint;
+declare new_id bigint;
 begin
   perform pg_advisory_xact_lock(hashtext(uid::text || ':' || feat));
+  perform public.sweep_ai_reservations(uid, feat);
 
-  if cap_day is not null then
-    select count(*) into n from public.ai_usage
-     where user_id = uid and feature = feat and success and created_at >= since_day;
-    if n >= cap_day then return jsonb_build_object('id', null, 'window', 'daily'); end if;
+  if cap_day is not null and public.ai_usage_counted(uid, feat, since_day) >= cap_day then
+    return jsonb_build_object('id', null, 'window', 'daily');
   end if;
-
-  if cap_week is not null then
-    select count(*) into n from public.ai_usage
-     where user_id = uid and feature = feat and success and created_at >= since_week;
-    if n >= cap_week then return jsonb_build_object('id', null, 'window', 'weekly'); end if;
+  if cap_week is not null and public.ai_usage_counted(uid, feat, since_week) >= cap_week then
+    return jsonb_build_object('id', null, 'window', 'weekly');
   end if;
-
-  if cap_month is not null then
-    select count(*) into n from public.ai_usage
-     where user_id = uid and feature = feat and success and created_at >= since_month;
-    if n >= cap_month then return jsonb_build_object('id', null, 'window', 'monthly'); end if;
+  if cap_month is not null and public.ai_usage_counted(uid, feat, since_month) >= cap_month then
+    return jsonb_build_object('id', null, 'window', 'monthly');
   end if;
 
   insert into public.ai_usage (user_id, feature, model, success)

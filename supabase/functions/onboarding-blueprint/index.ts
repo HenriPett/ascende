@@ -156,8 +156,16 @@ Deno.serve(async (req) => {
       const { res, data } = await anthropicCall(supabase, user.id, "onboarding-blueprint", {
         model: MODEL_SMART,
         max_tokens: 4000,
+        /* SEM cache_control aqui, de propósito — não reponha.
+           Escrever cache custa 1,25x a entrada e ler custa 0,1x. Nos dados
+           reais de produção esta rota escrevia 70,2% da entrada e lia 0%:
+           custo relativo 117,6 contra 100 de não cachear nada — a rota MAIS
+           CARA do produto por causa do cache, 17,6% acima de não ter cache.
+           E é estrutural, não afinável: o TTL do cache da Anthropic é de 5
+           minutos e o Blueprint roda UMA vez na vida de cada conta. Não existe
+           segunda chamada para ler o que a primeira escreveu. */
         system: [
-          { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
+          { type: "text", text: SYSTEM },
           { type: "text", text: `━━━ RETRATO DECLARADO NO ONBOARDING ━━━\n${snapshot}` },
         ],
         tools: [BLUEPRINT_TOOL],

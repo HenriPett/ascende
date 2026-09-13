@@ -26,7 +26,7 @@ import {
   CAPTURE_SYSTEM, CAPTURE_TOOL, STATEMENT_SYSTEM, STATEMENT_TOOL, normalizeStatementItems,
   attachMemorySources,
 } from "../_shared/lib.ts";
-import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage } from "../_shared/usage.ts";
+import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage, settleUsage } from "../_shared/usage.ts";
 import {
   getEntitlements, spDayStartUtc, spWeekStartUtc, spMonthStartUtc,
   nextSpMonthStartUtc, spParts, TZ,
@@ -294,7 +294,12 @@ function looksConversational(text: string): boolean {
  *  Retorna { id } quando pode falar, ou { message } com o texto do limite.
  *  Aqui a reserva NÃO é passada para o anthropicCall: a chamada do WhatsApp
  *  é registrada sob 'wa-conselheiro' (telemetria por canal), então a linha da
- *  reserva fica como marcador de cota — é ela que o teto conta, nos dois canais. */
+ *  reserva fica como marcador de cota — é ela que o teto conta, nos dois canais.
+ *  Por isso ela precisa ser LIQUIDADA (settleUsage) quando o turno é entregue:
+ *  sem isso ela ficaria 'reserva' para sempre, indistinguível de uma reserva
+ *  órfã (função morta antes de devolver a cota) — e a varredura por idade,
+ *  que existe para destravar quem perdeu cota sem usar, devolveria de brinde
+ *  TODA conversa já tida por aqui. */
 async function reserveChatTurn(
   // deno-lint-ignore no-explicit-any
   supabase: any, userId: string, ent: Awaited<ReturnType<typeof getEntitlements>>, url: string,
@@ -453,6 +458,10 @@ async function counselorTurn(
   } catch (e) {
     console.error("wa chat-extracao", e);
   }
+  // Turno entregue: a cota é devida. A extração acima é bônus e não muda isso
+  // (ela nem cobra cota nova). Liquidar aqui, e não antes do envio, mantém a
+  // promessa das mensagens de erro logo acima: falha não conta no limite.
+  await settleUsage(supabase, chatReservation);
   return true;
 }
 
@@ -697,7 +706,11 @@ Deno.serve(async (req) => {
           [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: toBase64(media.bytes) } }],
           `${ask}\n📎 ${docName}`,
         );
-        if (!okTurn) await releaseUsage(supabase, docReservation); // falha não consome análise
+        // Falha não consome análise; sucesso LIQUIDA a reserva — a leitura do
+        // PDF foi cobrada na linha do turno ('wa-conselheiro'), então esta
+        // linha é só o marcador da cota e precisa parar de parecer em voo.
+        if (okTurn) await settleUsage(supabase, docReservation);
+        else await releaseUsage(supabase, docReservation);
         return new Response("ok", { status: 200 });
       }
 
@@ -738,7 +751,8 @@ Deno.serve(async (req) => {
           `${ask}\n\n━━━ CONTEÚDO DE "${docName}" (extraído do arquivo, texto puro) ━━━\n${content}`,
           url, [], `${ask}\n📎 ${docName}`,
         );
-        if (!okTurn) await releaseUsage(supabase, docReservation);
+        if (okTurn) await settleUsage(supabase, docReservation);
+        else await releaseUsage(supabase, docReservation);
         return new Response("ok", { status: 200 });
       }
 

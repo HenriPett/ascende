@@ -14,10 +14,25 @@
 //   advisory lock) antes da chamada de IA; `releaseUsage` devolve a reserva
 //   quando a chamada falha. Duas requisições simultâneas não passam mais
 //   juntas pela mesma janela de verificação.
+// • Reserva ÓRFÃ não cobra: uma reserva em voo só sai da conta por código
+//   (sucesso → UPDATE; falha → releaseUsage), e código nenhum roda quando o
+//   worker é MORTO. Por isso a reserva aberta tem prazo de validade
+//   (RESERVATION_GRACE_MS) e quem consome cota fora do anthropicCall precisa
+//   LIQUIDAR a linha (`settleUsage`) para ela não parecer uma órfã.
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
+
+/** Janela de graça de uma reserva de cota, em ms.
+ *  ESPELHO de public.ai_reservation_grace() no banco (se mudar lá, mude aqui).
+ *  Uma reserva ABERTA mais velha que isto não é uso: é entulho de uma função
+ *  de borda que foi MORTA (relógio de parede do Edge Runtime, estouro de
+ *  memória, reciclagem do worker) entre a reserva e a devolução — nenhum
+ *  `catch` roda nesse caso, e a linha cobrava a pessoa para sempre.
+ *  O porquê do número está na migração
+ *  20260913140000_reserva_orfa_nao_pode_cobrar_cota.sql. */
+const RESERVATION_GRACE_MS = 15 * 60 * 1000;
 
 // Runtime do Supabase Edge: waitUntil mantém a função viva até a promise terminar.
 // deno-lint-ignore no-explicit-any
@@ -148,7 +163,13 @@ function logUsage(
       console.error("ai_usage: falha ao registrar", e);
     }
   })();
-  return ensureCompletes(write);
+  /* A gravação de telemetria pode ser diferida (waitUntil), mas a LIQUIDAÇÃO
+     da reserva não: enquanto o UPDATE não cai, a linha ainda é 'reserva' e
+     parece uma chamada em voo. O ai-chat encadeia até mais três chamadas à
+     Anthropic depois desta — se o worker for morto nesse intervalo, a promise
+     diferida morre junto e a reserva vira órfã de uma chamada que DEU CERTO.
+     São ~20ms de UPDATE dentro de um request que já levou segundos. */
+  return reservationId && success ? write : ensureCompletes(write);
 }
 
 /**
@@ -162,10 +183,15 @@ export async function countUsage(
   opts: { strict?: boolean } = {},
 ): Promise<number> {
   const strict = opts.strict !== false;
+  // MESMA regra de public.ai_usage_counted (o teto atômico usa aquela; esta
+  // conta para exibição e para os limites que não passam por reserva).
+  // Divergir faria a tela mostrar um número e o servidor cobrar outro.
+  const graceIso = new Date(Date.now() - RESERVATION_GRACE_MS).toISOString();
   const { count, error } = await supabase.from("ai_usage")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId).eq("success", true)
-    .in("feature", features).gte("created_at", sinceIso);
+    .in("feature", features).gte("created_at", sinceIso)
+    .or(`model.neq.reserva,created_at.gte.${graceIso}`);
   if (error) {
     console.error("countUsage", error.message);
     if (strict) {
@@ -248,4 +274,19 @@ export async function releaseUsage(supabase: SupabaseClient, reservationId: numb
   if (!reservationId) return;
   const { error } = await supabase.rpc("release_ai_usage", { reservation_id: reservationId });
   if (error) console.error("releaseUsage", error.message);
+}
+
+/** LIQUIDA uma reserva cuja entrega aconteceu, mas cuja chamada de IA foi
+ *  registrada em OUTRA linha (o Conselheiro do WhatsApp reserva sob
+ *  'chat-principal' e registra sob 'wa-conselheiro'; a análise de documento é
+ *  lida dentro do turno do Conselheiro). Nesses casos a reserva nunca recebe
+ *  o UPDATE de logUsage e ficava como 'reserva' para sempre — indistinguível
+ *  de uma órfã, o que impedia qualquer varredura por idade de existir.
+ *  A linha continua contando no teto: ela É o marcador da cota consumida.
+ *  Ver settle_ai_usage e a migração
+ *  20260913140000_reserva_orfa_nao_pode_cobrar_cota.sql. */
+export async function settleUsage(supabase: SupabaseClient, reservationId: number | null | undefined): Promise<void> {
+  if (!reservationId) return;
+  const { error } = await supabase.rpc("settle_ai_usage", { reservation_id: reservationId });
+  if (error) console.error("settleUsage", error.message);
 }
