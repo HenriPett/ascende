@@ -20,7 +20,7 @@ import {
   installmentPosition, countPastInstallments, groupDeletionLabel,
   cycleKey, MIN_INSTALLMENTS, MAX_INSTALLMENTS,
   shouldOfferInstallments, quickInstallmentSummary,
-  QUICK_INSTALLMENT_MIN, QUICK_INSTALLMENT_CHIPS,
+  QUICK_INSTALLMENT_CHIPS,
 } from "@/lib/prosperidade";
 
 /** Formatador determinístico: o teste não pode depender do ICU da máquina. */
@@ -308,22 +308,23 @@ describe("setup.sql não pode ficar para trás da migração de parcelas", () =>
 
    A opção de parcelar chegou ao QuickExpense, que existe por um motivo só:
    registrar o almoço em dois toques. O acordo do desenho é que ela não custe
-   NADA para quem não parcela — nasce escondida e só aparece quando o próprio
-   valor digitado sugere que faz sentido.
+   NADA para quem não parcela — nasce escondida e só aparece depois que existe
+   um valor digitado.
 
-   O gatilho é o VALOR, não a categoria: parcela-se um pneu, não um mercado de
-   R$ 80. Estes testes travam o limiar e a linha que confirma o compromisso —
-   as duas coisas que, se mudarem sem querer, ou enchem o diálogo do almoço de
-   opção inútil, ou escondem de alguém que ela existe.
+   NÃO HÁ LIMIAR. Havia um piso de R$ 200 e ele foi retirado por decisão de
+   produto: qualquer piso está errado para alguém, e quem parcelou uma compra
+   pequena e não achou a opção conclui que o app não faz aquilo. Estes testes
+   travam o que sobrou — que campo vazio não revela nada, e que a linha de
+   resumo diz a verdade sobre o compromisso.
 ────────────────────────────────────────────────────────────────── */
 describe("o gatilho do parcelamento no gasto rápido", () => {
-  it("abaixo do limiar o diálogo continua o de dois toques", () => {
-    expect(shouldOfferInstallments(80)).toBe(false);   // o mercado
-    expect(shouldOfferInstallments(199.99)).toBe(false);
-  });
-
-  it("no limiar e acima, a linha aparece", () => {
-    expect(shouldOfferInstallments(QUICK_INSTALLMENT_MIN)).toBe(true);
+  it("não há piso: qualquer valor positivo pode ser parcelado", () => {
+    // O antigo limiar de R$ 200 barrava exatamente os casos abaixo. R$ 150 em
+    // 3x é uma compra parcelada tão real quanto R$ 2.000 em 10x.
+    expect(shouldOfferInstallments(80)).toBe(true);
+    expect(shouldOfferInstallments(150)).toBe(true);
+    expect(shouldOfferInstallments(199.99)).toBe(true);
+    expect(shouldOfferInstallments(0.01)).toBe(true);
     expect(shouldOfferInstallments(3000)).toBe(true);
   });
 
@@ -344,59 +345,59 @@ describe("o gatilho do parcelamento no gasto rápido", () => {
 });
 
 describe("a linha que confirma o compromisso no gasto rápido", () => {
-  // O valor digitado é a PARCELA — a mesma leitura da Prosperidade, e a que a
-  // nota do cartão grita. Foi divergência apontada pelo QA: a tela Hoje lia o
-  // número como total enquanto a Prosperidade lia como parcela, e o limiar de
-  // R$ 200 muda de sentido conforme qual das duas valer (R$ 200 de total em
-  // 12x são parcelas de R$ 16,67 — o caso que o limiar existe para ignorar).
+  // O valor digitado é o TOTAL — a mesma leitura da Prosperidade. É como a
+  // pessoa fala da compra que acabou de fazer ("um celular de R$ 2.000 em
+  // 10x"), e é a leitura em que errar custa uma ORDEM DE GRANDEZA: quem
+  // digita 2.000 pensando no total e vê o app registrar R$ 20.000 de
+  // compromisso só descobre no extrato. As duas telas leem o mesmo campo do
+  // mesmo jeito; duas leituras contrárias é o app falando duas línguas.
   const rapido = (over = {}) =>
-    plan({ amount: 250, count: 12, mode: "parcela", description: "Transporte", ...over });
+    plan({ amount: 2000, count: 10, mode: "total", description: "Transporte", ...over });
 
-  it("o valor digitado É a parcela — 12x de R$ 250, não de R$ 20,83", () => {
+  it("o valor digitado É o total — 2.000 em 10x são parcelas de R$ 200", () => {
     expect(quickInstallmentSummary(rapido(), money))
-      .toBe("12x de R$ 250,00 · total R$ 3000,00 · última em ago/2027");
+      .toBe("10x de R$ 200,00 · última em jun/2027");
   });
 
-  it("o total do compromisso aparece — é o número que ninguém faz de cabeça", () => {
-    // Desde que o campo passou a ser a PARCELA, o valor da compra inteira
-    // sumiu da tela: R$ 250 por mês soa pequeno, R$ 3.000 é a decisão. O QA
-    // varreu o diálogo inteiro e a string "3.000" não existia em lugar nenhum.
-    // (O `money` daqui é de propósito sem separador de milhar, para o teste não
-    //  depender de locale: na tela quem formata é o `brl`, que escreve 3.000,00.)
-    expect(quickInstallmentSummary(rapido(), money)).toContain("total R$ 3000,00");
-    expect(quickInstallmentSummary(rapido({ amount: 43.9, count: 10 }), money))
-      .toContain("total R$ 439,00");
+  it("o total NÃO se repete no padrão — ali quem falta é a parcela", () => {
+    // A pessoa acabou de digitar 2.000 como total; devolver "total R$ 2.000"
+    // é ler o campo de volta para ela. O que ela não sabe é a parcela, e a
+    // parcela abre a linha.
+    expect(quickInstallmentSummary(rapido(), money)).not.toContain("total R$");
   });
 
-  it("no modo total o total NÃO se repete — ali quem falta é a parcela", () => {
-    // A pessoa acabou de digitar 250 como total; devolver "total R$ 250,00" é
-    // ler o campo de volta para ela. O que ela não sabe é a parcela, e a
-    // parcela já abre a linha.
-    const linha = quickInstallmentSummary(rapido({ mode: "total" }), money, null, "total");
-    expect(linha).not.toContain("total R$");
-    expect(linha).toBe("12x de R$ 20,83 (as 4 primeiras, R$ 20,84) · última em ago/2027");
-  });
-
-  it("no modo parcela a conta é exata: nunca sobra centavo para distribuir", () => {
-    const p = rapido({ amount: 43.9, count: 10 });
-    expect({ each: p.each, total: p.total, oddCount: p.oddCount })
-      .toEqual({ each: 43.9, total: 439, oddCount: 0 });
-    expect(quickInstallmentSummary(p, money)).toBe("10x de R$ 43,90 · total R$ 439,00 · última em jun/2027");
-  });
-
-  it("quem só tem o total na mão inverte — e aí os centavos são ditos em voz alta", () => {
-    // Mesmo número digitado, leitura invertida pelo link: 250 vira o total.
-    expect(quickInstallmentSummary(rapido({ mode: "total" }), money, null, "total"))
-      .toBe("12x de R$ 20,83 (as 4 primeiras, R$ 20,84) · última em ago/2027");
-    expect(quickInstallmentSummary(rapido({ amount: 100, count: 3, mode: "total" }), money, null, "total"))
+  it("quando a divisão não fecha redondo, os centavos são ditos em voz alta", () => {
+    expect(quickInstallmentSummary(rapido({ amount: 100, count: 3 }), money))
       .toBe("3x de R$ 33,33 (a 1ª, R$ 33,34) · última em nov/2026");
+    expect(quickInstallmentSummary(rapido({ amount: 250, count: 12 }), money))
+      .toBe("12x de R$ 20,83 (as 4 primeiras, R$ 20,84) · última em ago/2027");
+  });
+
+  it("a soma das parcelas é EXATAMENTE o total digitado — nunca sobra centavo", () => {
+    // A trava contra o erro clássico do parcelamento: arredondar cada parcela
+    // e a compra inteira acabar valendo alguns centavos a mais ou a menos do
+    // que a pessoa digitou. O resto vai para as primeiras parcelas.
+    for (const [valor, n] of [[2000, 10], [100, 3], [250, 12], [0.1, 3]] as const) {
+      const p = plan({ amount: valor, count: n, mode: "total", description: "x" });
+      expect(p.total).toBe(valor);
+      expect(p.rows.reduce((acc, r) => acc + Number(r.amount), 0)).toBeCloseTo(valor, 10);
+    }
+  });
+
+  it("quem tem a PARCELA na mão inverte — e aí o total entra na linha", () => {
+    // O risco simétrico: R$ 250 por mês soa pequeno, R$ 3.000 é a decisão.
+    // (O `money` daqui é de propósito sem separador de milhar, para o teste
+    //  não depender de locale: na tela quem formata é o `brl`.)
+    const p = plan({ amount: 250, count: 12, mode: "parcela", description: "Transporte" });
+    expect(quickInstallmentSummary(p, money, null, "parcela"))
+      .toBe("12x de R$ 250,00 · total R$ 3000,00 · última em ago/2027");
   });
 
   it("a mesma entrada produz na Hoje o mesmo plano que na Prosperidade", () => {
     // A trava contra as duas telas divergirem de novo: mesmo valor, mesma
     // contagem, mesmo modo padrão → linhas idênticas, ao centavo e à data.
     const hoje = rapido();
-    const prosperidade = plan({ amount: 250, count: 12, mode: "parcela", description: "Transporte" });
+    const prosperidade = plan({ amount: 2000, count: 10, mode: "total", description: "Transporte" });
     expect(hoje.rows).toEqual(prosperidade.rows);
     expect(hoje.total).toBe(prosperidade.total);
   });
@@ -405,9 +406,9 @@ describe("a linha que confirma o compromisso no gasto rápido", () => {
     // Compra em 14/09/2026, 2x → parcelas em 14/09 e 14/10. Com ciclo dia 20,
     // a de 14/10 ainda pertence ao ciclo que começou em 20/09.
     expect(quickInstallmentSummary(rapido({ count: 2 }), money, 20))
-      .toBe("2x de R$ 250,00 · total R$ 500,00 · última em set/2026");
+      .toBe("2x de R$ 1000,00 · última em set/2026");
     expect(quickInstallmentSummary(rapido({ count: 2 }), money))
-      .toBe("2x de R$ 250,00 · total R$ 500,00 · última em out/2026");
+      .toBe("2x de R$ 1000,00 · última em out/2026");
   });
 
   it("a primeira parcela é HOJE — igual à Prosperidade, sem campo de data", () => {

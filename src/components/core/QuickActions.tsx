@@ -36,7 +36,7 @@ import { toast } from "sonner";
 import { Droplet, Camera, Dumbbell } from "lucide-react";
 import {
   CATEGORIES, QUICK_INSTALLMENT_CHIPS, buildInstallmentPlan, newInstallmentGroupId,
-  quickInstallmentSummary, shouldOfferInstallments,
+  quickInstallmentSummary, shouldOfferInstallments, MIN_INSTALLMENTS, MAX_INSTALLMENTS,
 } from "@/lib/prosperidade";
 import { cn } from "@/lib/utils";
 import { activePillarSet } from "@/lib/pillars";
@@ -56,34 +56,32 @@ import { brl, todayISO } from "@/lib/format";
    para cá é conhecido: este diálogo existe por UM motivo — registrar o almoço
    em dois toques — e todo campo cobrado de todo mundo come essa razão.
 
-   Por isso a opção nasce escondida e só aparece quando o PRÓPRIO VALOR
-   digitado sugere que faz sentido (>= R$ 200, `shouldOfferInstallments`). O
-   gatilho é o valor e não a categoria: parcela-se um pneu, não um mercado de
-   R$ 80. Abaixo do limiar este diálogo é byte a byte o de antes — zero toques
-   a mais, zero pixels a mais. É esse acordo que preserva a razão de ele
-   existir, e é ele que a linha do limiar protege.
+   Por isso a opção nasce escondida e só aparece depois que existe um valor
+   digitado. NÃO HÁ LIMIAR: havia um piso de R$ 200 e ele foi retirado por
+   decisão de produto. Qualquer piso está errado para alguém — R$ 150 em 3x é
+   uma compra parcelada tão real quanto R$ 2.000 em 10x — e quem parcelou e
+   não achou a opção conclui que o app não faz aquilo. O acordo com quem só
+   quer registrar o almoço continua de pé por outro caminho: enquanto o campo
+   está vazio não há linha nenhuma, e quando ela aparece é UMA linha discreta
+   com "À vista" já marcado, que não rouba foco e não empurra o botão salvar.
 
-   Acima do limiar aparece UMA linha discreta ("À vista · Parcelar"), sempre
-   com "À vista" marcado, abaixo da categoria — não empurra o botão salvar e
-   não rouba o foco. Tocar em Parcelar revela os atalhos NA MESMA TELA: sem
-   segundo passo, sem novo diálogo, sem campo de data (a 1ª parcela é hoje,
-   igual à Prosperidade).
+   Essa linha ("À vista · Parcelar") fica abaixo da categoria. Tocar em
+   Parcelar revela os atalhos NA MESMA TELA: sem segundo passo, sem novo
+   diálogo, sem campo de data (a 1ª parcela é hoje, igual à Prosperidade).
 
-   O VALOR DIGITADO É A PARCELA, IGUAL À PROSPERIDADE. As duas telas fazem a
-   mesma coisa e precisam ler o mesmo número do mesmo jeito — o QA pegou esta
-   tela lendo o valor como TOTAL enquanto a Prosperidade lê como parcela, e
-   duas leituras contrárias para a mesma ação é o app falando duas línguas.
+   O VALOR DIGITADO É O TOTAL, IGUAL À PROSPERIDADE. As duas telas fazem a
+   mesma coisa e precisam ler o mesmo número do mesmo jeito — duas leituras
+   contrárias para a mesma ação é o app falando duas línguas.
 
-   Prevalece a parcela por três razões, nenhuma delas preferência:
-   • é o que a nota do cartão grita ("10x de R$ 43,90") — o argumento original
-     do desenho, e o que a pessoa tem na mão na hora de registrar;
-   • é o que a microcópia especificada já dizia: em "12x de R$ 250", os R$ 250
-     digitados SÃO a parcela;
-   • é a leitura em que o limiar de R$ 200 faz sentido. R$ 200 de TOTAL em 12x
-     são parcelas de R$ 16,67 — exatamente o caso que o limiar existe para não
-     incomodar.
-   Para quem só tem o total na mão existe o mesmo link discreto de inversão que
-   a Prosperidade tem — mas o padrão é parcela nas duas. ── */
+   Prevalece o TOTAL porque é como a pessoa fala da compra que acabou de
+   fazer: "comprei um celular de R$ 2.000 em 10x". Digitar 2.000 e receber
+   "10x de R$ 200" confere com a nota; digitar 2.000 e receber um compromisso
+   de R$ 20.000 é um erro silencioso de uma ordem de grandeza — o número está
+   certo na tela e errado na vida, e a pessoa só descobre no extrato.
+
+   O risco simétrico (quem tem a parcela na mão, "10x de R$ 43,90") não
+   desapareceu: continua atendido pelo mesmo link discreto de inversão que a
+   Prosperidade tem — mas o padrão é TOTAL nas duas. ── */
 const QUICK_EXPENSE_CATEGORIES = CATEGORIES.filter((c) => c !== "Salário" && c !== "Extra");
 
 /** As duas metades de "À vista · Parcelar". Alvo de 44px de altura mesmo sendo
@@ -103,9 +101,9 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
   const [category, setCategory] = useState<string>("Mercado");
   const [parcelar, setParcelar] = useState(false);
   const [parcelas, setParcelas] = useState("");
-  // Qual dos dois números a pessoa digitou. Padrão "parcela", igual à
+  // Qual dos dois números a pessoa digitou. Padrão "total", igual à
   // Prosperidade — o outro o app calcula e devolve na linha de resumo.
-  const [valorMode, setValorMode] = useState<"parcela" | "total">("parcela");
+  const [valorMode, setValorMode] = useState<"parcela" | "total">("total");
   const [saving, setSaving] = useState(false);
   // O rótulo "última em out/2027" é o mês do CICLO da pessoa, não do mês civil.
   const cycleDay = profile?.financial_cycle_day ?? 1;
@@ -113,11 +111,11 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
   const value = Number(String(amount).replace(",", "."));
   const offerInstallments = shouldOfferInstallments(value);
 
-  // Caiu abaixo do limiar (a pessoa corrigiu o valor): a linha some e o estado
-  // some junto. Sem isto, subir o valor de novo reencontraria um parcelamento
-  // meio preenchido que ninguém pediu — e o padrão é sempre "À vista".
+  // O campo ficou vazio ou inválido (a pessoa apagou para corrigir): a linha
+  // some e o estado some junto. Sem isto, digitar de novo reencontraria um
+  // parcelamento meio preenchido que ninguém pediu — e o padrão é "À vista".
   useEffect(() => {
-    if (!offerInstallments && parcelar) { setParcelar(false); setParcelas(""); setValorMode("parcela"); }
+    if (!offerInstallments && parcelar) { setParcelar(false); setParcelas(""); setValorMode("total"); }
   }, [offerInstallments, parcelar]);
 
   const plan = useMemo(() => {
@@ -128,7 +126,7 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
     });
   }, [parcelar, offerInstallments, value, parcelas, valorMode, category]);
 
-  const desligarParcelamento = () => { setParcelar(false); setParcelas(""); setValorMode("parcela"); };
+  const desligarParcelamento = () => { setParcelar(false); setParcelas(""); setValorMode("total"); };
   const reset = () => { setAmount(""); desligarParcelamento(); };
 
   const save = async () => {
@@ -138,7 +136,17 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
     // que a Prosperidade grava. Cada parcela com a data real dela, para cair
     // no ciclo certo e sumir do seguinte sozinha.
     if (parcelar) {
-      if (!plan) { toast.error("Escolha em quantas parcelas — de 2 a 24."); return; }
+      // Duas falhas diferentes, dois avisos diferentes — a mesma separação que
+      // a Prosperidade faz. Sem o piso de R$ 200, "não dá para dividir" virou
+      // um caso ALCANÇÁVEL (R$ 0,05 em 12x não tem como virar 12 parcelas), e
+      // mandar a pessoa escolher outro número de parcelas nesse caso seria
+      // mandá-la consertar o campo errado.
+      const n = Number(parcelas);
+      if (!Number.isInteger(n) || n < MIN_INSTALLMENTS || n > MAX_INSTALLMENTS) {
+        toast.error(`Escolha em quantas parcelas — de ${MIN_INSTALLMENTS} a ${MAX_INSTALLMENTS}.`);
+        return;
+      }
+      if (!plan) { toast.error("Esse valor não dá para dividir nesse número de parcelas."); return; }
       setSaving(true);
       const groupId = newInstallmentGroupId();
       const { error } = await supabase.from("transactions").insert(
@@ -187,7 +195,7 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
 
             Centrado (`top-50% translate-y--50%`), cada linha revelada era
             repartida: metade subia o topo, metade empurrava o botão salvar.
-            Ao cruzar os R$ 200 o alvo descia 28px — debaixo do polegar de
+            Ao aparecer a linha de parcelamento o alvo descia 28px — debaixo do polegar de
             quem já estava mirando em salvar, no instante do terceiro dígito
             (achado 4 do QA).
 
@@ -198,8 +206,8 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
             o topo para cima e o botão não anda um pixel.
 
             Medido em 390px de largura, botão "Registrar gasto": deslocamento
-            0px a 844, 800 e 700px de altura — contra 28px ao cruzar o limiar
-            e 93px com os chips abertos. O diálogo do almoço continua com 279px
+            0px a 844, 800 e 700px de altura — contra 28px quando a linha de
+            parcelamento aparecia e 93px com os chips abertos. O diálogo do almoço continua com 279px
             e no mesmo lugar (283 → 285). O `max-h`/`overflow` é a rede: numa
             janela baixa (celular deitado) o diálogo encolhe e rola por dentro
             em vez de escapar pelo topo. */}
@@ -226,8 +234,9 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
               </SelectContent>
             </Select>
 
-            {/* A linha do limiar. Abaixo de R$ 200 ela não existe — e é por
-                isso que o caminho do almoço continua idêntico ao de antes. */}
+            {/* A linha aparece assim que existe um valor — não há mais
+                limiar. Enquanto o campo está vazio ela não existe, e é por
+                isso que abrir o diálogo continua idêntico ao de antes. */}
             {offerInstallments && (
               <div className="space-y-2.5">
                 <div className="flex items-center justify-center gap-1 text-xs" role="group"
@@ -298,14 +307,16 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
                         frase e mesmo lugar da Prosperidade, de propósito. */}
                     <button
                       type="button"
-                      // O botão é um INTERRUPTOR de dois estados (parcela/total),
-                      // não uma ação solta: sem `aria-pressed` o leitor de tela
-                      // anuncia só o rótulo e a pessoa cega não sabe em qual dos
-                      // dois modos o campo está — justo quem menos pode conferir
-                      // o placeholder de relance. O par "À vista · Parcelar" e os
-                      // chips `Nx` logo acima já expõem estado; esta linha era a
-                      // única que não expunha.
-                      aria-pressed={valorMode === "total"}
+                      // SEM `aria-pressed`, de propósito. Ele esteve aqui e
+                      // estava errado: o rótulo deste botão MUDA com o estado
+                      // ("digitei o valor total" ↔ "digitei o valor da
+                      // parcela"), então ele nomeia uma AÇÃO, não um estado
+                      // ligado/desligado. Marcar `pressed` num rótulo que já
+                      // virou o oposto faz o leitor de tela anunciar "digitei o
+                      // valor da parcela, pressionado" para quem digitou o
+                      // TOTAL — exatamente o contrário do que vale, e agora no
+                      // estado PADRÃO. Quem mostra o modo é o rótulo do campo,
+                      // que é o mesmo sinal que a pessoa vidente usa.
                       onClick={() => setValorMode(valorMode === "total" ? "parcela" : "total")}
                       className="w-full min-h-11 text-[11px] text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
                     >
