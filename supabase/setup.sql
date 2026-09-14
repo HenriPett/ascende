@@ -963,21 +963,34 @@ do $$ begin
     foreign key (recurring_id) references public.recurring_transactions(id) on delete set null;
 exception when duplicate_object then null; end $$;
 
--- Cinto e suspensório contra materialização dupla no mesmo mês.
+-- Cinto e suspensório contra materialização dupla no mesmo mês civil — que,
+-- com a materialização consciente de ciclo, é uma linha por CICLO: para um par
+-- (cycleDay, day_of_month) fixo, ciclos consecutivos caem em meses civis
+-- consecutivos, então a correspondência é 1 para 1. Se a pessoa MUDAR o
+-- cycleDay, dois ciclos podem mapear para o mesmo mês civil e o índice barra a
+-- segunda linha — que é o lado seguro do erro.
 create unique index if not exists tx_recurring_month_unique
   on public.transactions (recurring_id, date_trunc('month', occurred_at::timestamp))
   where recurring_id is not null;
 
 -- 22.4 Ledger de materialização: a função roda NO MÁXIMO uma vez por
---      usuário/mês. Assim, excluir um lançamento materializado não o faz
+--      usuário/CICLO. Assim, excluir um lançamento materializado não o faz
 --      "renascer" no próximo acesso (a exclusão da pessoa é respeitada).
---      Recorrência criada no meio do mês: o app materializa o mês corrente
---      na hora da criação, direto no cliente.
+--      Recorrência criada no meio do ciclo: o app materializa o ciclo
+--      corrente na hora da criação, direto no cliente.
+--      A chave era 'month_key' (mês civil) e isso ERA METADE DE UM BUG: com
+--      ciclo financeiro customizado, o começo de um ciclo novo não disparava
+--      materialização nenhuma, porque o mês civil "já tinha rodado" — e a
+--      pessoa via "Entradas: R$ 0" por semanas. Ver a migração
+--      20260914120000_o_fixo_nasce_no_ciclo_da_pessoa.sql.
 create table if not exists public.recurrence_runs (
   user_id uuid not null references auth.users(id) on delete cascade,
-  month_key text not null,             -- 'YYYY-MM' no fuso America/Sao_Paulo
+  -- Chave do CICLO: mês em que o ciclo COMEÇOU ('YYYY-MM', fuso de São Paulo).
+  -- Mesma conta de cycleKey() em src/lib/prosperidade.ts. Com
+  -- financial_cycle_day nulo ou 1, é idêntica ao mês civil.
+  cycle_key text not null,
   ran_at timestamptz not null default now(),
-  primary key (user_id, month_key)
+  primary key (user_id, cycle_key)
 );
 alter table public.recurrence_runs enable row level security;
 drop policy if exists "runs_select_own" on public.recurrence_runs;
@@ -986,26 +999,56 @@ create policy "runs_select_own" on public.recurrence_runs for select using (auth
 
 -- Materialização lazy: chamada pelo app ao abrir a Prosperidade / tela Hoje.
 -- Zero infraestrutura de cron; funciona para quem só abre o app no dia 15.
+--
+-- CONSCIENTE DE CICLO. O nome continua 'month' porque é o que o app chama por
+-- RPC, mas o "mês" aqui é o da PESSOA: profiles.financial_cycle_day (1-28)
+-- decide onde o ciclo começa, e tanto a DATA da linha quanto a GUARDA seguem
+-- essa fronteira. Antes as duas pensavam em mês civil, e com cycleDay != 1 o
+-- fixo nascia no ciclo anterior — a tela mostrava "Entradas: R$ 0" no ciclo
+-- corrente. O porquê inteiro (inclusive por que a data do caso D < C é a do
+-- mês civil SEGUINTE) está na migração
+-- 20260914120000_o_fixo_nasce_no_ciclo_da_pessoa.sql.
+-- Com financial_cycle_day nulo ou 1 a aritmética é a mesma de antes, não
+-- apenas equivalente — ver src/lib/cicloRecorrencias.test.ts.
 create or replace function public.ensure_month_recurrences()
 returns int language plpgsql security definer set search_path = public as $$
 declare
   uid uuid := auth.uid();
   sp_today date := (now() at time zone 'America/Sao_Paulo')::date;
-  mkey text;
+  cday int;
+  cycle_start date;
+  ckey text;
   inserted int := 0;
 begin
   if uid is null then return 0; end if;
-  mkey := to_char(sp_today, 'YYYY-MM');
 
-  -- Já rodou este mês? Então a palavra final é da pessoa (exclusões valem).
-  if exists (select 1 from public.recurrence_runs where user_id = uid and month_key = mkey) then
+  -- Mesmo clamp de clampCycleDay() no prosperidade.ts: fora de 2..28 (ou
+  -- nulo, ou perfil ausente) é mês civil. A coluna não tem CHECK de propósito
+  -- (seção 31), então a defesa é aqui.
+  select case when p.financial_cycle_day between 2 and 28 then p.financial_cycle_day else 1 end
+    into cday from public.profiles p where p.user_id = uid;
+  cday := coalesce(cday, 1);
+
+  -- Primeiro dia do ciclo CORRENTE. Subtrair (cday-1) dias e truncar no mês é
+  -- a mesma conta de cycleKey(); com cday=1 devolve o primeiro dia do mês.
+  cycle_start := date_trunc('month', sp_today - make_interval(days => cday - 1))::date + (cday - 1);
+  ckey := to_char(cycle_start, 'YYYY-MM');
+
+  -- Já rodou ESTE CICLO? Então a palavra final é da pessoa (exclusões valem).
+  if exists (select 1 from public.recurrence_runs where user_id = uid and cycle_key = ckey) then
     return 0;
   end if;
 
   insert into public.transactions (user_id, kind, amount, category, description, occurred_at, source, recurring_id)
   select r.user_id, r.kind, r.amount, r.category,
          coalesce(r.description, r.category),
-         make_date(extract(year from sp_today)::int, extract(month from sp_today)::int, r.day_of_month),
+         -- A única ocorrência do dia D dentro do ciclo corrente: a deste mês
+         -- quando D >= C, a do mês seguinte quando D < C (senão a linha cairia
+         -- no ciclo anterior — o bug). day_of_month é 1..28 por CHECK, então
+         -- não existe mês curto para tratar aqui.
+         (date_trunc('month', cycle_start)
+            + case when r.day_of_month >= cday then interval '0' else interval '1 month' end)::date
+           + (r.day_of_month - 1),
          'recurring', r.id
   from public.recurring_transactions r
   where r.user_id = uid and r.active
@@ -1013,8 +1056,8 @@ begin
     where recurring_id is not null do nothing;
   get diagnostics inserted = row_count;
 
-  insert into public.recurrence_runs (user_id, month_key) values (uid, mkey)
-  on conflict (user_id, month_key) do nothing;
+  insert into public.recurrence_runs (user_id, cycle_key) values (uid, ckey)
+  on conflict (user_id, cycle_key) do nothing;
 
   return inserted;
 end; $$;
@@ -1030,7 +1073,8 @@ begin
   insert into public.life_events (user_id, pillar, kind, occurred_at, payload, source, source_table, source_id)
   values (new.user_id, 'prosperidade', 'transaction', new.occurred_at::timestamptz,
     jsonb_build_object('amount', new.amount, 'tx_kind', new.kind, 'category', new.category,
-                       'description', new.description, 'tx_source', new.source),
+                       'description', new.description, 'tx_source', new.source,
+                       'tx_group_id', new.group_id),
     'system', 'transactions', new.id)
   on conflict (source_table, source_id) where source_id is not null do nothing;
   return new;
@@ -1053,6 +1097,23 @@ begin
      and coalesce(new.payload->>'tx_source', 'manual') in ('recurring','import') then
     return new;
   end if;
+
+  -- Compra parcelada: DEZ LINHAS, UMA AÇÃO, UM XP. A primeira parcela a chegar
+  -- leva os 2 XP da compra; as irmãs não levam nada. Ver o cabeçalho desta
+  -- migração — é a mesma regra "XP por ato vivido, nunca por volume de linhas"
+  -- que já vale para importação e recorrência.
+  if new.kind = 'transaction'
+     and (new.payload->>'tx_group_id') is not null
+     and exists (
+       select 1 from public.life_events e
+        where e.user_id = new.user_id
+          and e.kind = 'transaction'
+          and e.payload->>'tx_group_id' = new.payload->>'tx_group_id'
+          and e.id <> new.id
+     ) then
+    return new;
+  end if;
+
   pts := case new.kind
     when 'habit_done' then 10 when 'workout' then 8 when 'practice' then 8
     when 'mood' then 5 when 'sleep' then 5 when 'nap' then 2 when 'meal' then 4
@@ -1406,6 +1467,15 @@ alter table public.transactions
 alter table public.transactions
   add column if not exists source_record_key text;
 
+-- Compra parcelada registrada a mao: as N linhas compartilham este uuid. E o
+-- UNICO vinculo entre elas -- nunca agrupar por texto da descricao. Ver a
+-- migracao 20260914140000.
+alter table public.transactions
+  add column if not exists group_id uuid;
+create index if not exists transactions_user_group
+  on public.transactions (user_id, group_id)
+  where group_id is not null;
+
 create unique index if not exists transactions_source_record_unique
   on public.transactions (user_id, data_source_id, source_record_key)
   where data_source_id is not null and source_record_key is not null;
@@ -1555,3 +1625,10 @@ alter table public.profiles add column if not exists mokari_enabled boolean;
 
 comment on column public.profiles.mokari_enabled is
   'Mokari: null = nunca perguntamos (pode convidar) · false = recusou ou desligou (silêncio) · true = ligado. NULLABLE de propósito — com default os dois primeiros estados viram um só.';
+
+-- Sustenta o `exists` de award_xp_for_event (compra parcelada paga XP uma
+-- vez so, nao uma por parcela). Ver a migracao 20260914140000.
+create index if not exists life_events_tx_group
+  on public.life_events (user_id, (payload->>'tx_group_id'))
+  where (payload->>'tx_group_id') is not null;
+
