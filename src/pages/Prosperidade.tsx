@@ -308,7 +308,7 @@ export default function Prosperidade() {
   // conferir contra a nota. Nunca os dois campos ao mesmo tempo.
   const [parcelado, setParcelado] = useState(false);
   const [parcelas, setParcelas] = useState("");
-  const [valorMode, setValorMode] = useState<"parcela" | "total">("parcela");
+  const [valorMode, setValorMode] = useState<"parcela" | "total">("total");
   const [limitInfo, setLimitInfo] = useState<PlanLimitError | null>(null);
   // Apagar uma parcela abre duas escolhas explícitas, nenhuma pré-selecionada.
   // As irmãs vêm do BANCO (não da janela de 6 meses carregada na tela): a
@@ -667,7 +667,7 @@ export default function Prosperidade() {
       setSaving(false);
       if (error) { toast.error("Não consegui salvar as parcelas. Tente de novo."); return; }
       toast.success(`Compra registrada em ${installmentPlan.count} parcelas, uma por mês. +XP`);
-      setAmount(""); setDescription(""); setParcelas(""); setParcelado(false); setValorMode("parcela");
+      setAmount(""); setDescription(""); setParcelas(""); setParcelado(false); setValorMode("total");
       qc.invalidateQueries();
       return;
     }
@@ -1254,7 +1254,7 @@ export default function Prosperidade() {
             setKind(v as typeof kind);
             // Entrada não parcela. Desligar aqui evita o estado fantasma de
             // voltar para Gasto e reencontrar um parcelamento meio preenchido.
-            if (v !== "expense") { setParcelado(false); setParcelas(""); setValorMode("parcela"); }
+            if (v !== "expense") { setParcelado(false); setParcelas(""); setValorMode("total"); }
           }}>
             <TabsList className="grid grid-cols-2 w-full">
               <TabsTrigger value="expense">Gasto</TabsTrigger>
@@ -1264,8 +1264,12 @@ export default function Prosperidade() {
           <div className="grid grid-cols-2 gap-2.5">
             <div className="space-y-1.5">
               {/* O rótulo do campo diz QUAL número está sendo digitado. Com
-                  "Parcelei" ligado o padrão é o valor da parcela — é o que a
-                  nota grita ("10x de R$ 43,90") e o que entra em cada ciclo. */}
+                  "Parcelei" ligado o padrão é o valor TOTAL — é como a pessoa
+                  fala da compra ("um celular de R$ 2.000 em 10x"), e é a
+                  leitura em que errar custa uma ordem de grandeza: digitar
+                  2.000 pensando no total e registrar R$ 20.000 de compromisso
+                  é um erro que só aparece no extrato. Quem tem a parcela na
+                  mão inverte no link logo abaixo do resumo. */}
               <Label htmlFor="amount">
                 {isParcelado ? (valorMode === "total" ? "Valor total (R$)" : "Valor da parcela (R$)") : "Valor (R$)"}
               </Label>
@@ -1302,7 +1306,7 @@ export default function Prosperidade() {
                 </Label>
                 <Switch id="parcelei" checked={parcelado} onCheckedChange={(on) => {
                   setParcelado(on);
-                  if (!on) { setParcelas(""); setValorMode("parcela"); }
+                  if (!on) { setParcelas(""); setValorMode("total"); }
                 }} />
               </div>
 

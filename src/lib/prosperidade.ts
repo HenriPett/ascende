@@ -555,22 +555,30 @@ export function newInstallmentGroupId(): string {
    Qualquer campo a mais cobrado de TODO MUNDO destrói a razão de ele existir —
    e parcelamento é minoria dos gastos do dia a dia.
 
-   Por isso a opção NASCE ESCONDIDA e só aparece quando o próprio valor
-   digitado sugere que faz sentido. O gatilho é o VALOR, não a categoria:
-   parcela-se um pneu, não um mercado de R$ 80. Abaixo do limiar o diálogo é
-   byte a byte o de antes — zero toques a mais, zero pixels a mais.
-────────────────────────────────────────────────────────────────── */
+   Por isso a opção NASCE ESCONDIDA e só aparece depois que existe um valor
+   para parcelar. NÃO existe mais piso: havia um limiar de R$ 200, desenhado
+   para não incomodar quem registra o almoço, e ele foi retirado por decisão
+   de produto. O argumento contra o limiar é melhor que o a favor: qualquer
+   piso que a gente escolha vai estar errado para alguém — R$ 150 em 3x é uma
+   compra parcelada tão real quanto R$ 2.000 em 10x, e quem parcelou e não
+   encontrou a opção conclui que o app não faz aquilo. O custo de quem NÃO
+   parcela continua sendo o mesmo de sempre: uma linha discreta com "À vista"
+   já marcado, que não rouba foco e não empurra o botão salvar.
 
-/** Limiar em reais a partir do qual o gasto rápido oferece parcelar. */
-export const QUICK_INSTALLMENT_MIN = 200;
+   O piso que sobrou é o único que a aritmética exige: dá para dividir? Um
+   total de R$ 0,05 em 10x não tem como virar dez parcelas — quem barra isso
+   é o `buildInstallmentPlan`, que devolve `null`, e não um número redondo
+   escolhido a dedo.
+────────────────────────────────────────────────────────────────── */
 
 /** Atalhos de parcelas do gasto rápido (o campo livre cobre o resto). */
 export const QUICK_INSTALLMENT_CHIPS = [2, 3, 6, 10, 12] as const;
 
-/** O gasto digitado justifica oferecer parcelamento? Valor sujo (vazio, texto,
- *  negativo) é sempre `false`: na dúvida, o diálogo continua o de dois toques. */
+/** Já dá para oferecer parcelamento? Basta existir um valor positivo — não há
+ *  mais limiar. Valor sujo (vazio, texto, zero, negativo) é `false`: sem valor
+ *  a linha não teria o que parcelar, e o diálogo continua o de dois toques. */
 export function shouldOfferInstallments(amount: number): boolean {
-  return Number.isFinite(amount) && amount >= QUICK_INSTALLMENT_MIN;
+  return Number.isFinite(amount) && amount > 0;
 }
 
 /** "12x de R$ 250" — e, quando a divisão não fecha redondo, diz em voz alta
@@ -580,25 +588,21 @@ const installmentHead = (plan: InstallmentPlan, money: (v: number) => string): s
     ? `${plan.count}x de ${money(plan.each)} (${plan.oddCount === 1 ? "a 1ª" : `as ${plan.oddCount} primeiras`}, ${money(plan.oddAmount)})`
     : `${plan.count}x de ${money(plan.each)}`;
 
-/** A linha do gasto rápido: "12x de R$ 250 · total R$ 3.000 · última em set/2027".
+/** A linha do gasto rápido: "10x de R$ 200 · última em jun/2027".
  *  Mais curta que a da Prosperidade de propósito — ali a pessoa está fazendo
  *  contas, aqui ela está registrando de pé na fila.
  *
- *  DOIS NÚMEROS NÃO PODEM FALTAR, E SÃO OS DOIS QUE A PESSOA NÃO FAZ DE
- *  CABEÇA. O fim do compromisso ("última em ago/2027") — ninguém conta doze
- *  meses a partir de hoje na fila do mercado. E o TOTAL: desde que o campo
- *  passou a ser a PARCELA (é o que a nota do cartão grita), o valor do
- *  compromisso inteiro deixou de estar em qualquer lugar da tela. R$ 250 por
- *  mês soa pequeno; R$ 3.000 é a decisão que está sendo tomada, e o app que
- *  esconde o total de uma compra parcelada está do lado errado da mesa.
- *
- *  No modo "total" o número digitado é o próprio total — repeti-lo seria ruído.
- *  Ali o que a pessoa não sabe é a parcela, e ela já abre a linha. */
+ *  O QUE NÃO PODE FALTAR É O NÚMERO QUE A PESSOA NÃO FAZ DE CABEÇA, e ele
+ *  muda com o modo. No padrão ("total", o número que aparece na compra: R$
+ *  2.000 em 10x), o que falta é a PARCELA — e ela abre a linha. Repetir o
+ *  total ali seria ler o campo de volta para quem acabou de digitá-lo.
+ *  No modo invertido, quem digitou a parcela não sabe o compromisso inteiro:
+ *  R$ 250 por mês soa pequeno, R$ 3.000 é a decisão — e aí o total entra. */
 export function quickInstallmentSummary(
   plan: InstallmentPlan,
   money: (v: number) => string,
   cycleDay?: number | null,
-  mode: "parcela" | "total" = "parcela",
+  mode: "parcela" | "total" = "total",
 ): string {
   const last = cycleMonthLabel(plan.rows[plan.rows.length - 1].occurred_at, cycleDay);
   const total = mode === "total" ? "" : ` · total ${money(plan.total)}`;
