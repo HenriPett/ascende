@@ -254,6 +254,61 @@ export function cycleKey(iso: string, cycleDay?: number | null): string {
   return d.toISOString().slice(0, 7);
 }
 
+/** Primeiro dia do ciclo a que `todayIso` pertence (YYYY-MM-DD).
+ *  ESPELHO do SQL em materialize_recurrences_for():
+ *    date_trunc('month', sp_today - make_interval(days => cday - 1))::date + (cday - 1)
+ *  Com cycleDay ausente/1 devolve o primeiro dia do mês civil. */
+export function cycleStartISO(todayIso: string, cycleDay?: number | null): string {
+  const day = clampCycleDay(cycleDay);
+  const [y, m, dd] = todayIso.slice(0, 10).split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, dd));
+  d.setUTCDate(d.getUTCDate() - (day - 1));
+  const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+  start.setUTCDate(start.getUTCDate() + (day - 1));
+  return start.toISOString().slice(0, 10);
+}
+
+/**
+ * A data em que um fixo do dia `dayOfMonth` deve ser materializado para cair
+ * DENTRO do ciclo corrente.
+ *
+ * ESPELHO do SQL em materialize_recurrences_for() (setup.sql e migração
+ * 20260914160000):
+ *   (date_trunc('month', cycle_start)
+ *      + case when day_of_month >= cday then interval '0' else interval '1 month' end)::date
+ *    + (day_of_month - 1)
+ *
+ * POR QUE NÃO É O MÊS CIVIL: o ciclo corrente é [C do mês M, C do mês M+1 − 1].
+ * Dentro dessa janela existe EXATAMENTE UMA ocorrência do dia D — é isso que
+ * torna a regra bem definida, sem escolha arbitrária:
+ *   D >= C  →  D do mês M      (ciclo 10, fixo 25 → 25/09)
+ *   D <  C  →  D do mês M+1    (ciclo 10, fixo  5 → 05/10)
+ * Datar o segundo caso em 05/09 seria datá-lo num dia que JÁ PERTENCE ao ciclo
+ * anterior: foi esse o bug que deixou o salário do fundador fora do ciclo, com
+ * a tela dizendo "Entradas: R$ 0".
+ *
+ * ESTA FUNÇÃO RODA NOS DOIS LADOS — o banco materializa os fixos do ciclo e o
+ * cliente materializa NA HORA o que a pessoa acabou de criar (Raio-X, adoção
+ * do salário, novo recorrente), porque a função do banco só roda quando o app
+ * abre. As duas datas precisam coincidir; src/lib/cicloCliente.test.ts confronta
+ * esta função com uma transcrição literal do SQL para provar que coincidem.
+ *
+ * `dayOfMonth` é 1..28 por CHECK no banco; o clamp aqui é só defesa (e é o
+ * mesmo que o antigo currentMonthDayISO fazia).
+ */
+export function cycleOccurrenceISO(
+  todayIso: string,
+  cycleDay: number | null | undefined,
+  dayOfMonth: number,
+): string {
+  const day = clampCycleDay(cycleDay);
+  const d = Math.min(28, Math.max(1, Math.round(Number(dayOfMonth)) || 1));
+  const [sy, sm] = cycleStartISO(todayIso, cycleDay).split("-").map(Number);
+  const base = new Date(Date.UTC(sy, sm - 1 + (d >= day ? 0 : 1), 1));
+  base.setUTCDate(base.getUTCDate() + (d - 1));
+  return base.toISOString().slice(0, 10);
+}
+
 /** Rótulo do período: nome do mês civil (cycleDay=1) ou faixa "10 ago – 09 set". */
 export function cycleRangeLabel(key: string, cycleDay?: number | null): string {
   const day = clampCycleDay(cycleDay);

@@ -973,16 +973,16 @@ create unique index if not exists tx_recurring_month_unique
   on public.transactions (recurring_id, date_trunc('month', occurred_at::timestamp))
   where recurring_id is not null;
 
--- 22.4 Ledger de materialização: a função roda NO MÁXIMO uma vez por
---      usuário/CICLO. Assim, excluir um lançamento materializado não o faz
---      "renascer" no próximo acesso (a exclusão da pessoa é respeitada).
---      Recorrência criada no meio do ciclo: o app materializa o ciclo
---      corrente na hora da criação, direto no cliente.
---      A chave era 'month_key' (mês civil) e isso ERA METADE DE UM BUG: com
---      ciclo financeiro customizado, o começo de um ciclo novo não disparava
---      materialização nenhuma, porque o mês civil "já tinha rodado" — e a
---      pessoa via "Entradas: R$ 0" por semanas. Ver a migração
---      20260914120000_o_fixo_nasce_no_ciclo_da_pessoa.sql.
+-- 22.4 HISTÓRICO. Guarda antiga da materialização: "o ciclo K rodou para o
+--      usuário U". NÃO é mais escrita nem lida — ela registrava o fato errado
+--      (o ciclo, não o recorrente), e por isso um recorrente criado depois da
+--      rodada perdia o ciclo inteiro. Quem guarda isso agora é
+--      recurrence_materializations, logo abaixo (22.4-B).
+--      A tabela fica de pé porque é dela que a tradução para o modelo novo foi
+--      feita (r.created_at <= run.ran_at) e porque jogar histórico fora não se
+--      desfaz. NÃO volte a usá-la como guarda.
+--      A chave já tinha sido 'month_key' (mês civil), e isso era a outra
+--      metade do mesmo bug — ver 20260914120000_o_fixo_nasce_no_ciclo_da_pessoa.sql.
 create table if not exists public.recurrence_runs (
   user_id uuid not null references auth.users(id) on delete cascade,
   -- Chave do CICLO: mês em que o ciclo COMEÇOU ('YYYY-MM', fuso de São Paulo).
@@ -997,23 +997,41 @@ drop policy if exists "runs_select_own" on public.recurrence_runs;
 create policy "runs_select_own" on public.recurrence_runs for select using (auth.uid() = user_id);
 -- (sem insert/update/delete: só a função security definer escreve aqui)
 
--- Materialização lazy: chamada pelo app ao abrir a Prosperidade / tela Hoje.
--- Zero infraestrutura de cron; funciona para quem só abre o app no dia 15.
---
--- CONSCIENTE DE CICLO. O nome continua 'month' porque é o que o app chama por
--- RPC, mas o "mês" aqui é o da PESSOA: profiles.financial_cycle_day (1-28)
--- decide onde o ciclo começa, e tanto a DATA da linha quanto a GUARDA seguem
--- essa fronteira. Antes as duas pensavam em mês civil, e com cycleDay != 1 o
--- fixo nascia no ciclo anterior — a tela mostrava "Entradas: R$ 0" no ciclo
--- corrente. O porquê inteiro (inclusive por que a data do caso D < C é a do
--- mês civil SEGUINTE) está na migração
--- 20260914120000_o_fixo_nasce_no_ciclo_da_pessoa.sql.
--- Com financial_cycle_day nulo ou 1 a aritmética é a mesma de antes, não
--- apenas equivalente — ver src/lib/cicloRecorrencias.test.ts.
-create or replace function public.ensure_month_recurrences()
+-- 22.4-B Livro-caixa de materialização: uma linha por (RECORRENTE, CICLO), no
+--        momento em que o recorrente é materializado.
+--        A guarda acima registrava o fato ERRADO — "o ciclo K rodou" — e com
+--        isso um recorrente criado DEPOIS da rodada perdia o ciclo inteiro,
+--        sem segunda chance. Em produção isso somou três ciclos seguidos sem
+--        o salário de uma pessoa: a tela dizia "Entradas: R$ 0".
+--        Por que uma tabela e não inferir por `transactions`: o índice único
+--        só sabe o que EXISTE agora, e não distingue "nunca foi criado" de
+--        "foi criado e a pessoa apagou". `life_events` também não serve —
+--        trg_tx_event_del apaga o evento junto com a transação. Esta tabela é
+--        o único registro durável do ATO, e é dela que depende a promessa
+--        "apagou, não volta".
+--        Ver 20260914160000_o_fixo_criado_depois_da_rodada_perdia_o_ciclo.sql.
+create table if not exists public.recurrence_materializations (
+  recurring_id uuid not null references public.recurring_transactions(id) on delete cascade,
+  cycle_key text not null,              -- 'YYYY-MM' do ciclo (ver cycleKey em src/lib/prosperidade.ts)
+  user_id uuid not null references auth.users(id) on delete cascade,
+  materialized_at timestamptz not null default now(),
+  primary key (recurring_id, cycle_key)
+);
+create index if not exists recurrence_mat_user_cycle
+  on public.recurrence_materializations (user_id, cycle_key);
+alter table public.recurrence_materializations enable row level security;
+drop policy if exists "recmat_select_own" on public.recurrence_materializations;
+create policy "recmat_select_own" on public.recurrence_materializations for select using (auth.uid() = user_id);
+-- (sem insert/update/delete: só a função security definer escreve aqui)
+
+-- ─── A REGRA, NUM LUGAR SÓ ────────────────────────────────────────────
+-- O app chama ensure_month_recurrences() (sem argumento, pelo auth.uid()); a
+-- cura da dívida chama esta aqui, por usuário. Uma definição só: a cura não
+-- pode divergir do caminho real, senão consertamos hoje e desconsertamos na
+-- próxima mudança.
+create or replace function public.materialize_recurrences_for(uid uuid)
 returns int language plpgsql security definer set search_path = public as $$
 declare
-  uid uuid := auth.uid();
   sp_today date := (now() at time zone 'America/Sao_Paulo')::date;
   cday int;
   cycle_start date;
@@ -1023,8 +1041,7 @@ begin
   if uid is null then return 0; end if;
 
   -- Mesmo clamp de clampCycleDay() no prosperidade.ts: fora de 2..28 (ou
-  -- nulo, ou perfil ausente) é mês civil. A coluna não tem CHECK de propósito
-  -- (seção 31), então a defesa é aqui.
+  -- nulo, ou perfil ausente) é mês civil.
   select case when p.financial_cycle_day between 2 and 28 then p.financial_cycle_day else 1 end
     into cday from public.profiles p where p.user_id = uid;
   cday := coalesce(cday, 1);
@@ -1034,32 +1051,59 @@ begin
   cycle_start := date_trunc('month', sp_today - make_interval(days => cday - 1))::date + (cday - 1);
   ckey := to_char(cycle_start, 'YYYY-MM');
 
-  -- Já rodou ESTE CICLO? Então a palavra final é da pessoa (exclusões valem).
-  if exists (select 1 from public.recurrence_runs where user_id = uid and cycle_key = ckey) then
-    return 0;
-  end if;
-
-  insert into public.transactions (user_id, kind, amount, category, description, occurred_at, source, recurring_id)
-  select r.user_id, r.kind, r.amount, r.category,
-         coalesce(r.description, r.category),
-         -- A única ocorrência do dia D dentro do ciclo corrente: a deste mês
-         -- quando D >= C, a do mês seguinte quando D < C (senão a linha cairia
-         -- no ciclo anterior — o bug). day_of_month é 1..28 por CHECK, então
-         -- não existe mês curto para tratar aqui.
-         (date_trunc('month', cycle_start)
-            + case when r.day_of_month >= cday then interval '0' else interval '1 month' end)::date
-           + (r.day_of_month - 1),
-         'recurring', r.id
-  from public.recurring_transactions r
-  where r.user_id = uid and r.active
-  on conflict (recurring_id, (date_trunc('month', occurred_at::timestamp)))
-    where recurring_id is not null do nothing;
-  get diagnostics inserted = row_count;
-
-  insert into public.recurrence_runs (user_id, cycle_key) values (uid, ckey)
-  on conflict (user_id, cycle_key) do nothing;
+  with pendentes as (
+    -- A pergunta é POR RECORRENTE. Antes era "este ciclo já rodou?", e quem
+    -- nascia depois da rodada não tinha segunda chance.
+    select r.id, r.user_id, r.kind, r.amount, r.category, r.description, r.day_of_month
+      from public.recurring_transactions r
+     where r.user_id = uid and r.active
+       and not exists (
+         select 1 from public.recurrence_materializations m
+          where m.recurring_id = r.id and m.cycle_key = ckey)
+  ),
+  gravadas as (
+    insert into public.transactions (user_id, kind, amount, category, description, occurred_at, source, recurring_id)
+    select p.user_id, p.kind, p.amount, p.category,
+           coalesce(p.description, p.category),
+           -- A única ocorrência do dia D dentro do ciclo corrente: a deste mês
+           -- quando D >= C, a do mês seguinte quando D < C (senão a linha cairia
+           -- no ciclo anterior). day_of_month é 1..28 por CHECK, então não
+           -- existe mês curto para tratar aqui.
+           (date_trunc('month', cycle_start)
+              + case when p.day_of_month >= cday then interval '0' else interval '1 month' end)::date
+             + (p.day_of_month - 1),
+           'recurring', p.id
+      from pendentes p
+    on conflict (recurring_id, (date_trunc('month', occurred_at::timestamp)))
+      where recurring_id is not null do nothing
+    returning 1
+  ),
+  marcadas as (
+    -- Marca TODOS os pendentes, inclusive os que caíram no conflito: conflito
+    -- aqui significa que o lançamento daquele ciclo já existe (o Raio-X cria
+    -- na hora, por exemplo). O ato aconteceu; não há por que tentar de novo.
+    -- CTE que escreve roda sempre, mesmo sem ser lida pela consulta principal
+    -- (garantia do Postgres) — é de propósito que ela não aparece embaixo.
+    insert into public.recurrence_materializations (recurring_id, cycle_key, user_id)
+    select p.id, ckey, uid from pendentes p
+    on conflict (recurring_id, cycle_key) do nothing
+    returning 1
+  )
+  select count(*) into inserted from gravadas;
 
   return inserted;
+end; $$;
+revoke all on function public.materialize_recurrences_for(uuid) from anon, authenticated;
+
+-- Materialização lazy: chamada pelo app ao abrir a Prosperidade / tela Hoje.
+-- Zero infraestrutura de cron; funciona para quem só abre o app no dia 15.
+-- O nome continua 'month' porque é o que o app chama por RPC; o "mês" aqui é
+-- o CICLO da pessoa (profiles.financial_cycle_day).
+create or replace function public.ensure_month_recurrences()
+returns int language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return 0; end if;
+  return public.materialize_recurrences_for(auth.uid());
 end; $$;
 grant execute on function public.ensure_month_recurrences() to authenticated;
 

@@ -43,6 +43,7 @@ import {
   type Tx, type CategoryEstimate, type RecurringTx,
   composeVariableMonth, buildMonthMap, estimatedMonthlyNet,
   buildCalibration, expensesByCategory, cycleKey, cycleRangeLabel, daysSinceCycleStart,
+  cycleOccurrenceISO,
   buildInstallmentPlan, installmentSummary, installmentPosition,
   countPastInstallments, groupDeletionLabel, MIN_INSTALLMENTS, MAX_INSTALLMENTS,
 } from "@/lib/prosperidade";
@@ -63,12 +64,6 @@ const brlShort = (v: number) =>
 
 const SOURCE_BADGE: Record<string, string | null> = {
   manual: null, capture: "frase", import: "fatura", recurring: "fixo",
-};
-
-/** Data (YYYY-MM-DD) do dia `day` no mês SP corrente. */
-const currentMonthDayISO = (day: number) => {
-  const { y, m } = spParts();
-  return `${y}-${String(m).padStart(2, "0")}-${String(Math.min(day, 28)).padStart(2, "0")}`;
 };
 
 /** uuid v4 para o group_id da compra parcelada. `crypto.randomUUID` só existe
@@ -101,8 +96,11 @@ function RaioX({ initialIncome, onDone, onSkip }: {
   onSkip: () => void;
 }) {
   const { user } = useAuth();
-  const { refresh: refreshProfile } = useProfile();
+  const { profile, refresh: refreshProfile } = useProfile();
   const qc = useQueryClient();
+  // O Raio-X materializa na hora o que acabou de criar, e essa data precisa
+  // nascer no CICLO da pessoa — não no mês civil. Ver cycleOccurrenceISO.
+  const cycleDay = profile?.financial_cycle_day ?? 1;
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const knownIncome = (initialIncome ?? 0) > 0;
@@ -141,7 +139,8 @@ function RaioX({ initialIncome, onDone, onSkip }: {
           if (sal) {
             await supabase.from("transactions").insert({
               user_id: user.id, kind: sal.kind, amount: sal.amount, category: sal.category,
-              description: sal.description, occurred_at: currentMonthDayISO(sal.day_of_month),
+              description: sal.description,
+              occurred_at: cycleOccurrenceISO(todayISO(), cycleDay, sal.day_of_month),
               source: "recurring", recurring_id: sal.id,
             });
           }
@@ -165,7 +164,8 @@ function RaioX({ initialIncome, onDone, onSkip }: {
         if (created?.length) {
           await supabase.from("transactions").insert(created.map((r) => ({
             user_id: user.id, kind: r.kind, amount: r.amount, category: r.category,
-            description: r.description, occurred_at: currentMonthDayISO(r.day_of_month),
+            description: r.description,
+            occurred_at: cycleOccurrenceISO(todayISO(), cycleDay, r.day_of_month),
             source: "recurring", recurring_id: r.id,
           })));
         }
@@ -570,7 +570,8 @@ export default function Prosperidade() {
       if (error || !sal) throw error;
       await supabase.from("transactions").insert({
         user_id: user.id, kind: sal.kind, amount: sal.amount, category: sal.category,
-        description: sal.description, occurred_at: currentMonthDayISO(sal.day_of_month),
+        description: sal.description,
+        occurred_at: cycleOccurrenceISO(todayISO(), cycleDay, sal.day_of_month),
         source: "recurring", recurring_id: sal.id,
       });
       toast.success("Salário lançado como entrada fixa — cai todo mês, sozinho.");
@@ -704,7 +705,8 @@ export default function Prosperidade() {
       // Materializa o mês corrente na hora (a função mensal só roda 1x/mês).
       await supabase.from("transactions").insert({
         user_id: user.id, kind: created.kind, amount: created.amount, category: created.category,
-        description: created.description, occurred_at: currentMonthDayISO(created.day_of_month),
+        description: created.description,
+        occurred_at: cycleOccurrenceISO(todayISO(), cycleDay, created.day_of_month),
         source: "recurring", recurring_id: created.id,
       });
       toast.success(recKind === "income"
