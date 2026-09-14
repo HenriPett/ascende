@@ -24,6 +24,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
@@ -38,6 +43,8 @@ import {
   type Tx, type CategoryEstimate, type RecurringTx,
   composeVariableMonth, buildMonthMap, estimatedMonthlyNet,
   buildCalibration, expensesByCategory, cycleKey, cycleRangeLabel, daysSinceCycleStart,
+  buildInstallmentPlan, installmentSummary, installmentPosition,
+  countPastInstallments, groupDeletionLabel, MIN_INSTALLMENTS, MAX_INSTALLMENTS,
 } from "@/lib/prosperidade";
 import {
   ResponsiveContainer, ComposedChart, Area, BarChart, Bar, LineChart, Line,
@@ -62,6 +69,19 @@ const SOURCE_BADGE: Record<string, string | null> = {
 const currentMonthDayISO = (day: number) => {
   const { y, m } = spParts();
   return `${y}-${String(m).padStart(2, "0")}-${String(Math.min(day, 28)).padStart(2, "0")}`;
+};
+
+/** uuid v4 para o group_id da compra parcelada. `crypto.randomUUID` só existe
+ *  em contexto seguro e a partir do Safari 15.4 — o fallback evita que o botão
+ *  "Registrar N parcelas" estoure no aparelho antigo de quem mais precisa dele. */
+const newGroupId = (): string => {
+  if (typeof crypto?.randomUUID === "function") return crypto.randomUUID();
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 };
 
 const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -293,7 +313,21 @@ export default function Prosperidade() {
   const [category, setCategory] = useState("Mercado");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  // Compra parcelada (só na aba Gasto). Desligado por padrão: quem não parcelou
+  // paga uma olhada e nada mais. `valorMode` diz QUAL dos dois números a pessoa
+  // digitou — o outro o app calcula e devolve na linha de resumo, para ela
+  // conferir contra a nota. Nunca os dois campos ao mesmo tempo.
+  const [parcelado, setParcelado] = useState(false);
+  const [parcelas, setParcelas] = useState("");
+  const [valorMode, setValorMode] = useState<"parcela" | "total">("parcela");
   const [limitInfo, setLimitInfo] = useState<PlanLimitError | null>(null);
+  // Apagar uma parcela abre duas escolhas explícitas, nenhuma pré-selecionada.
+  // As irmãs vêm do BANCO (não da janela de 6 meses carregada na tela): a
+  // contagem de "já passaram" precisa ser verdadeira, e a compra pode ter
+  // parcelas fora da janela dos gráficos.
+  const [groupDel, setGroupDel] = useState<null | {
+    tx: Tx; groupId: string; index: number; count: number; past: number;
+  }>(null);
   const [raioxSkipped, setRaioxSkipped] = useState(() => lsGet("prosperidade-raiox-skip") === "1");
   const [calibDismissed, setCalibDismissed] = useState(false);
 
@@ -558,10 +592,56 @@ export default function Prosperidade() {
     refreshProfile();
   };
 
+  // A compra parcelada expandida em N linhas, ao vivo, enquanto a pessoa
+  // digita. A regra mora em src/lib/prosperidade.ts (pura e testada) e espelha
+  // a do servidor, que faz o mesmo com a fatura importada.
+  const isParcelado = kind === "expense" && parcelado;
+  const installmentPlan = useMemo(() => {
+    if (!isParcelado) return null;
+    return buildInstallmentPlan({
+      amount: Number(amount.replace(",", ".")),
+      count: Number(parcelas),
+      mode: valorMode,
+      description: description.trim() || category,
+      purchaseDate: todayISO(),
+    });
+  }, [isParcelado, amount, parcelas, valorMode, description, category]);
+
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     const v = Number(amount.replace(",", "."));
     if (!user || !v || v <= 0) { toast.error("Informe um valor válido em reais."); return; }
+
+    // Parcelada: N linhas de uma vez, ligadas por um group_id. Uma linha por
+    // ciclo, cada uma com a data real da parcela — é assim que ela entra no
+    // total do ciclo certo e some do seguinte sozinha.
+    if (isParcelado) {
+      const n = Number(parcelas);
+      if (!Number.isInteger(n) || n < MIN_INSTALLMENTS || n > MAX_INSTALLMENTS) {
+        toast.error(`Informe o número de parcelas, de ${MIN_INSTALLMENTS} a ${MAX_INSTALLMENTS}.`);
+        return;
+      }
+      if (!installmentPlan) {
+        toast.error("Esse valor não dá para dividir nesse número de parcelas.");
+        return;
+      }
+      const groupId = newGroupId();
+      setSaving(true);
+      const { error } = await supabase.from("transactions").insert(
+        installmentPlan.rows.map((r) => ({
+          user_id: user.id, kind: "expense" as const, amount: r.amount, category,
+          description: r.description, occurred_at: r.occurred_at,
+          source: "manual" as const, group_id: groupId,
+        })),
+      );
+      setSaving(false);
+      if (error) { toast.error("Não consegui salvar as parcelas. Tente de novo."); return; }
+      toast.success(`Compra registrada em ${installmentPlan.count} parcelas, uma por mês. +XP`);
+      setAmount(""); setDescription(""); setParcelas(""); setParcelado(false); setValorMode("parcela");
+      qc.invalidateQueries();
+      return;
+    }
+
     setSaving(true);
     const { error } = await supabase.from("transactions").insert({
       user_id: user.id, kind, amount: v, category,
@@ -578,6 +658,33 @@ export default function Prosperidade() {
     await supabase.from("transactions").delete().eq("id", id);
     qc.invalidateQueries();
     toast.success("Lançamento removido.");
+  };
+
+  /** Toque em apagar. Linha avulsa some direto, como sempre. Parcela de uma
+   *  compra registrada à mão abre as duas escolhas — nunca cascateia sozinho.
+   *  Parcelada IMPORTADA antiga não tem group_id: cai no caminho de sempre e
+   *  só a linha em foco é apagada (não se inventa vínculo por texto). */
+  const askRemove = async (t: Tx) => {
+    const groupId = t.group_id;
+    if (!groupId) { await remove(t.id); return; }
+    const { data, error } = await supabase.from("transactions")
+      .select("id,occurred_at").eq("group_id", groupId);
+    const rows = (data ?? []) as { id: string; occurred_at: string }[];
+    // Falha na busca das irmãs: não dá para perguntar com números honestos, e
+    // apagar só a linha em foco é o lado seguro do erro.
+    if (error || rows.length <= 1) { await remove(t.id); return; }
+    const { index, count } = installmentPosition(rows, t.id);
+    setGroupDel({ tx: t, groupId, index, count, past: countPastInstallments(rows, todayISO()) });
+  };
+
+  const removeGroup = async () => {
+    if (!groupDel) return;
+    const { count } = groupDel;
+    const { error } = await supabase.from("transactions").delete().eq("group_id", groupDel.groupId);
+    setGroupDel(null);
+    if (error) { toast.error("Não consegui apagar a compra. Tente de novo."); return; }
+    qc.invalidateQueries();
+    toast.success(`Compra apagada — ${count} lançamentos.`);
   };
 
   const addRecurring = async () => {
@@ -1088,7 +1195,12 @@ export default function Prosperidade() {
       {/* Novo lançamento */}
       <Card className="p-4">
         <form onSubmit={add} className="space-y-3">
-          <Tabs value={kind} onValueChange={(v) => setKind(v as typeof kind)}>
+          <Tabs value={kind} onValueChange={(v) => {
+            setKind(v as typeof kind);
+            // Entrada não parcela. Desligar aqui evita o estado fantasma de
+            // voltar para Gasto e reencontrar um parcelamento meio preenchido.
+            if (v !== "expense") { setParcelado(false); setParcelas(""); setValorMode("parcela"); }
+          }}>
             <TabsList className="grid grid-cols-2 w-full">
               <TabsTrigger value="expense">Gasto</TabsTrigger>
               <TabsTrigger value="income">Entrada</TabsTrigger>
@@ -1096,7 +1208,12 @@ export default function Prosperidade() {
           </Tabs>
           <div className="grid grid-cols-2 gap-2.5">
             <div className="space-y-1.5">
-              <Label htmlFor="amount">Valor (R$)</Label>
+              {/* O rótulo do campo diz QUAL número está sendo digitado. Com
+                  "Parcelei" ligado o padrão é o valor da parcela — é o que a
+                  nota grita ("10x de R$ 43,90") e o que entra em cada ciclo. */}
+              <Label htmlFor="amount">
+                {isParcelado ? (valorMode === "total" ? "Valor total (R$)" : "Valor da parcela (R$)") : "Valor (R$)"}
+              </Label>
               <Input id="amount" inputMode="decimal" placeholder="0,00" required
                 value={amount} onChange={(e) => setAmount(e.target.value)} />
             </div>
@@ -1115,8 +1232,59 @@ export default function Prosperidade() {
             <Input id="desc" maxLength={120} placeholder="Ex.: feira da semana"
               value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
+
+          {/* ── Parcelei ─────────────────────────────────────────────
+              Uma linha só, abaixo da Descrição, só na aba Gasto. Desligada
+              custa uma olhada; ligada abre UM campo (nº de parcelas). O outro
+              número o app calcula e devolve no resumo, para conferir contra a
+              nota — nunca dois campos digitados para a mesma conta. */}
+          {kind === "expense" && (
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between gap-3">
+                {/* O rótulo é o alvo: 44px de altura medidos, largura da linha. */}
+                <Label htmlFor="parcelei" className="flex-1 flex items-center min-h-11 cursor-pointer font-normal">
+                  Parcelei
+                </Label>
+                <Switch id="parcelei" checked={parcelado} onCheckedChange={(on) => {
+                  setParcelado(on);
+                  if (!on) { setParcelas(""); setValorMode("parcela"); }
+                }} />
+              </div>
+
+              {parcelado && (
+                <div className="space-y-2.5">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="parcelas">Nº de parcelas</Label>
+                    <Input id="parcelas" className="min-h-11" inputMode="numeric" placeholder="10"
+                      value={parcelas}
+                      onChange={(e) => setParcelas(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                      aria-describedby={installmentPlan ? "parcelas-resumo" : undefined} />
+                  </div>
+                  {/* Inverte a conta para quem só tem o total na mão. */}
+                  <button type="button" className="text-xs text-muted-foreground underline underline-offset-4 min-h-11 text-left"
+                    onClick={() => setValorMode(valorMode === "total" ? "parcela" : "total")}>
+                    {valorMode === "total" ? "digitei o valor da parcela" : "digitei o valor total"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* A linha de resumo ao vivo: é ela que impede a surpresa de dez
+              lançamentos, nove deles no futuro. Chega ANTES do toque. */}
+          {installmentPlan && (
+            <p id="parcelas-resumo" aria-live="polite" className="text-xs text-muted-foreground">
+              {installmentSummary(installmentPlan, brl, cycleDay)}
+            </p>
+          )}
+
+          {/* O botão renomeado é o aviso — por isso não há modal de
+              confirmação: avisar sem cobrar um toque a mais. */}
           <Button type="submit" className="w-full" disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Plus className="w-4 h-4 mr-1" /> Registrar</>)}
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+              <><Plus className="w-4 h-4 mr-1" />
+                {installmentPlan ? `Registrar ${installmentPlan.count} parcelas` : "Registrar"}</>
+            )}
           </Button>
         </form>
       </Card>
@@ -1154,13 +1322,42 @@ export default function Prosperidade() {
                 {t.kind === "expense" ? "−" : "+"}{brl(Number(t.amount))}
               </span>
               <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground"
-                onClick={() => remove(t.id)} aria-label="Excluir lançamento">
+                onClick={() => askRemove(t)} aria-label="Excluir lançamento">
                 <Trash2 className="w-4 h-4" />
               </Button>
             </div>
           ))}
         </div>
       </Card>
+
+      {/* Apagar uma parcela: duas escolhas explícitas, NENHUMA pré-selecionada.
+          A contagem de "já passaram" é o que impede a pessoa de apagar ciclos
+          fechados achando que limpava só o futuro. */}
+      <AlertDialog open={!!groupDel} onOpenChange={(o) => { if (!o) setGroupDel(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Esta parcela faz parte de uma compra</AlertDialogTitle>
+            <AlertDialogDescription>
+              {groupDel?.tx.description || groupDel?.tx.category} — o que você quer apagar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Button variant="outline"
+              className="w-full min-h-11 h-auto justify-start whitespace-normal text-left py-2.5"
+              onClick={() => { const id = groupDel!.tx.id; setGroupDel(null); remove(id); }}>
+              Só esta parcela ({groupDel?.index}/{groupDel?.count})
+            </Button>
+            <Button variant="outline"
+              className="w-full min-h-11 h-auto justify-start whitespace-normal text-left py-2.5 text-destructive"
+              onClick={removeGroup}>
+              {groupDel ? groupDeletionLabel(groupDel.count, groupDel.past) : ""}
+            </Button>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-11">Não apagar nada</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Paywall contextual: aparece só quando um limite do plano é atingido */}
       <Paywall info={limitInfo} onClose={() => setLimitInfo(null)} />

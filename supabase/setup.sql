@@ -1073,7 +1073,8 @@ begin
   insert into public.life_events (user_id, pillar, kind, occurred_at, payload, source, source_table, source_id)
   values (new.user_id, 'prosperidade', 'transaction', new.occurred_at::timestamptz,
     jsonb_build_object('amount', new.amount, 'tx_kind', new.kind, 'category', new.category,
-                       'description', new.description, 'tx_source', new.source),
+                       'description', new.description, 'tx_source', new.source,
+                       'tx_group_id', new.group_id),
     'system', 'transactions', new.id)
   on conflict (source_table, source_id) where source_id is not null do nothing;
   return new;
@@ -1096,6 +1097,23 @@ begin
      and coalesce(new.payload->>'tx_source', 'manual') in ('recurring','import') then
     return new;
   end if;
+
+  -- Compra parcelada: DEZ LINHAS, UMA AÇÃO, UM XP. A primeira parcela a chegar
+  -- leva os 2 XP da compra; as irmãs não levam nada. Ver o cabeçalho desta
+  -- migração — é a mesma regra "XP por ato vivido, nunca por volume de linhas"
+  -- que já vale para importação e recorrência.
+  if new.kind = 'transaction'
+     and (new.payload->>'tx_group_id') is not null
+     and exists (
+       select 1 from public.life_events e
+        where e.user_id = new.user_id
+          and e.kind = 'transaction'
+          and e.payload->>'tx_group_id' = new.payload->>'tx_group_id'
+          and e.id <> new.id
+     ) then
+    return new;
+  end if;
+
   pts := case new.kind
     when 'habit_done' then 10 when 'workout' then 8 when 'practice' then 8
     when 'mood' then 5 when 'sleep' then 5 when 'nap' then 2 when 'meal' then 4
@@ -1449,6 +1467,15 @@ alter table public.transactions
 alter table public.transactions
   add column if not exists source_record_key text;
 
+-- Compra parcelada registrada a mao: as N linhas compartilham este uuid. E o
+-- UNICO vinculo entre elas -- nunca agrupar por texto da descricao. Ver a
+-- migracao 20260914140000.
+alter table public.transactions
+  add column if not exists group_id uuid;
+create index if not exists transactions_user_group
+  on public.transactions (user_id, group_id)
+  where group_id is not null;
+
 create unique index if not exists transactions_source_record_unique
   on public.transactions (user_id, data_source_id, source_record_key)
   where data_source_id is not null and source_record_key is not null;
@@ -1598,3 +1625,10 @@ alter table public.profiles add column if not exists mokari_enabled boolean;
 
 comment on column public.profiles.mokari_enabled is
   'Mokari: null = nunca perguntamos (pode convidar) · false = recusou ou desligou (silêncio) · true = ligado. NULLABLE de propósito — com default os dois primeiros estados viram um só.';
+
+-- Sustenta o `exists` de award_xp_for_event (compra parcelada paga XP uma
+-- vez so, nao uma por parcela). Ver a migracao 20260914140000.
+create index if not exists life_events_tx_group
+  on public.life_events (user_id, (payload->>'tx_group_id'))
+  where (payload->>'tx_group_id') is not null;
+

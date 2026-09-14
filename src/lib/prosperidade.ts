@@ -41,6 +41,10 @@ export interface Tx {
   occurred_at: string; // YYYY-MM-DD
   source: TxSource;
   recurring_id?: string | null;
+  /** Compra parcelada registrada à mão: todas as N linhas compartilham este
+   *  id. É o ÚNICO vínculo entre elas — parceladas antigas, vindas da fatura,
+   *  têm `null` aqui e não se inventa vínculo por texto para elas. */
+  group_id?: string | null;
 }
 
 export interface CategoryEstimate {
@@ -272,4 +276,207 @@ export function daysSinceCycleStart(today: Date, cycleDay?: number | null): numb
   let start = new Date(today.getFullYear(), today.getMonth(), day);
   if (start.getTime() > today.getTime()) start = new Date(today.getFullYear(), today.getMonth() - 1, day);
   return Math.floor((today.getTime() - start.getTime()) / 86_400_000) + 1;
+}
+/* ─────────────────────────────────────────────────────────────────
+   COMPRA PARCELADA REGISTRADA À MÃO
+
+   Pela fatura importada isto já existia: o servidor expande a compra em
+   todas as parcelas, passadas e futuras. À mão não existia — e é aqui que
+   mora o dinheiro que a pessoa mais erra, porque o parcelamento é o único
+   gasto que ela assume HOJE e paga em ciclos que ainda nem começaram.
+
+   ESTE BLOCO ESPELHA supabase/functions/_shared/lib.ts (addMonthsClamp e a
+   expansão em normalizeStatementItems). Espelhar é o padrão da casa para
+   regra que roda nos dois lados — o servidor é Deno, o app é Vite, e não há
+   módulo compartilhado entre eles. O que impede as duas cópias de divergirem
+   em silêncio é src/lib/parcelas.test.ts: ele fixa a mesma aritmética que a
+   fatura usa (mesma data-base, mesmo passo de um mês, mesmo rótulo "k/N").
+   Se alguém mexer em um lado só, o teste cai.
+
+   POR QUE SOMAR MÊS CIVIL RESOLVE O CICLO: somar um mês a um dia fixo avança
+   exatamente UM ciclo, para qualquer financial_cycle_day — varrido nos testes
+   com as 28 configurações de ciclo. A parcela k nasce em
+   addMonthsClamp(dataDaCompra, k-1) e cai sozinha no ciclo certo. Não existe
+   aritmética de ciclo aqui de propósito: inventá-la seria uma segunda regra
+   para o mesmo fato.
+────────────────────────────────────────────────────────────────── */
+
+export const MIN_INSTALLMENTS = 2;
+/** Mesmo teto do servidor (STATEMENT_MAX_INSTALLMENTS, _shared/lib.ts). */
+export const MAX_INSTALLMENTS = 24;
+
+/** Soma `delta` meses a uma data ISO, fixando o dia ao último dia do mês
+ *  quando necessário (31/01 + 1 mês → 28/02).
+ *  ESPELHO de addMonthsClamp() em supabase/functions/_shared/lib.ts. */
+export function addMonthsClamp(iso: string, delta: number): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const idx = (m - 1) + delta;
+  const ny = y + Math.floor(idx / 12);
+  const nm = ((idx % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
+  const nd = Math.min(d, lastDay);
+  return `${ny}-${String(nm + 1).padStart(2, "0")}-${String(nd).padStart(2, "0")}`;
+}
+
+export interface InstallmentRow {
+  /** 1..count */
+  index: number;
+  amount: number;
+  occurred_at: string; // YYYY-MM-DD
+  /** "Sofá · 3/10" — MESMA grafia da importação de fatura, de propósito:
+   *  duas grafias para a mesma coisa seria o app falando duas línguas. */
+  description: string;
+}
+
+export interface InstallmentPlan {
+  count: number;
+  rows: InstallmentRow[];
+  /** Soma EXATA das parcelas. É este número que a linha de resumo mostra. */
+  total: number;
+  /** A parcela que se repete. */
+  each: number;
+  /** Quantas parcelas levam 1 centavo a mais (0 quando divide redondo). */
+  oddCount: number;
+  /** `each + 0,01` quando há sobra; igual a `each` quando não há. */
+  oddAmount: number;
+}
+
+/**
+ * Expande uma compra parcelada nas N linhas que ela realmente é.
+ *
+ * DOIS MODOS DE ENTRADA, UM SÓ CAMPO DIGITADO:
+ * • "parcela" (padrão) — a pessoa digita o que a nota grita ("10x de R$ 43,90")
+ *   e o total é calculado. Divisão não acontece: toda parcela é o valor
+ *   digitado e o total é parcela × N, exato ao centavo.
+ * • "total" — para quem só tem o total na mão. Aqui a divisão pode não fechar.
+ *
+ * ONDE VAI A DIFERENÇA DE CENTAVOS (modo "total"):
+ * a conta é feita em CENTAVOS inteiros. `base = piso(total / N)` e a sobra
+ * `r = total − base × N` (0..N−1 centavos) é distribuída de 1 em 1 nas r
+ * PRIMEIRAS parcelas. Três razões, nesta ordem:
+ *   1. a soma bate com o total digitado por construção — a pessoa confere
+ *      contra a nota e fecha, que é o requisito inegociável;
+ *   2. nenhuma parcela se afasta mais de 1 centavo da divisão ideal;
+ *   3. a sobra cai no começo, em ciclos que a pessoa ainda vai conferir contra
+ *      a fatura, e não escondida numa parcela a dez meses de distância que
+ *      ninguém reconcilia — e é também como a fatura costuma arredondar.
+ * E, principalmente: a linha de resumo DIZ isso em voz alta ("as 3 primeiras,
+ * R$ 43,91"). A pessoa nunca descobre a diferença por subtração.
+ *
+ * Devolve `null` quando o plano não é registrável: número de parcelas fora de
+ * [2, 24], valor não positivo, ou total tão pequeno que não daria 1 centavo
+ * por parcela (a coluna `amount` exige > 0 — plano inválido não vira linha).
+ */
+export function buildInstallmentPlan(input: {
+  amount: number;
+  count: number;
+  mode: "parcela" | "total";
+  /** Já resolvida (descrição digitada ou, na falta, a categoria). */
+  description: string;
+  purchaseDate: string; // YYYY-MM-DD
+}): InstallmentPlan | null {
+  const count = Math.round(Number(input.count));
+  if (!Number.isFinite(count) || count < MIN_INSTALLMENTS || count > MAX_INSTALLMENTS) return null;
+  const cents = Math.round((Number(input.amount) || 0) * 100);
+  if (!Number.isFinite(cents) || cents <= 0) return null;
+
+  let base: number;
+  let odd: number;
+  let totalCents: number;
+  if (input.mode === "total") {
+    totalCents = cents;
+    if (totalCents < count) return null;
+    base = Math.floor(totalCents / count);
+    odd = totalCents - base * count;
+  } else {
+    base = cents;
+    odd = 0;
+    totalCents = cents * count;
+  }
+
+  const label = input.description.trim();
+  const rows: InstallmentRow[] = [];
+  for (let k = 1; k <= count; k++) {
+    rows.push({
+      index: k,
+      amount: (base + (k <= odd ? 1 : 0)) / 100,
+      occurred_at: addMonthsClamp(input.purchaseDate, k - 1),
+      description: `${label} · ${k}/${count}`,
+    });
+  }
+  return {
+    count, rows,
+    total: totalCents / 100,
+    each: base / 100,
+    oddCount: odd,
+    oddAmount: (base + (odd > 0 ? 1 : 0)) / 100,
+  };
+}
+
+const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/** "set/2026" — o mês do CICLO em que a data cai (com cycleDay 1 é o mês
+ *  civil). Abreviação em tabela, não em toLocaleDateString: o rótulo entra em
+ *  teste e não pode depender do ICU da máquina. */
+const cycleMonthLabel = (iso: string, cycleDay?: number | null): string => {
+  const [y, m] = cycleKey(iso, cycleDay).split("-").map(Number);
+  return `${MONTHS_PT[m - 1]}/${y}`;
+};
+
+/** "de set/2026 a jun/2027" — a faixa de ciclos que a compra vai ocupar.
+ *  É esta frase que impede a surpresa: deixa explícito, ANTES do toque, que
+ *  a maioria das parcelas está no futuro. */
+export function installmentSpanLabel(plan: InstallmentPlan, cycleDay?: number | null): string {
+  const first = cycleMonthLabel(plan.rows[0].occurred_at, cycleDay);
+  const last = cycleMonthLabel(plan.rows[plan.rows.length - 1].occurred_at, cycleDay);
+  return first === last ? first : `de ${first} a ${last}`;
+}
+
+/** A linha de resumo ao vivo, logo acima do botão:
+ *  "10x de R$ 43,90 · total R$ 439,00 · de set/2026 a jun/2027".
+ *  O formatador entra por parâmetro para o teste não depender de locale. */
+export function installmentSummary(
+  plan: InstallmentPlan,
+  money: (v: number) => string,
+  cycleDay?: number | null,
+): string {
+  const head = plan.oddCount > 0
+    ? `${plan.count}x de ${money(plan.each)} (${plan.oddCount === 1 ? "a 1ª" : `as ${plan.oddCount} primeiras`}, ${money(plan.oddAmount)})`
+    : `${plan.count}x de ${money(plan.each)}`;
+  return `${head} · total ${money(plan.total)} · ${installmentSpanLabel(plan, cycleDay)}`;
+}
+
+/** Posição da parcela dentro da compra, pela ORDEM DAS DATAS — nunca lendo
+ *  o "3/10" do texto. O vínculo é o group_id; o texto é só rótulo. */
+export function installmentPosition(
+  rows: { id: string; occurred_at: string }[],
+  id: string,
+): { index: number; count: number } {
+  const sorted = [...rows].sort(
+    (a, b) => a.occurred_at.localeCompare(b.occurred_at) || a.id.localeCompare(b.id),
+  );
+  const i = sorted.findIndex((r) => r.id === id);
+  return { index: i < 0 ? 0 : i + 1, count: sorted.length };
+}
+
+/** Quantas parcelas já aconteceram (data <= hoje). Apagar a compra inteira é
+ *  onde mais se erra: a pessoa quer limpar o futuro e leva junto ciclos
+ *  fechados. Esta contagem existe para ela ver isso antes. */
+export function countPastInstallments(
+  rows: { occurred_at: string }[],
+  todayIso: string,
+): number {
+  return rows.filter((r) => r.occurred_at <= todayIso).length;
+}
+
+/** Rótulo da opção destrutiva:
+ *  "A compra inteira — 10 lançamentos, 2 já passaram".
+ *  A contagem de passados é OBRIGATÓRIA (decisão do desenho): é ela que evita
+ *  apagar meses já fechados achando que se limpava só o futuro. */
+export function groupDeletionLabel(count: number, past: number): string {
+  const n = `${count} ${count === 1 ? "lançamento" : "lançamentos"}`;
+  const p = past <= 0 ? "nenhum passou ainda"
+    : past === 1 ? "1 já passou"
+    : `${past} já passaram`;
+  return `A compra inteira — ${n}, ${p}`;
 }
