@@ -10,60 +10,56 @@
  * lia "Entradas: R$ 0" e concluía que o mês estava no vermelho. O salário
  * dela estava lá; só estava datado no balde errado.
  *
- * A regra nova mora em SQL (ensure_month_recurrences, no setup.sql e na
- * migração 20260914120000_o_fixo_nasce_no_ciclo_da_pessoa.sql), e SQL não roda
- * nestes runners. O que dá para provar aqui — e é o que importa — é que a
- * REGRA está certa, usando o cycleKey DE VERDADE, o mesmo que a tela usa:
- * se a data escolhida cai no ciclo corrente segundo cycleKey, a tela mostra.
+ * Depois veio a SEGUNDA metade, achada no banco de produção: consertada a
+ * data, o salário de uma pessoa continuava sem aparecer. A guarda registrava
+ * o fato errado — "o ciclo K rodou", e não "o recorrente R foi materializado
+ * no ciclo K". Quem criasse um recorrente DEPOIS da rodada perdia o ciclo
+ * inteiro, sem segunda chance; no caso real isso somou três ciclos e R$ 11.500
+ * de entrada que nunca entraram. A guarda virou um livro-caixa por
+ * (recorrente, ciclo) — recurrence_materializations.
  *
- * O espelho em TypeScript abaixo poderia envelhecer em silêncio, então o
- * último teste prende as duas cópias do SQL uma na outra e nas fórmulas que
- * este arquivo reproduz.
+ * As duas regras moram em SQL (materialize_recurrences_for, no setup.sql e nas
+ * migrações 20260914120000 e 20260914160000), e SQL não roda nestes runners.
+ * A divisão de trabalho deste arquivo:
+ *   • a ARITMÉTICA DE DATA é provada de verdade, contra o cycleKey que a tela
+ *     usa — se a data cai no ciclo corrente, a tela mostra;
+ *   • a MECÂNICA DA GUARDA (por recorrente, ato gravado mesmo em conflito) é
+ *     presa pelo texto do SQL, e validada em Postgres de verdade na revisão.
+ *
+ * ATUALIZAÇÃO: a aritmética de data deixou de ser espelho deste arquivo.
+ * Descobriu-se que o CLIENTE tinha o mesmo bug de pé — src/pages/Prosperidade.tsx
+ * materializa recorrente em quatro pontos (Raio-X, adoção do salário, criação
+ * de fixo), porque a função do banco só roda quando o app abre, e fazia isso
+ * em MÊS CIVIL. As fórmulas mudaram de casa para src/lib/prosperidade.ts
+ * (cycleStartISO / cycleOccurrenceISO) e este arquivo passou a importá-las.
+ * O ganho é grande: os testes abaixo deixaram de provar uma cópia escrita para
+ * o teste e passaram a provar a função que roda de verdade no app.
+ *
+ * Os últimos testes continuam prendendo as cópias do SQL uma na outra e nas
+ * fórmulas que a produção agora executa.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { cycleKey } from "./prosperidade";
+import { cycleKey, cycleStartISO, cycleOccurrenceISO } from "./prosperidade";
 
 const SETUP = "supabase/setup.sql";
-const MIGRACAO = "supabase/migrations/20260914120000_o_fixo_nasce_no_ciclo_da_pessoa.sql";
+const MIGRACAO_DATA = "supabase/migrations/20260914120000_o_fixo_nasce_no_ciclo_da_pessoa.sql";
+const MIGRACAO_GUARDA = "supabase/migrations/20260914160000_o_fixo_criado_depois_da_rodada_perdia_o_ciclo.sql";
 
-/* ─── Espelho da aritmética do SQL ───────────────────────────────────────
-   O SQL é a fonte da verdade; isto é a MESMA conta em TypeScript, para poder
-   confrontá-la com o cycleKey da tela. Qualquer divergência entre os dois é
-   pega pelo teste de acoplamento no fim do arquivo. */
-
-/** Espelho de clampCycleDay() do prosperidade.ts e do `between 2 and 28` do SQL. */
-const clamp = (cycleDay: number | null | undefined): number =>
-  cycleDay && cycleDay >= 2 && cycleDay <= 28 ? Math.round(cycleDay) : 1;
+/* ─── A aritmética, agora vinda do código de PRODUÇÃO ────────────────────
+   Estes dois nomes eram funções locais deste arquivo. Hoje são apelidos das
+   funções que o app executa: a mesma conta do SQL, provada contra o cycleKey
+   que a tela usa para agrupar. A transcrição independente do SQL — o oráculo
+   que garante que a mudança de casa não alterou a fórmula — vive em
+   src/lib/cicloCliente.test.ts. */
+const inicioDoCiclo = cycleStartISO;
+const ocorrenciaDoCiclo = cycleOccurrenceISO;
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const doIso = (s: string) => {
   const [y, m, dd] = s.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, dd));
 };
-
-/** SQL: date_trunc('month', sp_today - (cday-1) dias)::date + (cday-1) */
-function inicioDoCiclo(hoje: string, cycleDay: number | null): string {
-  const c = clamp(cycleDay);
-  const d = doIso(hoje);
-  d.setUTCDate(d.getUTCDate() - (c - 1));
-  const inicio = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-  inicio.setUTCDate(inicio.getUTCDate() + (c - 1));
-  return iso(inicio);
-}
-
-/** SQL: (date_trunc('month', cycle_start) + (D >= C ? 0 : 1 mês))::date + (D-1) */
-function ocorrenciaDoCiclo(hoje: string, cycleDay: number | null, dayOfMonth: number): string {
-  const c = clamp(cycleDay);
-  const inicio = doIso(inicioDoCiclo(hoje, cycleDay));
-  const base = new Date(Date.UTC(
-    inicio.getUTCFullYear(),
-    inicio.getUTCMonth() + (dayOfMonth >= c ? 0 : 1),
-    1,
-  ));
-  base.setUTCDate(base.getUTCDate() + (dayOfMonth - 1));
-  return iso(base);
-}
 
 /** Uma varredura de "hoje" que cruza viradas de mês, de ano e um fevereiro. */
 function diasDeTeste(): string[] {
@@ -168,44 +164,91 @@ describe("o índice único (recurring_id, mês civil) continua valendo uma linha
 });
 
 describe("o SQL e este espelho não podem divergir em silêncio", () => {
-  /** Corpo da função, sem comentários nem espaço em branco — é o que precisa
-   *  ser idêntico nos dois arquivos; os comentários de cada um falam do seu
-   *  próprio contexto e podem (devem) diferir. */
-  const corpoDaFuncao = (caminho: string) => {
+  /** Corpo de uma função, sem comentários nem espaço em branco.
+   *
+   *  `lastIndexOf` de propósito: o setup.sql redefine algumas funções mais de
+   *  uma vez ao longo do arquivo, e quem vale no banco é a ÚLTIMA. Procurar a
+   *  primeira faria este teste aprovar uma definição que nunca roda. */
+  const corpoDaFuncao = (caminho: string, nome: string) => {
     const src = readFileSync(caminho, "utf-8");
-    const i = src.indexOf("create or replace function public.ensure_month_recurrences()");
-    expect(i, `${caminho} não define ensure_month_recurrences`).toBeGreaterThanOrEqual(0);
+    const assinatura = `create or replace function public.${nome}`;
+    const i = src.lastIndexOf(assinatura);
+    expect(i, `${caminho} não define ${nome}`).toBeGreaterThanOrEqual(0);
     const j = src.indexOf("end; $$;", i);
     return src.slice(i, j)
       .split("\n").map((l) => l.replace(/--.*$/, "").trim()).filter(Boolean).join(" ")
       .replace(/\s+/g, " ");
   };
 
-  it("setup.sql e a migração definem a MESMA função", () => {
+  const REGRA = "materialize_recurrences_for";
+  const CASCA = "ensure_month_recurrences";
+
+  it("setup.sql e a migração definem a MESMA regra de materialização", () => {
     // O setup.sql é a linha de base (um ambiente novo nasce só com ele) e a
     // migração é para quem já tem banco. Divergir aqui faz produção e staging
     // se comportarem diferente sem ninguém perceber.
-    expect(corpoDaFuncao(SETUP)).toBe(corpoDaFuncao(MIGRACAO));
+    expect(corpoDaFuncao(SETUP, REGRA)).toBe(corpoDaFuncao(MIGRACAO_GUARDA, REGRA));
+    expect(corpoDaFuncao(SETUP, CASCA)).toBe(corpoDaFuncao(MIGRACAO_GUARDA, CASCA));
   });
 
-  it("o SQL usa as fórmulas que este arquivo espelha", () => {
-    const corpo = corpoDaFuncao(SETUP);
+  it("a regra usa as fórmulas de data que este arquivo espelha", () => {
+    const corpo = corpoDaFuncao(SETUP, REGRA);
     expect(corpo).toContain(
       "cycle_start := date_trunc('month', sp_today - make_interval(days => cday - 1))::date + (cday - 1);");
     expect(corpo).toContain(
-      "case when r.day_of_month >= cday then interval '0' else interval '1 month' end");
-    // A guarda tem de ser por ciclo. Se alguém voltar a `month_key`, o bug
-    // inteiro volta junto: ciclo novo não dispara materialização nenhuma.
-    expect(corpo).toContain("and cycle_key = ckey");
-    expect(corpo).not.toContain("month_key");
+      "case when p.day_of_month >= cday then interval '0' else interval '1 month' end");
   });
 
-  it("a cura da dívida só toca quem está quebrado (D < C e ciclo customizado)", () => {
-    const src = readFileSync(MIGRACAO, "utf-8");
-    // Fora esse recorte, o backfill ressuscitaria lançamentos que a pessoa
-    // apagou — e o ledger promete, por escrito, que isso não acontece.
+  it("a guarda é por (RECORRENTE, ciclo) — não por ciclo, não por mês civil", () => {
+    // As três formas erradas que esta linha já teve, em ordem cronológica:
+    //   month_key      → o ciclo novo não disparava materialização nenhuma;
+    //   cycle_key só   → o recorrente criado depois da rodada perdia o ciclo;
+    //   inferir de transactions → ressuscitaria o que a pessoa apagou.
+    const corpo = corpoDaFuncao(SETUP, REGRA);
+    expect(corpo).toContain("from public.recurrence_materializations m");
+    expect(corpo).toContain("where m.recurring_id = r.id and m.cycle_key = ckey");
+    expect(corpo).not.toContain("month_key");
+    expect(corpo).not.toContain("recurrence_runs");
+  });
+
+  it("o ato é gravado mesmo quando o lançamento já existia (senão tenta para sempre)", () => {
+    const corpo = corpoDaFuncao(SETUP, REGRA);
+    // `pendentes`, não `gravadas`: marcar só o que entrou deixaria o conflito
+    // (Raio-X já criou a linha) pedindo materialização a cada abertura do app.
+    expect(corpo).toContain("select p.id, ckey, uid from pendentes p");
+    expect(corpo).toContain("on conflict (recurring_id, cycle_key) do nothing");
+  });
+
+  it("o app continua chamando a mesma RPC, e ela é só a casca do auth.uid()", () => {
+    // Mudar a assinatura obrigaria um deploy do front junto — e a migração
+    // afirma, no cabeçalho, que não há ordem de deploy.
+    expect(corpoDaFuncao(SETUP, CASCA)).toContain("return public.materialize_recurrences_for(auth.uid());");
+    expect(readFileSync("src/pages/Prosperidade.tsx", "utf-8"))
+      .toContain('supabase.rpc("ensure_month_recurrences")');
+  });
+
+  it("a cura da dívida chama a função, em vez de copiar a regra", () => {
+    const src = readFileSync(MIGRACAO_GUARDA, "utf-8");
+    expect(src).toContain("public.materialize_recurrences_for(u)");
+    // Uma segunda cópia da regra seria a próxima divergência: o app conserta,
+    // a cura não (ou o contrário). O único INSERT em transactions do arquivo
+    // é o que está DENTRO da função.
+    expect(src.match(/insert into public\.transactions/g) ?? []).toHaveLength(1);
+  });
+
+  it("a tradução da guarda antiga respeita o instante da rodada", () => {
+    const src = readFileSync(MIGRACAO_GUARDA, "utf-8");
+    // Sem isto, um recorrente criado DEPOIS da rodada seria carimbado como
+    // materializado e a dívida ficaria marcada como paga sem ter sido.
+    expect(src).toContain("where r.created_at <= run.ran_at");
+    // E o ciclo corrente fica de fora da tradução, senão o caso do fundador
+    // (rodada de setembro posterior ao recorrente) continuaria quebrado.
+    expect(src).toContain("and run.cycle_key is distinct from coalesce(");
+  });
+
+  it("a cura da migração anterior só tocava quem estava quebrado (D < C)", () => {
+    const src = readFileSync(MIGRACAO_DATA, "utf-8");
     expect(src).toContain("where p.financial_cycle_day between 2 and 28");
     expect(src).toContain("and r.day_of_month < c.cday");
-    expect(src).toContain("on conflict (recurring_id, (date_trunc('month', occurred_at::timestamp)))");
   });
 });
