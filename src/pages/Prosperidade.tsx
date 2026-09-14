@@ -46,6 +46,8 @@ import {
   cycleOccurrenceISO,
   buildInstallmentPlan, installmentSummary, installmentPosition,
   countPastInstallments, groupDeletionLabel, MIN_INSTALLMENTS, MAX_INSTALLMENTS,
+  newInstallmentGroupId, projectCycle, cycleTotals, cycleDistance,
+  MAX_PROJECTION_CYCLES, type ProjectedTx,
 } from "@/lib/prosperidade";
 import {
   ResponsiveContainer, ComposedChart, Area, BarChart, Bar, LineChart, Line,
@@ -64,19 +66,6 @@ const brlShort = (v: number) =>
 
 const SOURCE_BADGE: Record<string, string | null> = {
   manual: null, capture: "frase", import: "fatura", recurring: "fixo",
-};
-
-/** uuid v4 para o group_id da compra parcelada. `crypto.randomUUID` só existe
- *  em contexto seguro e a partir do Safari 15.4 — o fallback evita que o botão
- *  "Registrar N parcelas" estoure no aparelho antigo de quem mais precisa dele. */
-const newGroupId = (): string => {
-  if (typeof crypto?.randomUUID === "function") return crypto.randomUUID();
-  const b = new Uint8Array(16);
-  crypto.getRandomValues(b);
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 };
 
 const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -416,9 +405,6 @@ export default function Prosperidade() {
   const spentToday = (txs ?? [])
     .filter((t) => t.kind === "expense" && t.occurred_at === todayISO())
     .reduce((s, t) => s + Number(t.amount), 0);
-  // Mês em navegação (cards de resumo + lista)
-  const income = monthTxs.filter((t) => t.kind === "income").reduce((s, t) => s + Number(t.amount), 0);
-  const expense = monthTxs.filter((t) => t.kind === "expense").reduce((s, t) => s + Number(t.amount), 0);
   // Mês CORRENTE (Mapa do mês, orçamento, composição): navegação não muda a operação
   const nowKey = monthKey(todayISO());
   const curMonthTxs = (txs ?? []).filter((t) => monthKey(t.occurred_at) === nowKey);
@@ -437,9 +423,52 @@ export default function Prosperidade() {
     const k = monthKey(t.occurred_at);
     return k > mx ? k : mx;
   }, nowKey);
+  /* Até onde a seta "próximo" anda.
+     Duas fronteiras, e vale a mais distante:
+     • o último COMPROMISSO REAL (parcelas já registradas — no banco do
+       fundador, jan/2028): elas existem e têm que aparecer, mesmo além do
+       horizonte de projeção, onde o ciclo mostra só o real;
+     • o horizonte de PROJEÇÃO (12 ciclos), para quem tem salário e fixos mas
+       nenhuma parcela futura. Sem esta segunda fronteira a seta ficaria presa
+       no ciclo corrente e a projeção não existiria para essa pessoa — que é
+       justamente a maioria de quem reclamou de "Entradas R$ 0". */
+  const maxProjKey = (recurrings ?? []).some((r) => r.active)
+    ? shiftMonthKey(nowKey, MAX_PROJECTION_CYCLES) : nowKey;
+  const maxNavKey = maxTxKey > maxProjKey ? maxTxKey : maxProjKey;
   // Rótulo do período: nome do mês civil (ciclo padrão) ou a faixa exata do
   // ciclo customizado ("10 ago – 09 set") — já sai com a maiúscula certa.
   const viewMonthLabel = cycleRangeLabel(viewMonth, cycleDay);
+
+  /* ── Ciclos futuros: salário e fixos aparecem, sem virar linha no banco ──
+     As parcelas futuras já são linhas reais e já somavam. Faltava o outro lado
+     da conta: todo ciclo à frente abria com "Entradas R$ 0" e parecia prejuízo
+     puro, porque salário e fixos só existem depois que a materialização mensal
+     roda — e ela só roda quando o mês chega.
+
+     A regra mora em src/lib/prosperidade.ts (pura e testada): ciclo corrente
+     não recebe projeção, já materializado não projeta, inativo não projeta e
+     nada passa de 12 ciclos à frente. Aqui é só desenho.
+
+     NADA DISTO É GRAVADO. Escrever no banco um salário que não caiu contamina
+     o retrato que o Conselheiro lê e contraria a regra da casa de que
+     histórico é o que a pessoa viveu. Projeção nasce no render e morre nele. */
+  const projectedRows = useMemo<ProjectedTx[]>(
+    () => projectCycle({
+      recurrings: recurrings ?? [], txs: txs ?? [],
+      targetCycle: viewMonth, currentCycle: nowKey, cycleDay,
+    }),
+    [recurrings, txs, viewMonth, nowKey, cycleDay],
+  );
+  // Os três números do cabeçalho — real + projeção no mesmo total, porque um
+  // saldo que ignora o salário é mentira mais cara que uma previsão assumida.
+  // `projected` é o gatilho do rótulo "Previsão" que assume a previsão em voz
+  // alta: um rótulo cobrindo os três, nunca legenda por número.
+  const viewTotals = cycleTotals(monthTxs, projectedRows);
+  // Passou dos 12 ciclos: o ciclo mostra só o real. Dizer isso é o que impede
+  // a pessoa de ler o R$ 0 como "minha renda acabou" — a mesma confusão que
+  // originou o pedido, um ano e meio adiante.
+  const beyondProjection = cycleDistance(nowKey, viewMonth) > MAX_PROJECTION_CYCLES &&
+    (recurrings ?? []).some((r) => r.active);
   const monthlyIncome = Number(profile?.monthly_income ?? 0);
   const composition = useMemo(
     () => composeVariableMonth(expensesByCategory(txs ?? [], nowKey, cycleDay), estimates ?? []),
@@ -626,7 +655,7 @@ export default function Prosperidade() {
         toast.error("Esse valor não dá para dividir nesse número de parcelas.");
         return;
       }
-      const groupId = newGroupId();
+      const groupId = newInstallmentGroupId();
       setSaving(true);
       const { error } = await supabase.from("transactions").insert(
         installmentPlan.rows.map((r) => ({
@@ -893,7 +922,10 @@ export default function Prosperidade() {
           aria-label="Mês anterior">
           <ChevronLeft className="w-4 h-4" />
         </Button>
-        <button className="text-sm font-medium disabled:cursor-default"
+        {/* `min-w-0` + `px-2`: a linha tem 390px num celular e três ocupantes.
+            O rótulo encolhe em vez de empurrar, e as duas folgas de 8px
+            garantem que o texto nunca encoste no alvo de toque das setas. */}
+        <button className="text-sm font-medium disabled:cursor-default min-w-0 px-2 truncate"
           disabled={viewMonth === nowKey}
           onClick={() => setViewMonth(nowKey)}
           title={viewMonth !== nowKey ? "Voltar ao mês atual" : undefined}>
@@ -903,24 +935,45 @@ export default function Prosperidade() {
           )}
         </button>
         <Button variant="ghost" size="icon" className="w-8 h-8"
-          disabled={viewMonth >= maxTxKey}
+          disabled={viewMonth >= maxNavKey}
           onClick={() => setViewMonth((v) => shiftMonthKey(v, 1))}
           aria-label="Próximo mês">
           <ChevronRight className="w-4 h-4" />
         </Button>
       </div>
+      {/* O rótulo do ciclo mora numa LINHA PRÓPRIA, não junto do nome do mês.
+          Somado à linha de navegação ele estourava os 390px de um celular:
+          "Novembro de 2026 · voltar ao mês atual" + a badge quebrava em duas
+          linhas, com "atual" órfã e folga zero até o alvo de toque da seta
+          (achado 1 do QA — não acontecia em 768 nem em 1440).
+
+          Aqui embaixo ele ainda faz o trabalho que tinha de fazer: fica
+          encostado nos três números que rotula, e um rótulo só cobre os três.
+          Legenda por número diria a mesma coisa três vezes e ainda deixaria a
+          dúvida de qual deles é previsão — são todos. */}
+      {viewTotals.projected && (
+        <p className="flex items-center justify-center gap-1.5 flex-wrap text-[11px] text-muted-foreground -mt-1">
+          <Badge variant="secondary" className="text-[10px] font-normal">Previsão</Badge>
+          inclui salário e fixos que ainda não caíram
+        </p>
+      )}
+      {beyondProjection && (
+        <p className="text-[11px] text-muted-foreground text-center -mt-1">
+          Sem previsão de renda daqui em diante — este ciclo mostra só o que já está assumido.
+        </p>
+      )}
       <div className="grid grid-cols-3 gap-2.5">
         <Card className="p-3 min-w-0 overflow-hidden">
           <p className="text-[11px] text-muted-foreground">Entradas</p>
-          <p className="font-semibold text-success text-[13px] sm:text-base tracking-tight">{brl(income)}</p>
+          <p className="font-semibold text-success text-[13px] sm:text-base tracking-tight">{brl(viewTotals.income)}</p>
         </Card>
         <Card className="p-3 min-w-0 overflow-hidden">
           <p className="text-[11px] text-muted-foreground">Saídas</p>
-          <p className="font-semibold text-destructive text-[13px] sm:text-base tracking-tight">{brl(expense)}</p>
+          <p className="font-semibold text-destructive text-[13px] sm:text-base tracking-tight">{brl(viewTotals.expense)}</p>
         </Card>
         <Card className="p-3 min-w-0 overflow-hidden">
           <p className="text-[11px] text-muted-foreground">Saldo do mês</p>
-          <p className="font-semibold text-[13px] sm:text-base tracking-tight">{brl(income - expense)}</p>
+          <p className="font-semibold text-[13px] sm:text-base tracking-tight">{brl(viewTotals.net)}</p>
         </Card>
       </div>
 
@@ -1295,7 +1348,7 @@ export default function Prosperidade() {
       <Card className="p-4">
         <h2 className="font-display font-semibold mb-3">Lançamentos · {viewMonthLabel}</h2>
         {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
-        {!isLoading && !monthTxs.length && (
+        {!isLoading && !monthTxs.length && !projectedRows.length && (
           <p className="text-sm text-muted-foreground">
             {/* Um mês passado vazio deixava a pessoa com duas perguntas sem
                 resposta ("quebrou?" e "dá para trazer de algum lugar?"). A
@@ -1304,6 +1357,16 @@ export default function Prosperidade() {
             {viewMonth === nowKey
               ? "Nenhum lançamento ainda. Registre o primeiro acima — ou conte na tela Hoje."
               : "Este mês está sem lançamentos. Se você quiser preencher o passado, a importação de fatura entra com a data original de cada compra."}
+          </p>
+        )}
+
+        {/* Uma lista só, dois grupos. O subtítulo aparece quando há projeção —
+            é ele que separa o que a pessoa JÁ DEVE do que ela ESPERA. Sem
+            projeção (ciclo corrente, passado, ou além dos 12 ciclos) a lista é
+            a de sempre, sem subtítulo nenhum a explicar. */}
+        {!!projectedRows.length && !!monthTxs.length && (
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+            Já assumido
           </p>
         )}
         <div className="divide-y">
@@ -1330,6 +1393,62 @@ export default function Prosperidade() {
             </div>
           ))}
         </div>
+
+        {/* Previsto: salário e fixos que ainda não caíram. A legenda mora AQUI,
+            no subtítulo, e não repetida em cada linha. A barra tracejada e a
+            opacidade dizem o resto sem palavra nenhuma.
+
+            Não abre detalhe e não tem lixeira — o que não existe não se edita.
+            Para mudar uma destas linhas, muda-se o recorrente logo acima. */}
+        {!!projectedRows.length && (
+          <>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mt-3 mb-1">
+              Previsto · ainda não caiu
+            </p>
+            {/* A barra tracejada e a tinta mais fria são o sinal — SEM opacity
+                no contêiner.
+
+                `opacity-70` no grupo inteiro era o desenho pedido e derrubava
+                a segunda linha (12px) para 3,83:1, abaixo do mínimo de 4,5:1
+                (achado 2 do QA). Medido depois: NENHUM alpha que ainda leia
+                como "esmaecido" mantém texto de 12-14px acima do mínimo nos
+                dois temas — a saída (`text-destructive`) já cai para 2,87:1 a
+                70%. Então a diferenciação sai da ESCOLHA DE COR, não do alpha:
+                o título desce de `text-foreground` (16,26:1) para
+                `text-muted-foreground` (6,50:1) — um degrau visível de
+                verdade —, e os valores ficam na mesma tinta das linhas reais.
+
+                A barra era `border-border` com opacity por cima: 1,1:1, um
+                enfeite que ninguém enxergava (achado 3). `muted-foreground/75`
+                entrega 4,21:1 no escuro e 3,16:1 no claro, ambos acima dos
+                3:1 de elemento não textual. */}
+            <div className="divide-y border-l-2 border-dashed border-muted-foreground/75 pl-3">
+              {projectedRows.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    {/* `font-medium` devolve a hierarquia INTERNA que a
+                        correção do achado 2 tirou sem querer: com título e
+                        subtítulo na mesma tinta mutada, "Salário" e "Salário ·
+                        05 de fev." viraram o mesmo peso visual, e o grupo
+                        Previsto passou a ter uma gramática diferente da do
+                        grupo real logo acima. A distinção volta pelo PESO, não
+                        pela cor — abaixar a cor de novo é reabrir o 3,83:1. */}
+                    <p className="text-sm font-medium truncate text-muted-foreground">{r.description}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {r.category} · {new Date(r.occurred_at + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                    </p>
+                  </div>
+                  <span className={r.kind === "expense" ? "text-sm font-medium text-destructive" : "text-sm font-medium text-success"}>
+                    {r.kind === "expense" ? "−" : "+"}{brl(Number(r.amount))}
+                  </span>
+                  {/* Alinha o valor com a coluna das linhas reais, que têm a
+                      lixeira ocupando esta largura. */}
+                  <span className="w-8 shrink-0" aria-hidden />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </Card>
 
       {/* Apagar uma parcela: duas escolhas explícitas, NENHUMA pré-selecionada.

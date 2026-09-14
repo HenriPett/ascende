@@ -18,7 +18,7 @@
  * O componente já se esconde sozinho quando nenhum tracker relevante está
  * ativo, então na folha de quem desligou tudo nada muda.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,30 +34,128 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Droplet, Camera, Dumbbell } from "lucide-react";
-import { CATEGORIES } from "@/lib/prosperidade";
+import {
+  CATEGORIES, QUICK_INSTALLMENT_CHIPS, buildInstallmentPlan, newInstallmentGroupId,
+  quickInstallmentSummary, shouldOfferInstallments,
+} from "@/lib/prosperidade";
+import { cn } from "@/lib/utils";
 import { activePillarSet } from "@/lib/pillars";
 import { activeTrackerSet } from "@/lib/trackers";
 import { invalidateKeys, FINANCE_KEYS, LIFE_DATA_KEYS } from "@/lib/queryKeys";
 import { xpToastSuffix } from "@/lib/xp";
-import { todayISO } from "@/lib/format";
+import { brl, todayISO } from "@/lib/format";
 
 /* ── Gasto rápido inline (plano de feedbacks): registrar um gasto do dia a
    dia não deveria custar uma navegação. O botão abre um diálogo de 2 toques
    (valor + categoria) e grava direto em `transactions` — o gráfico e o
-   Conselheiro enxergam na hora. O pilar completo continua a um link. ── */
+   Conselheiro enxergam na hora. O pilar completo continua a um link.
+
+   PARCELAR SEM DESTRUIR OS DOIS TOQUES (TODO do fundador)
+
+   Parcelar na Prosperidade já existia; aqui não. O risco de trazer a opção
+   para cá é conhecido: este diálogo existe por UM motivo — registrar o almoço
+   em dois toques — e todo campo cobrado de todo mundo come essa razão.
+
+   Por isso a opção nasce escondida e só aparece quando o PRÓPRIO VALOR
+   digitado sugere que faz sentido (>= R$ 200, `shouldOfferInstallments`). O
+   gatilho é o valor e não a categoria: parcela-se um pneu, não um mercado de
+   R$ 80. Abaixo do limiar este diálogo é byte a byte o de antes — zero toques
+   a mais, zero pixels a mais. É esse acordo que preserva a razão de ele
+   existir, e é ele que a linha do limiar protege.
+
+   Acima do limiar aparece UMA linha discreta ("À vista · Parcelar"), sempre
+   com "À vista" marcado, abaixo da categoria — não empurra o botão salvar e
+   não rouba o foco. Tocar em Parcelar revela os atalhos NA MESMA TELA: sem
+   segundo passo, sem novo diálogo, sem campo de data (a 1ª parcela é hoje,
+   igual à Prosperidade).
+
+   O VALOR DIGITADO É A PARCELA, IGUAL À PROSPERIDADE. As duas telas fazem a
+   mesma coisa e precisam ler o mesmo número do mesmo jeito — o QA pegou esta
+   tela lendo o valor como TOTAL enquanto a Prosperidade lê como parcela, e
+   duas leituras contrárias para a mesma ação é o app falando duas línguas.
+
+   Prevalece a parcela por três razões, nenhuma delas preferência:
+   • é o que a nota do cartão grita ("10x de R$ 43,90") — o argumento original
+     do desenho, e o que a pessoa tem na mão na hora de registrar;
+   • é o que a microcópia especificada já dizia: em "12x de R$ 250", os R$ 250
+     digitados SÃO a parcela;
+   • é a leitura em que o limiar de R$ 200 faz sentido. R$ 200 de TOTAL em 12x
+     são parcelas de R$ 16,67 — exatamente o caso que o limiar existe para não
+     incomodar.
+   Para quem só tem o total na mão existe o mesmo link discreto de inversão que
+   a Prosperidade tem — mas o padrão é parcela nas duas. ── */
 const QUICK_EXPENSE_CATEGORIES = CATEGORIES.filter((c) => c !== "Salário" && c !== "Extra");
+
+/** As duas metades de "À vista · Parcelar". Alvo de 44px de altura mesmo sendo
+ *  texto discreto: o toque tem que ser fácil, a linha é que tem que ser leve. */
+const opcaoPagamento = (ativa: boolean) => cn(
+  "min-h-11 px-3 rounded-lg transition-colors",
+  ativa ? "font-medium text-foreground underline underline-offset-4"
+        : "text-muted-foreground hover:text-foreground",
+);
 
 function QuickExpense({ disabled }: { disabled?: boolean }) {
   const { user } = useAuth();
+  const { profile } = useProfile();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<string>("Mercado");
+  const [parcelar, setParcelar] = useState(false);
+  const [parcelas, setParcelas] = useState("");
+  // Qual dos dois números a pessoa digitou. Padrão "parcela", igual à
+  // Prosperidade — o outro o app calcula e devolve na linha de resumo.
+  const [valorMode, setValorMode] = useState<"parcela" | "total">("parcela");
   const [saving, setSaving] = useState(false);
+  // O rótulo "última em out/2027" é o mês do CICLO da pessoa, não do mês civil.
+  const cycleDay = profile?.financial_cycle_day ?? 1;
+
+  const value = Number(String(amount).replace(",", "."));
+  const offerInstallments = shouldOfferInstallments(value);
+
+  // Caiu abaixo do limiar (a pessoa corrigiu o valor): a linha some e o estado
+  // some junto. Sem isto, subir o valor de novo reencontraria um parcelamento
+  // meio preenchido que ninguém pediu — e o padrão é sempre "À vista".
+  useEffect(() => {
+    if (!offerInstallments && parcelar) { setParcelar(false); setParcelas(""); setValorMode("parcela"); }
+  }, [offerInstallments, parcelar]);
+
+  const plan = useMemo(() => {
+    if (!parcelar || !offerInstallments) return null;
+    return buildInstallmentPlan({
+      amount: value, count: Number(parcelas), mode: valorMode,
+      description: category, purchaseDate: todayISO(),
+    });
+  }, [parcelar, offerInstallments, value, parcelas, valorMode, category]);
+
+  const desligarParcelamento = () => { setParcelar(false); setParcelas(""); setValorMode("parcela"); };
+  const reset = () => { setAmount(""); desligarParcelamento(); };
 
   const save = async () => {
-    const value = Number(String(amount).replace(",", "."));
     if (!user || !value || value <= 0) { toast.error("Informe um valor válido em reais, como 30."); return; }
+
+    // Parcelada: N linhas de uma vez, ligadas por um group_id — a mesma forma
+    // que a Prosperidade grava. Cada parcela com a data real dela, para cair
+    // no ciclo certo e sumir do seguinte sozinha.
+    if (parcelar) {
+      if (!plan) { toast.error("Escolha em quantas parcelas — de 2 a 24."); return; }
+      setSaving(true);
+      const groupId = newInstallmentGroupId();
+      const { error } = await supabase.from("transactions").insert(
+        plan.rows.map((r) => ({
+          user_id: user.id, kind: "expense" as const, amount: r.amount, category,
+          description: r.description, occurred_at: r.occurred_at,
+          source: "manual" as const, group_id: groupId,
+        })),
+      );
+      setSaving(false);
+      if (error) { toast.error("Não consegui registrar as parcelas. Tente de novo."); return; }
+      toast.success(`Compra em ${plan.count}x · ${category} registrada. +2 XP${xpToastSuffix()}`);
+      reset(); setOpen(false);
+      invalidateKeys(qc, FINANCE_KEYS);
+      return;
+    }
+
     setSaving(true);
     const { error } = await supabase.from("transactions").insert({
       user_id: user.id, kind: "expense", amount: value,
@@ -66,7 +164,7 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
     setSaving(false);
     if (error) { toast.error("Não consegui registrar o gasto. Tente de novo."); return; }
     toast.success(`Gasto de R$ ${value.toFixed(2).replace(".", ",")} · ${category} registrado. +2 XP${xpToastSuffix()}`);
-    setAmount(""); setOpen(false);
+    reset(); setOpen(false);
     invalidateKeys(qc, FINANCE_KEYS);
   };
 
@@ -79,8 +177,33 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
       >
         <span className="text-[13px] font-semibold" style={{ color: "hsl(var(--prosperidade))" }} aria-hidden>R$</span> Gasto
       </button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-sm">
+      <Dialog open={open} onOpenChange={(o) => {
+        setOpen(o);
+        // Fechar sem salvar devolve o padrão: "À vista". O parcelamento é a
+        // exceção e nunca deve estar ligado na próxima vez que o diálogo abre.
+        if (!o) desligarParcelamento();
+      }}>
+        {/* O DIÁLOGO CRESCE PARA CIMA, NÃO PARA BAIXO.
+
+            Centrado (`top-50% translate-y--50%`), cada linha revelada era
+            repartida: metade subia o topo, metade empurrava o botão salvar.
+            Ao cruzar os R$ 200 o alvo descia 28px — debaixo do polegar de
+            quem já estava mirando em salvar, no instante do terceiro dígito
+            (achado 4 do QA).
+
+            Reservar o espaço em branco resolveria e custaria os 56px que o
+            caminho do almoço não pode pagar. Então em vez de reservar, o
+            diálogo ganha o FUNDO FIXO: ancorado onde o fundo do diálogo curto
+            já ficava (141px = metade da altura dele), tudo que aparece empurra
+            o topo para cima e o botão não anda um pixel.
+
+            Medido em 390px de largura, botão "Registrar gasto": deslocamento
+            0px a 844, 800 e 700px de altura — contra 28px ao cruzar o limiar
+            e 93px com os chips abertos. O diálogo do almoço continua com 279px
+            e no mesmo lugar (283 → 285). O `max-h`/`overflow` é a rede: numa
+            janela baixa (celular deitado) o diálogo encolhe e rola por dentro
+            em vez de escapar pelo topo. */}
+        <DialogContent className="max-w-sm top-auto translate-y-0 bottom-[max(1rem,calc(50%_-_141px))] max-h-[calc(100%_-_max(1rem,calc(50%_-_141px))_-_1rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Registrar gasto</DialogTitle>
             <DialogDescription>Valor e categoria — dois toques e pronto.</DialogDescription>
@@ -89,7 +212,9 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
             <Input
               inputMode="decimal"
               autoFocus
-              placeholder="Valor (R$)"
+              placeholder={parcelar
+                ? (valorMode === "total" ? "Valor total (R$)" : "Valor da parcela (R$)")
+                : "Valor (R$)"}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") save(); }}
@@ -100,8 +225,106 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
                 {QUICK_EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
+
+            {/* A linha do limiar. Abaixo de R$ 200 ela não existe — e é por
+                isso que o caminho do almoço continua idêntico ao de antes. */}
+            {offerInstallments && (
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-center gap-1 text-xs" role="group"
+                  aria-label="Como você pagou">
+                  <button type="button" aria-pressed={!parcelar} className={opcaoPagamento(!parcelar)}
+                    onClick={desligarParcelamento}>
+                    À vista
+                  </button>
+                  <span className="text-muted-foreground" aria-hidden>·</span>
+                  <button type="button" aria-pressed={parcelar} className={opcaoPagamento(parcelar)}
+                    onClick={() => setParcelar(true)}>
+                    Parcelar
+                  </button>
+                </div>
+
+                {parcelar && (
+                  <div className="space-y-2">
+                    {/* Enrola em vez de espremer: num aparelho de 320px os
+                        cinco atalhos mais o campo livre não cabem numa linha
+                        sem cada um virar um alvo de 37px. `basis-11` fixa o
+                        piso de 44px e a segunda linha aparece só onde precisa
+                        — medido de 320 a 430px. */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {QUICK_INSTALLMENT_CHIPS.map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          aria-pressed={Number(parcelas) === n}
+                          aria-label={`${n} parcelas`}
+                          onClick={() => setParcelas(String(n))}
+                          className={cn(
+                            "flex-1 basis-11 min-w-11 min-h-11 rounded-full border text-xs font-medium transition-colors",
+                            // O selecionado INVERTE. O `bg-muted` de antes
+                            // mudava 8/255 por canal e a seleção ficava por
+                            // conta só do brilho do texto (achado 5 do QA).
+                            // Medi as alternativas: a cor do pilar dá 11,2:1 de
+                            // borda no escuro mas só 1,87:1 no claro (ouro
+                            // sobre branco), abaixo dos 3:1 exigidos de um
+                            // indicador não textual. A inversão é a única que
+                            // passa folgado nos dois temas.
+                            Number(parcelas) === n
+                              ? "bg-foreground text-background border-foreground"
+                              : "bg-card text-muted-foreground border-border hover:bg-muted/60",
+                          )}
+                        >
+                          {n}x
+                        </button>
+                      ))}
+                      {/* O campo livre cobre o que os atalhos não cobrem (4x,
+                          18x) sem virar um segundo passo para quem usa 12x. */}
+                      <Input
+                        className="w-14 min-h-11 text-center px-1"
+                        inputMode="numeric"
+                        placeholder="outro"
+                        aria-label="Outro número de parcelas"
+                        value={(QUICK_INSTALLMENT_CHIPS as readonly number[]).includes(Number(parcelas)) ? "" : parcelas}
+                        onChange={(e) => setParcelas(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                      />
+                    </div>
+                    {/* Uma linha: a parcela e, principalmente, QUANDO acaba —
+                        o compromisso real que a pessoa está assumindo. */}
+                    {plan && (
+                      <p aria-live="polite" className="text-[11px] text-muted-foreground text-center">
+                        {quickInstallmentSummary(plan, brl, cycleDay, valorMode)}
+                      </p>
+                    )}
+                    {/* Inverte a conta para quem só tem o total na mão. Mesma
+                        frase e mesmo lugar da Prosperidade, de propósito. */}
+                    <button
+                      type="button"
+                      // O botão é um INTERRUPTOR de dois estados (parcela/total),
+                      // não uma ação solta: sem `aria-pressed` o leitor de tela
+                      // anuncia só o rótulo e a pessoa cega não sabe em qual dos
+                      // dois modos o campo está — justo quem menos pode conferir
+                      // o placeholder de relance. O par "À vista · Parcelar" e os
+                      // chips `Nx` logo acima já expõem estado; esta linha era a
+                      // única que não expunha.
+                      aria-pressed={valorMode === "total"}
+                      onClick={() => setValorMode(valorMode === "total" ? "parcela" : "total")}
+                      className="w-full min-h-11 text-[11px] text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
+                    >
+                      {valorMode === "total" ? "digitei o valor da parcela" : "digitei o valor total"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* O botão nunca promete o que não vai fazer: com Parcelar
+                ligado ele deixa de dizer "Registrar gasto", mesmo antes de a
+                pessoa escolher o número — aí quem explica a falta é o aviso
+                ao tocar, que também diz a faixa aceita. */}
             <Button className="w-full" onClick={save} disabled={saving}>
-              {saving ? "Registrando…" : "Registrar gasto"}
+              {saving ? "Registrando…"
+                : plan ? `Registrar ${plan.count} parcelas`
+                : parcelar ? "Registrar parcelas"
+                : "Registrar gasto"}
             </Button>
             <p className="text-[11px] text-muted-foreground text-center">
               Descrição, data e entradas ficam no{" "}
