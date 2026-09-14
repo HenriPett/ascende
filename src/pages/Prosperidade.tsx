@@ -1373,7 +1373,14 @@ export default function Prosperidade() {
           {monthTxs.map((t) => (
             <div key={t.id} className="flex items-center gap-3 py-2.5">
               <div className="flex-1 min-w-0">
-                <p className="text-sm truncate">
+                {/* Título 500 / secundária 400 é a MESMA gramática do grupo
+                    "Previsto" logo abaixo. Sem isto os dois grupos marcavam a
+                    hierarquia por dispositivos diferentes — o real pela cor, o
+                    previsto pelo peso — e a projeção acabava tipografada com
+                    mais ênfase que o lançamento que já aconteceu. O que separa
+                    os grupos passa a ser só o que deve separá-los: a tinta
+                    mutada e a barra tracejada do que ainda não caiu. */}
+                <p className="text-sm font-medium truncate">
                   {t.description || t.category}
                   {SOURCE_BADGE[t.source] && (
                     <Badge variant="secondary" className="text-[10px] ml-1.5 align-middle">{SOURCE_BADGE[t.source]}</Badge>
