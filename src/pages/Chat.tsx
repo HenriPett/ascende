@@ -20,6 +20,7 @@ import LearnedInsights from "@/components/core/LearnedInsights";
 import type { LearnedMemory } from "@/lib/memories";
 import FirstTimeTip from "@/components/core/FirstTimeTip";
 import { useGuides } from "@/hooks/useGuides";
+import { chatInReadingOrder, CHAT_WINDOW } from "@/lib/chatWindow";
 import { xpForKind } from "@/lib/xp";
 import { sleepWindowHours, timeForInput } from "@/lib/sleep";
 import { useDictation } from "@/hooks/useDictation";
@@ -40,7 +41,7 @@ interface ProfileSuggestion {
   labels: string[];
 }
 
-interface Msg { id?: string; role: "user" | "assistant"; content: string; pending?: boolean }
+interface Msg { id?: string; role: "user" | "assistant"; content: string; created_at?: string; pending?: boolean }
 
 /** Compromisso diário proposto pelo Conselheiro — a pessoa escolhe quais
  *  criar; nada é criado automaticamente (hábito imposto é régua genérica). */
@@ -91,6 +92,15 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [local, setLocal] = useState<Msg[]>([]);
+  // A janela olha para o FIM da conversa e CRESCE para trás quando a pessoa
+  // pede. Sem isso, corrigir o bug teria um preço escondido: a tela passaria
+  // a mostrar as 200 ÚLTIMAS em vez das 200 primeiras, e quem tem conversa
+  // longa perderia de vista o começo dela — trocar um sumiço por outro.
+  const [windowSize, setWindowSize] = useState(CHAT_WINDOW);
+  // Crescer a janela adiciona mensagens ACIMA. O scroll automático para o fim
+  // existe para mensagem nova; aqui ele jogaria a pessoa de volta lá embaixo,
+  // longe do que ela acabou de pedir para ler.
+  const keepScroll = useRef(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [captured, setCaptured] = useState<ProposedEvent[] | null>(null);
   const [learned, setLearned] = useState<LearnedMemory[] | null>(null);
@@ -131,14 +141,20 @@ export default function Chat() {
   const { markSeen } = useGuides();
 
   const { data: history, isLoading, isError: historyError, refetch: refetchHistory, isFetching: historyFetching } = useQuery({
-    queryKey: ["chat", user?.id],
+    queryKey: ["chat", user?.id, windowSize],
     enabled: !!user,
     queryFn: async () => {
+      // AS ÚLTIMAS, NÃO AS PRIMEIRAS. Com `ascending: true` o `limit` corta
+      // pelo começo: a janela ficava presa nas 200 mensagens mais ANTIGAS e
+      // quem passava disso nunca mais via uma resposta aparecer. Ver a nota
+      // inteira em `src/lib/chatWindow.ts` — inclusive por que o empate de
+      // `created_at` (a pergunta e a resposta nascem no mesmo insert) precisa
+      // ser desempatado aqui em vez de confiado ao banco.
       const { data, error } = await supabase.from("chat_messages")
-        .select("id,role,content").eq("user_id", user!.id)
-        .order("created_at", { ascending: true }).limit(200);
+        .select("id,role,content,created_at").eq("user_id", user!.id)
+        .order("created_at", { ascending: false }).limit(windowSize);
       if (error) throw error;
-      return (data ?? []) as Msg[];
+      return chatInReadingOrder((data ?? []) as Msg[]);
     },
   });
 
@@ -147,6 +163,7 @@ export default function Chat() {
   const messages = [...(history ?? []), ...local].filter((m) => m.content && m.content.trim().length > 0);
 
   useEffect(() => {
+    if (keepScroll.current) { keepScroll.current = false; return; }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, sending, captured, proposedPlan, learned, stItems]);
 
@@ -453,6 +470,25 @@ export default function Chat() {
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-3 pb-3 pr-1">
         <FirstTimeTip id="conselheiro" />
         {isLoading && <Skeleton className="h-16 w-3/4" />}
+
+        {/* A janela encheu: existe conversa mais antiga do que o que está na
+            tela. O botão não aparece para quem cabe inteiro na janela — a
+            esmagadora maioria — e some sozinho quando o começo é alcançado. */}
+        {!isLoading && (history?.length ?? 0) >= windowSize && (
+          <div className="flex justify-center pt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground min-h-11"
+              disabled={historyFetching}
+              onClick={() => { keepScroll.current = true; setWindowSize((w) => w + CHAT_WINDOW); }}
+            >
+              {historyFetching
+                ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Carregando…</>
+                : "Ver mensagens anteriores"}
+            </Button>
+          </div>
+        )}
 
         {/* Histórico que não carregou não é conversa nova: sem isto, a tela
             de boas-vindas aparecia por cima de meses de conversa. */}
