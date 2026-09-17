@@ -21,6 +21,7 @@ import {
   cycleKey, MIN_INSTALLMENTS, MAX_INSTALLMENTS,
   shouldOfferInstallments, quickInstallmentSummary,
   QUICK_INSTALLMENT_CHIPS,
+  cycleLengthDays, daysSinceCycleStart,
 } from "@/lib/prosperidade";
 
 /** Formatador determinístico: o teste não pode depender do ICU da máquina. */
@@ -418,5 +419,37 @@ describe("a linha que confirma o compromisso no gasto rápido", () => {
   it("a descrição das linhas sai com a mesma grafia da fatura importada", () => {
     expect(rapido({ count: 3 }).rows.map((r) => r.description))
       .toEqual(["Transporte · 1/3", "Transporte · 2/3", "Transporte · 3/3"]);
+  });
+});
+
+describe("quantos dias TEM o ciclo — a base da projeção do orçamento", () => {
+  it("não é 30: fevereiro é curto e março é longo", () => {
+    // Projetar o fechamento do mês com um número redondo erra até 10% num
+    // ciclo curto — e erra no mês em que a pessoa mais sente, o apertado.
+    expect(cycleLengthDays(new Date(2027, 1, 10), 5)).toBe(28);   // 5/fev → 5/mar
+    expect(cycleLengthDays(new Date(2027, 2, 10), 5)).toBe(31);   // 5/mar → 5/abr
+    expect(cycleLengthDays(new Date(2028, 1, 10), 5)).toBe(29);   // bissexto
+  });
+
+  it("com ciclo no dia 1, é o tamanho do mês civil", () => {
+    expect(cycleLengthDays(new Date(2026, 0, 15), 1)).toBe(31);
+    expect(cycleLengthDays(new Date(2026, 3, 15), 1)).toBe(30);
+  });
+
+  it("antes do dia da virada, o ciclo corrente é o que começou no mês passado", () => {
+    // Dia 3 de março com virada no dia 5: a pessoa ainda está no ciclo que
+    // começou em 5 de fevereiro, que tem 28 dias — não no de março.
+    expect(cycleLengthDays(new Date(2027, 2, 3), 5)).toBe(28);
+  });
+
+  it("dias corridos e duração nunca se contradizem", () => {
+    // O corrido jamais pode passar da duração: seria projetar o mês com mais
+    // dias do que ele tem, e a projeção sairia menor que o gasto real.
+    for (const dia of [1, 5, 15, 28]) {
+      for (let d = 0; d < 400; d++) {
+        const hoje = new Date(2026, 0, 1 + d);
+        expect(daysSinceCycleStart(hoje, dia)).toBeLessThanOrEqual(cycleLengthDays(hoje, dia));
+      }
+    }
   });
 });

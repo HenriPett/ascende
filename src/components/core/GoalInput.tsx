@@ -30,16 +30,20 @@ export default function GoalInput({
 
   return (
     <div className="flex gap-2 items-center">
+      {/* `min-h-11` no lugar de `h-9` (36px): este é o controle com que a
+          pessoa DEFINE as metas do app — teto do dia, orçamento do mês,
+          calorias, proteína. Alvo abaixo de 44px num controle de digitação
+          é onde o dedo erra e o número sai trocado. */}
       <Input
         inputMode={inputMode}
-        className="h-9 text-sm min-w-0 flex-1"
+        className="min-h-11 text-sm min-w-0 flex-1"
         placeholder={currentLabel || placeholder}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
         aria-label={placeholder}
       />
-      <Button size="sm" variant="outline" className="h-9 shrink-0" onClick={submit}>
+      <Button size="sm" variant="outline" className="min-h-11 shrink-0" onClick={submit}>
         <Target className="w-3.5 h-3.5 mr-1.5" /> Definir meta
       </Button>
     </div>

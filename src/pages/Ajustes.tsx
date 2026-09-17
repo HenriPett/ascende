@@ -369,8 +369,19 @@ export default function Ajustes() {
             <Input id="income" type="number" min="0" value={income} onChange={(e) => setIncome(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="budget">Teto de gastos (R$)</Label>
+            {/* Era "Teto de gastos (R$)", e o campo grava `monthly_budget` —
+                o que a Prosperidade mostra como "Orçamento do mês". Só que a
+                MESMA tela da Prosperidade tem um "Teto de gasto do dia", que
+                é outro campo (`daily_spend_limit`). Eram três nomes para dois
+                conceitos: quem vinha procurar "orçamento" aqui encontrava
+                "teto", concluía que era o teto diário que já tinha, e ia
+                embora achando que o orçamento não dava para mudar. */}
+            <Label htmlFor="budget">Orçamento do mês (R$)</Label>
             <Input id="budget" type="number" min="0" value={budget} onChange={(e) => setBudget(e.target.value)} />
+            <p className="text-[11px] text-muted-foreground">
+              Quanto você quer gastar por mês. Aparece na Prosperidade — e dá para
+              mudar por lá também. Diferente do teto do DIA, que fica na tela Hoje.
+            </p>
           </div>
         </div>
         <div className="space-y-1.5">

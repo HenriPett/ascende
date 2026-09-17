@@ -461,8 +461,19 @@ function DayProgress() {
         supabase.from("life_events").select("id")
           .eq("user_id", user!.id).eq("kind", "workout")
           .gte("occurred_at", weekStart.toISOString()).limit(50),
+        /* HOJE É UM DIA, NÃO "DE HOJE EM DIANTE".
+           `gte(hoje)` sem teto somava todo gasto com data futura junto com o
+           do dia — e o app CRIA gastos futuros de propósito: uma compra em
+           10x grava dez linhas, uma por ciclo, até um ano à frente. Quem
+           registrasse R$ 2.000 em 10x via "Gasto de hoje: R$ 2.000" no lugar
+           dos R$ 200 da primeira parcela, e a barra do teto do dia estourava
+           por um dinheiro que ainda não saiu do bolso. O mesmo valia para os
+           fixos materializados à frente e para as parcelas importadas.
+
+           `occurred_at` é `date` (setup.sql:188), então a igualdade é exata:
+           o dia inteiro e só ele. */
         supabase.from("transactions").select("kind,amount")
-          .eq("user_id", user!.id).gte("occurred_at", todayISO()).limit(200),
+          .eq("user_id", user!.id).eq("occurred_at", todayISO()).limit(200),
       ]);
       return {
         events: (events ?? []) as { kind: string; payload: Record<string, unknown> }[],

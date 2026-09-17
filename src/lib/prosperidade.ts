@@ -332,6 +332,20 @@ export function daysSinceCycleStart(today: Date, cycleDay?: number | null): numb
   if (start.getTime() > today.getTime()) start = new Date(today.getFullYear(), today.getMonth() - 1, day);
   return Math.floor((today.getTime() - start.getTime()) / 86_400_000) + 1;
 }
+
+/**
+ * Quantos dias TEM o ciclo corrente. Não é 30: o ciclo que começa no dia 5 de
+ * fevereiro tem 28 dias, o que começa em 5 de março tem 31. Projetar o
+ * fechamento do mês com um número redondo erra em até 10% num ciclo curto —
+ * e erra justamente no mês em que a pessoa mais sente, que é o apertado.
+ */
+export function cycleLengthDays(today: Date, cycleDay?: number | null): number {
+  const day = clampCycleDay(cycleDay);
+  let start = new Date(today.getFullYear(), today.getMonth(), day);
+  if (start.getTime() > today.getTime()) start = new Date(today.getFullYear(), today.getMonth() - 1, day);
+  const next = new Date(start.getFullYear(), start.getMonth() + 1, day);
+  return Math.round((next.getTime() - start.getTime()) / 86_400_000);
+}
 /* ─────────────────────────────────────────────────────────────────
    COMPRA PARCELADA REGISTRADA À MÃO
 

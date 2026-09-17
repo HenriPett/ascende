@@ -48,6 +48,7 @@ import {
   countPastInstallments, groupDeletionLabel, MIN_INSTALLMENTS, MAX_INSTALLMENTS,
   newInstallmentGroupId, projectCycle, cycleTotals, cycleDistance,
   MAX_PROJECTION_CYCLES, type ProjectedTx,
+  cycleLengthDays,
 } from "@/lib/prosperidade";
 import {
   ResponsiveContainer, ComposedChart, Area, BarChart, Bar, LineChart, Line,
@@ -412,6 +413,21 @@ export default function Prosperidade() {
   const curExpense = curMonthTxs.filter((t) => t.kind === "expense").reduce((s, t) => s + Number(t.amount), 0);
   const budget = Number(profile?.monthly_budget ?? 0);
   const budgetPct = budget > 0 ? Math.min((curExpense / budget) * 100, 100) : null;
+  /* A PROJEÇÃO PELO RITMO — é ela que faz o número deixar de ser "jogado".
+     Gasto real ÷ dias já corridos do ciclo × dias do ciclo. Usa o ciclo da
+     pessoa (`daysSinceCycleStart`), não o mês civil: quem recebe no dia 5
+     está no meio do ciclo no dia 20, não no fim do mês.
+
+     Nos primeiros dias a conta é instável por construção (dividir por 1 ou 2
+     dias multiplica qualquer compra grande), então ela só aparece a partir do
+     terceiro dia — projeção que grita no dia 1 não informa, assusta. */
+  const budgetProjection = useMemo(() => {
+    if (!budget || curExpense <= 0) return null;
+    const hoje = new Date();
+    const corridos = daysSinceCycleStart(hoje, cycleDay);
+    if (corridos < 3) return null;
+    return Math.round((curExpense / corridos) * cycleLengthDays(hoje, cycleDay));
+  }, [budget, curExpense, cycleDay]);
 
   // Navegação: limites e rótulo do mês em foco
   const shiftMonthKey = (key: string, delta: number) => {
@@ -619,6 +635,27 @@ export default function Prosperidade() {
     const { error } = await supabase.from("profiles").update({ daily_spend_limit: v }).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar. Tente de novo."); return; }
     toast.success("Teto de gasto diário salvo. Acompanhe na tela Hoje.");
+    refreshProfile();
+  };
+
+  /* O ORÇAMENTO PASSA A SER EDITÁVEL ONDE ELE É MOSTRADO.
+     A queixa do dono foi "não consigo nem mudar o valor", e ele tinha razão
+     na prática mesmo com o campo existindo em Ajustes: lá ele se chamava
+     "Teto de gastos" e aqui "Orçamento do mês", com um "Teto de gasto do dia"
+     logo acima — três nomes para dois conceitos. Quem procurava "orçamento"
+     achava "teto", concluía que era o teto diário que já tinha, e desistia.
+
+     Sem caminho de edição, um número declarado uma vez, meses atrás, vira
+     régua: a pessoa não lembra de ter dado aquele valor e não pode corrigi-lo
+     de onde o vê. É a diferença entre espelho e cobrança, e ela não está no
+     dado — está na ausência do controle ao lado dele. */
+  const saveBudgetRaw = async (raw: string) => {
+    if (!user) return;
+    const v = Number(raw.replace(",", "."));
+    if (!v || v <= 0) { toast.error("Informe um valor válido em reais, como 2500."); return; }
+    const { error } = await supabase.from("profiles").update({ monthly_budget: v }).eq("user_id", user.id);
+    if (error) { toast.error("Não consegui salvar. Tente de novo."); return; }
+    toast.success("Orçamento do mês salvo.");
     refreshProfile();
   };
 
@@ -1019,18 +1056,40 @@ export default function Prosperidade() {
         </Link>
       </p>
 
+      {/* O ORÇAMENTO DO MÊS. Três defeitos foram corrigidos aqui de uma vez,
+          e os três vinham da mesma queixa ("não faz sentido do jeito que
+          está, nem consigo mudar o valor, e é um número meio jogado"):
+
+          1. NÃO DAVA PARA MUDAR de onde se vê — agora dá, no mesmo padrão do
+             teto diário logo acima.
+          2. O NÚMERO NÃO DIZIA NADA. "R$ 1.200 de R$ 2.800" no dia 8 não
+             responde a pergunta que a pessoa tem, que é "o mês fecha?". A
+             projeção pelo ritmo responde, e usa o gasto real dividido pelos
+             dias corridos do ciclo — a mesma aritmética de ciclo do resto da
+             tela, não o mês civil.
+          3. O TEXTO COBRAVA. "o limite que você definiu" atribui uma intenção
+             PRESENTE a uma frase dita meses atrás, sobre um número que a
+             pessoa nem lembra de ter dado. Mudar o número é uma resposta tão
+             legítima quanto gastar menos, e o texto passa a dizer isso. */}
       {budgetPct !== null && (
-        <Card className="p-4">
-          <div className="flex justify-between text-xs mb-1.5">
+        <Card className="p-4 space-y-2">
+          <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Orçamento do mês</span>
             <span>{brl(curExpense)} de {brl(budget)}</span>
           </div>
           <Progress value={budgetPct} />
-          {budgetPct >= 90 && (
-            <p className="text-xs text-warning mt-1.5">
-              Você está perto do limite que definiu. Sem pânico: veja com o Conselheiro onde dá para ajustar.
+          {budgetProjection !== null && (
+            <p className="text-xs text-muted-foreground">
+              {budgetProjection <= budget
+                ? <>No ritmo de agora, o mês fecha em <strong className="text-foreground">{brl(budgetProjection)}</strong> — dentro do que você declarou.</>
+                : <>No ritmo de agora, o mês fecha em <strong className="text-foreground">{brl(budgetProjection)}</strong>, {brl(budgetProjection - budget)} acima do que você declarou. Mudar o número também é uma resposta.</>}
             </p>
           )}
+          <GoalInput
+            placeholder="Mudar orçamento do mês (R$)"
+            currentLabel={`Declarado: ${brl(budget)}/mês`}
+            onSubmit={(raw) => saveBudgetRaw(raw)}
+          />
         </Card>
       )}
 
