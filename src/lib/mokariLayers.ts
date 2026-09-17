@@ -77,31 +77,167 @@ export const STAGE_ANCHORS: Record<MokariStage, StageAnchors> = {
   },
 };
 
-/** Quantas marcas cada nível de pilar PEDE. Nível 0 não desenha nada. */
-const LEAVES_BY_LEVEL: Record<PillarAffinity, number> = { 0: 0, 1: 2, 2: 5, 3: 9 };
-const FRUITS_BY_LEVEL: Record<PillarAffinity, number> = { 0: 0, 1: 1, 2: 3, 3: 6 };
-const FLOWERS_BY_LEVEL: Record<PillarAffinity, number> = { 0: 0, 1: 2, 2: 5, 3: 5 };
+/* ═══ OS SLOTS DEIXARAM DE SER UMA LISTA FINITA ══════════════════════════
+   Antes havia uma REGRA DE CAPACIDADE: o nível pedia N marcas e o estágio
+   limitava pelo tamanho do array de âncoras. A intenção era boa ("o corpo
+   carrega o que cabe nele"), mas medida ela apagava o outro eixo inteiro: no
+   Broto, que tem 3 âncoras de folha, 1 de fruto e 1 de flor, ir do PRIMEIRO
+   ao QUADRAGÉSIMO registro de um pilar mudava UMA folha — e nada nos frutos e
+   nas flores. Quem usa pouco fica semanas no estágio 1; era exatamente quem
+   mais precisava ver que estava avançando, e era quem não via nada.
 
-/**
- * REGRA DE CAPACIDADE: o nível pede N, o estágio limita.
- * Alimentação nível 3 num Broto mostra 3 folhas, não 9 — o corpo carrega o que
- * cabe nele, e cresce junto. É honesto, e é o que impede o desenho de virar
- * colagem de medalhas em cima de um caule de 30px.
- */
-export function capacity(asked: number, slots: readonly Point[]): number {
-  return Math.max(0, Math.min(asked, slots.length));
+   Agora a densidade é contínua e sem teto (mokariDensity.ts), então a lista
+   de âncoras não pode mais ser o limite. A composição desenhada à mão CONTINUA
+   VALENDO — ela é sempre usada primeiro, então o desenho de quem está no
+   começo é exatamente o de antes. O que passa dela é gerado em anéis ao redor
+   da copa, e é essa geração que faz o crescimento não ter fim.
+
+   O anel expande devagar (12% de raio por volta) e gira meio passo a cada
+   volta, para as marcas novas caírem entre as antigas em vez de em cima. */
+
+/** Distribui `n` pontos em anéis ao redor de um centro, sem limite superior. */
+export function ringSlots(center: Point, radius: number, n: number, fromDeg = 200): Point[] {
+  const out: Point[] = [];
+  let ring = 0;
+  while (out.length < n) {
+    const cap = 6 + ring * 2;              // o anel de fora cabe mais
+    const r = radius * (1 + ring * 0.12);
+    const giro = fromDeg + ring * (180 / cap);  // meio passo: não empilha
+    for (const pt of onEllipse(center.x, center.y, r, r * 0.66, cap, giro)) {
+      if (out.length >= n) break;
+      out.push(pt);
+    }
+    ring++;
+    if (ring > 60) break;                  // cinta de segurança, nunca atingida
+  }
+  return out;
 }
 
-export const leafSlotsFor = (stage: MokariStage, level: PillarAffinity): Point[] =>
-  STAGE_ANCHORS[stage].leafSlots.slice(0, capacity(LEAVES_BY_LEVEL[level], STAGE_ANCHORS[stage].leafSlots));
+/**
+ * Marca distante do centro desenha MENOR.
+ *
+ * Crescimento sem teto tem um preço óbvio: com anos de uso um pilar chega a
+ * dezenas de marcas, e dezenas de marcas do mesmo tamanho viram mancha. O
+ * encolhimento é o que deixa a copa continuar lendo como copa — a silhueta
+ * ganha densidade em vez de virar borrão, e a marca antiga continua sendo a
+ * maior, que é a leitura certa: o que veio primeiro sustenta o resto.
+ *
+ * Piso de 0,62: abaixo disso a marca deixa de ser reconhecível, e uma marca
+ * que não se vê é o mesmo que não tê-la desenhado.
+ */
+export const markScale = (index: number, base: number): number =>
+  index < base ? 1 : Math.max(0.62, 1 - (index - base) * 0.018);
 
-export const fruitSlotsFor = (stage: MokariStage, level: PillarAffinity): Point[] =>
-  STAGE_ANCHORS[stage].fruitSlots.slice(0, capacity(FRUITS_BY_LEVEL[level], STAGE_ANCHORS[stage].fruitSlots));
+/** Distância mínima entre duas marcas para elas lerem como duas. */
+const APART = 3.2;
 
-/** Flores usam os slots de índice ÍMPAR para não empilhar sobre as folhas. */
-export function flowerSlotsFor(stage: MokariStage, level: PillarAffinity): Point[] {
-  const odd = STAGE_ANCHORS[stage].leafSlots.filter((_, i) => i % 2 === 1);
-  return odd.slice(0, capacity(FLOWERS_BY_LEVEL[level], odd));
+/**
+ * A composição à mão primeiro; o excedente, gerado.
+ *
+ * Gera com FOLGA e filtra depois. A primeira versão gerava exatamente `n`
+ * candidatos, filtrava as colisões e devolvia menos marcas do que o pilar
+ * havia conquistado — um crescimento que some ao ser desenhado é pior que
+ * crescimento nenhum, porque a pessoa vê o número subir e a árvore não.
+ *
+ * `avoid` é o que impede as flores de nascerem em cima das folhas depois que
+ * a composição à mão acaba: a regra de "índice ímpar" só existia enquanto os
+ * slots eram uma lista fixa.
+ */
+function slotsFor(
+  base: readonly Point[], center: Point, radius: number,
+  n: number, fromDeg: number, avoid: readonly Point[] = [],
+): Point[] {
+  if (n <= base.length) return base.slice(0, Math.max(0, n));
+  const out: Point[] = [...base];
+  const longe = (g: Point) =>
+    !out.some((b) => Math.hypot(b.x - g.x, b.y - g.y) < APART) &&
+    !avoid.some((b) => Math.hypot(b.x - g.x, b.y - g.y) < APART);
+  for (const cand of ringSlots(center, radius, n * 3 + 36, fromDeg)) {
+    if (out.length >= n) break;
+    if (longe(cand)) out.push(cand);
+  }
+  return out.slice(0, n);
+}
+
+export const leafSlotsFor = (stage: MokariStage, n: number): Point[] => {
+  const a = STAGE_ANCHORS[stage];
+  return slotsFor(a.leafSlots, a.auraCenter, a.auraRadius * 0.8, n, 200);
+};
+
+export const fruitSlotsFor = (stage: MokariStage, n: number): Point[] => {
+  const a = STAGE_ANCHORS[stage];
+  return slotsFor(a.fruitSlots, a.auraCenter, a.auraRadius * 0.62, n, 20);
+};
+
+/** Flores nascem nos slots ÍMPARES de folha para não empilhar sobre elas, e
+ *  depois em anel próprio, desviando das folhas que já estão lá. */
+export function flowerSlotsFor(stage: MokariStage, n: number): Point[] {
+  const a = STAGE_ANCHORS[stage];
+  const odd = a.leafSlots.filter((_, i) => i % 2 === 1);
+  return slotsFor(odd, a.auraCenter, a.auraRadius * 0.95, n, 110, leafSlotsFor(stage, n));
+}
+
+/* ═══ RAÍZES ═════════════════════════════════════════════════════════════
+   Eram sete traçados à mão; viraram geração, porque a Vitalidade também
+   deixou de ter teto. Chegaram aqui por duas correções do QA visual, e a
+   segunda é a que importa entender.
+
+   PRIMEIRA: o alcance somava 11 unidades por raiz, sem limite. Com 20.000
+   registros as raízes iam de x=−160 a x=+403 num quadro de 0 a 240 — metade
+   desenhada fora, virando dois riscos cortados na borda.
+
+   SEGUNDA, e é a armadilha: a correção óbvia (fazer o alcance CONVERGIR)
+   trocou um defeito pelo outro. Com o alcance saturando, a 19ª raiz e a 50ª
+   terminavam praticamente no mesmo lugar — 30 das 50 desenhadas por cima de
+   outra, e as imagens de 800 e de 20.000 registros ficavam idênticas. Ou
+   seja: a camada de Vitalidade voltava a "evoluo e ele continua igual", que é
+   exatamente a queixa que esta mudança inteira existe para resolver.
+
+   A SAÍDA É A MESMA DA COPA: não crescer para FORA, crescer em DENSIDADE. As
+   folhas ganham anéis novos e se espalham entre as antigas; as raízes agora
+   fazem o mesmo num leque. Cada raiz nova cai num ângulo e num comprimento
+   que SUBDIVIDEM o que já existe, em vez de irem mais longe — então o leque
+   fica visivelmente mais cheio para sempre, e nada nunca sai do quadro.
+
+   As duas sequências abaixo são de baixa discrepância (parte fracionária dos
+   múltiplos de dois irracionais). Elas são determinísticas — o mesmo Mokari
+   desenhado duas vezes é o mesmo desenho, que é a regra de pureza do módulo —
+   e têm a propriedade que um sorteio não teria: cada novo termo cai no maior
+   vão que ainda existe, nunca em cima de um anterior.
+
+   O ESPAÇO ABAIXO DO CHÃO É POUCO E ISSO MANDA NA FORMA. Entre a linha do
+   chão (y=120) e a borda (y=150) cabem 30 unidades, e o componente ainda gira
+   o conjunto pelo `lean` do estágio (−2° na Árvore em flor), que empurra a
+   ponta de um dos lados para baixo DEPOIS desta conta. Por isso o leque é
+   raso: os ângulos vão de 4° a 21°, não até a vertical. Raiz funda não cabe —
+   e raiz cortada na borda é pior que raiz curta. */
+
+/** Sequências de baixa discrepância: ângulo e comprimento, independentes. */
+const PHI = 0.6180339887;
+const PLASTIC = 0.7548776662;
+
+/** Limites do leque, escolhidos para caber COM a rotação do estágio por cima:
+ *  o ponto mais fundo dá y ≈ 144, e 2° de giro a ~68 de distância acrescentam
+ *  no máximo ~2,4 — sobra margem até os 150 da borda. */
+const ROOT_LEN_MIN = 24;
+const ROOT_LEN_MAX = 68;
+const ROOT_ANG_MIN = 4;
+const ROOT_ANG_MAX = 21;
+
+export function rootPathsFor(stage: MokariStage, n: number): string[] {
+  const o = STAGE_ANCHORS[stage].rootOrigin;
+  return Array.from({ length: Math.max(0, n) }, (_, i) => {
+    const lado = i % 2 === 0 ? -1 : 1;
+    const k = Math.floor(i / 2);                       // índice dentro do lado
+    const tAng = (k * PHI) % 1;
+    const tLen = (k * PLASTIC) % 1;
+    const ang = ((ROOT_ANG_MIN + (ROOT_ANG_MAX - ROOT_ANG_MIN) * tAng) * Math.PI) / 180;
+    const len = ROOT_LEN_MIN + (ROOT_LEN_MAX - ROOT_LEN_MIN) * tLen;
+    const fim = { x: o.x + lado * len * Math.cos(ang), y: o.y + len * Math.sin(ang) };
+    // Controle puxado para dentro: a raiz sai do tronco quase reta e abre.
+    const meio = { x: o.x + lado * len * 0.45, y: o.y + len * Math.sin(ang) * 0.35 };
+    return `M${o.x},${o.y} Q${meio.x.toFixed(1)},${meio.y.toFixed(1)} ${fim.x.toFixed(1)},${fim.y.toFixed(1)}`;
+  });
 }
 
 /* ═══ Estados ═════════════════════════════════════════════════════════════

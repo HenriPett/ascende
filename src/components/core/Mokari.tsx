@@ -10,10 +10,13 @@ import { cn } from "@/lib/utils";
 import { PILLARS, type PillarId } from "@/lib/pillars";
 import { useMokariPreference } from "@/hooks/useMokariPreference";
 import { useMokariData } from "@/hooks/useMokariData";
+import { useAuth } from "@/hooks/useAuth";
+import { snapshotOf, readSnapshot, writeSnapshot, changesSince } from "@/lib/mokariChange";
 import type { Mokari as MokariData, MokariStage, PillarAffinity } from "@/lib/mokari";
+import { leafCount, fruitCount, flowerCount, rootCount, marksToGo } from "@/lib/mokariDensity";
 import {
   VIEWBOX, STAGE_ANCHORS, STATE_STYLE, STAGE_LABEL, ENVIRONMENT_LABEL,
-  leafSlotsFor, fruitSlotsFor, flowerSlotsFor, leafAngle, budSlot,
+  leafSlotsFor, fruitSlotsFor, flowerSlotsFor, rootPathsFor, leafAngle, budSlot, markScale, GROUND_Y,
   shouldShowBuds, BUD_STROKE, LEAF_LENGTH,
   type Point, type StageAnchors, type StateStyle,
 } from "@/lib/mokariLayers";
@@ -113,26 +116,16 @@ function Environment({ step }: { step: 1 | 2 | 3 | 4 | 5 }) {
 /* ── 2. RAÍZES — Vitalidade. Sustentação, não músculo ────────────────────
    Cumpre a regra 3 por construção: nada aqui muda com peso ou composição
    corporal, porque nada disso chega ao cálculo (MokariEvent não tem payload). */
-function Roots({ level, opacity }: { level: PillarAffinity; opacity: number }) {
-  if (level < 1) return null;
-  const stroke = color("vitalidade");
+function Roots({ stage, count, opacity }: { stage: MokariStage; count: number; opacity: number }) {
+  const n = rootCount(count);
+  if (n < 1) return null;
   return (
-    <g fill="none" stroke={stroke} strokeLinecap="round" opacity={opacity} aria-hidden>
-      <path d="M120,120 Q112,127 104,130" strokeWidth="1.5" />
-      <path d="M120,120 Q128,127 136,130" strokeWidth="1.5" />
-      {level >= 2 && (
-        <>
-          <path d="M104,130 Q104,128 88,132" strokeWidth="1.5" />
-          <path d="M136,130 Q136,128 152,132" strokeWidth="1.5" />
-        </>
-      )}
-      {level >= 3 && (
-        <>
-          <path d="M104,130 Q112,130 96,136" strokeWidth="1.5" />
-          <path d="M136,130 Q130,130 148,137" strokeWidth="1.5" />
-          <path d="M120,120 Q104,132 76,134" strokeWidth="3.5" />
-        </>
-      )}
+    <g fill="none" stroke={color("vitalidade")} strokeLinecap="round" opacity={opacity} aria-hidden>
+      {rootPathsFor(stage, n).map((d, i) => (
+        // A primeira raiz de cada lado é a mais grossa: a mais antiga é a que
+        // sustenta. As novas nascem finas e vão engrossando com o tempo.
+        <path key={i} d={d} strokeWidth={i < 2 ? 2.2 : 1.5} />
+      ))}
     </g>
   );
 }
@@ -191,19 +184,22 @@ function Body({ stage, canopyScaleX }: { stage: MokariStage; canopyScaleX: numbe
 
 /* ── 4. FOLHAS — Alimentação ─────────────────────────────────────────── */
 function Leaves({
-  stage, level, towardStem, opacity,
-}: { stage: MokariStage; level: PillarAffinity; towardStem: number; opacity: number }) {
-  if (level < 1) return null;
-  const slots = leafSlotsFor(stage, level);
+  stage, count, towardStem, opacity,
+}: { stage: MokariStage; count: number; towardStem: number; opacity: number }) {
+  const n = leafCount(count);
+  if (n < 1) return null;
+  const slots = leafSlotsFor(stage, n);
+  const base = STAGE_ANCHORS[stage].leafSlots.length;
   return (
     <g aria-hidden>
-      {level >= 3 && (
+      {n >= 9 && (
         <ellipse cx="120" cy={STAGE_ANCHORS[stage].auraCenter.y} rx="34" ry="20" fill={color("alimentacao", 0.07)} />
       )}
       {slots.map((slot, i) => (
         <ellipse
           key={i}
-          cx={slot.x} cy={slot.y} rx={LEAF_LENGTH} ry="4"
+          cx={slot.x} cy={slot.y}
+          rx={LEAF_LENGTH * markScale(i, base)} ry={4 * markScale(i, base)}
           fill={color("alimentacao", Math.min(1, 0.85 + opacity))}
           transform={`rotate(${leafAngle(slot, towardStem)} ${slot.x} ${slot.y})`}
         />
@@ -215,17 +211,31 @@ function Leaves({
 /* ── 5. FRUTOS — Prosperidade. Colheita, não moeda ──────────────────────
    Moeda lê como cobiça; fruto lê como colheita. */
 function Fruits({
-  stage, level, opacity,
-}: { stage: MokariStage; level: PillarAffinity; opacity: number }) {
-  if (level < 1) return null;
+  stage, count, opacity,
+}: { stage: MokariStage; count: number; opacity: number }) {
+  const n = fruitCount(count);
+  if (n < 1) return null;
   const fill = color("prosperidade", Math.min(1, 1 - 0 + opacity));
   return (
     <g aria-hidden>
-      {fruitSlotsFor(stage, level).map((slot, i) => (
-        <circle key={i} cx={slot.x} cy={slot.y} r="3.2" fill={fill} />
+      {fruitSlotsFor(stage, n).map((slot, i) => (
+        <circle
+          key={i} cx={slot.x} cy={slot.y}
+          r={3.2 * markScale(i, STAGE_ANCHORS[stage].fruitSlots.length)} fill={fill}
+        />
       ))}
-      {/* O fruto caído é o acúmulo que ficou — não é perda. */}
-      {level >= 3 && <circle cx="152" cy="118" r="3" fill={fill} />}
+      {/* O fruto caído é o acúmulo que ficou — não é perda.
+          Ele morava em x=152 fixo, a 32 unidades do tronco. Nos estágios
+          altos a copa sobe para y≈20–78 e ele ficava sozinho lá embaixo, sem
+          nada por perto: o QA leu como "ponto amarelo esquecido no ar", não
+          como fruta caída. Ancorado ao PÉ DO TRONCO ele volta a ser o que a
+          frase diz — o que caiu e ficou ali. */}
+      {n >= 6 && (
+        <circle
+          cx={STAGE_ANCHORS[stage].rootOrigin.x + 15}
+          cy={GROUND_Y - 2} r="3" fill={fill}
+        />
+      )}
     </g>
   );
 }
@@ -233,30 +243,34 @@ function Fruits({
 /* ── 6. FLORES E AURA — Mente ───────────────────────────────────────────
    Usam os slots de índice ímpar para não empilhar sobre as folhas. */
 function Flowers({
-  stage, level, anchors, opacity,
-}: { stage: MokariStage; level: PillarAffinity; anchors: StageAnchors; opacity: number }) {
-  if (level < 1) return null;
+  stage, count, anchors, opacity,
+}: { stage: MokariStage; count: number; anchors: StageAnchors; opacity: number }) {
+  const n = flowerCount(count);
+  if (n < 1) return null;
   const petal = color("mente", Math.min(1, 1 + opacity));
   return (
     <g aria-hidden>
-      {level >= 3 && (
+      {n >= 5 && (
         <circle cx={anchors.auraCenter.x} cy={anchors.auraCenter.y} r={anchors.auraRadius} fill="url(#mokari-aura)" />
       )}
-      {flowerSlotsFor(stage, level).map((slot, i) => (
-        <g key={i}>
-          {[0, 1, 2, 3, 4].map((k) => {
-            const a = ((k * 72 - 90) * Math.PI) / 180;
-            return (
-              <circle
-                key={k}
-                cx={slot.x + 3 * Math.cos(a)} cy={slot.y + 3 * Math.sin(a)}
-                r="1.8" fill={petal}
-              />
-            );
-          })}
-          <circle cx={slot.x} cy={slot.y} r="1.2" fill="hsl(var(--gold))" />
-        </g>
-      ))}
+      {flowerSlotsFor(stage, n).map((slot, i) => {
+        const e = markScale(i, anchors.leafSlots.filter((_, k) => k % 2 === 1).length);
+        return (
+          <g key={i}>
+            {[0, 1, 2, 3, 4].map((k) => {
+              const a = ((k * 72 - 90) * Math.PI) / 180;
+              return (
+                <circle
+                  key={k}
+                  cx={slot.x + 3 * e * Math.cos(a)} cy={slot.y + 3 * e * Math.sin(a)}
+                  r={1.8 * e} fill={petal}
+                />
+              );
+            })}
+            <circle cx={slot.x} cy={slot.y} r={1.2 * e} fill="hsl(var(--gold))" />
+          </g>
+        );
+      })}
     </g>
   );
 }
@@ -325,10 +339,19 @@ function Expression({
   );
 }
 
-function MokariFigure({ data, reduced }: { data: MokariData; reduced: boolean }) {
+function MokariFigure({ data, reduced, novidades }: {
+  data: MokariData; reduced: boolean; novidades: string[];
+}) {
   const anchors = STAGE_ANCHORS[data.stage];
   const style = STATE_STYLE[data.state];
   const lean = style.lean + anchors.lean;
+  const ev = data.detail.pillar_events;
+
+  /* O pilar mais perto da próxima marca. Empate resolve pela ordem dos
+     pilares, que é estável — assim a frase não troca sozinha a cada carga. */
+  const proximo = PILLARS
+    .map((p) => ({ nome: p.name, faltam: marksToGo(ev[p.id] ?? 0) }))
+    .sort((a, b) => a.faltam - b.faltam)[0] ?? null;
 
   const destaque = PILLARS.filter((p) => (data.affinity[p.id] ?? 0) >= 2).map((p) => p.name);
   const legenda = `${STAGE_LABEL[data.stage]} · ${ENVIRONMENT_LABEL[data.environment]} · ${style.label}`;
@@ -361,15 +384,18 @@ function MokariFigure({ data, reduced }: { data: MokariData; reduced: boolean })
           style={{ transformOrigin: `${anchors.rootOrigin.x}px ${anchors.rootOrigin.y}px` }}
         >
           <g transform={`rotate(${lean} ${anchors.rootOrigin.x} ${anchors.rootOrigin.y})`}>
-            <Roots level={data.affinity.vitalidade} opacity={Math.min(1, 1 + style.markOpacityBonus)} />
+            <Roots
+              stage={data.stage} count={ev.vitalidade}
+              opacity={Math.min(1, 1 + style.markOpacityBonus)}
+            />
             <Body stage={data.stage} canopyScaleX={style.canopyScaleX} />
             <Leaves
-              stage={data.stage} level={data.affinity.alimentacao}
+              stage={data.stage} count={ev.alimentacao}
               towardStem={style.leafTowardStem} opacity={style.markOpacityBonus}
             />
-            <Fruits stage={data.stage} level={data.affinity.prosperidade} opacity={style.markOpacityBonus} />
+            <Fruits stage={data.stage} count={ev.prosperidade} opacity={style.markOpacityBonus} />
             <Flowers
-              stage={data.stage} level={data.affinity.mente}
+              stage={data.stage} count={ev.mente}
               anchors={anchors} opacity={style.markOpacityBonus}
             />
             <Buds stage={data.stage} affinity={data.affinity} />
@@ -383,6 +409,29 @@ function MokariFigure({ data, reduced }: { data: MokariData; reduced: boolean })
           daltonismo (as quatro cores deixam de ser o único canal) e quem não
           decorou o vocabulário. */}
       <p className="text-sm text-muted-foreground text-center">{legenda}</p>
+
+      {/* O QUE MUDOU DESDE A ÚLTIMA VEZ. Sem isto, uma mudança que levou
+          semanas é indistinguível de nenhuma mudança — a pessoa não guarda de
+          memória quantas folhas tinha. Só aparece quando há ganho, some
+          sozinho na visita seguinte, e nunca vira notificação (regra 4). */}
+      {novidades.length > 0 && (
+        <p className="text-xs text-center rounded-md border p-2" style={{ borderColor: "hsl(var(--gold) / 0.4)" }}>
+          <span className="text-gold">✦</span>{" "}
+          {novidades.join(" · ")}
+        </p>
+      )}
+
+      {/* QUANTO FALTA, em registros — nunca em porcentagem. "3 registros de
+          Mente" é uma frase sobre a vida da pessoa; "68% do próximo nível" é
+          uma frase sobre o app, e aí o espelho vira placar. Mostra só o pilar
+          MAIS PERTO: quatro distâncias de uma vez viram lista de tarefas. */}
+      {proximo && (
+        <p className="text-xs text-muted-foreground text-center">
+          {proximo.faltam === 1
+            ? `1 registro de ${proximo.nome} e seu Mokari cresce de novo`
+            : `${proximo.faltam} registros de ${proximo.nome} e seu Mokari cresce de novo`}
+        </p>
+      )}
     </>
   );
 }
@@ -392,6 +441,23 @@ export default function Mokari() {
   const { data, isLoading, isError, refetch, isFetching } = useMokariData(enabled);
   const reduced = useReducedMotion();
   const [openWhat, setOpenWhat] = useState(false);
+  const { user } = useAuth();
+
+  /* A COMPARAÇÃO ACONTECE UMA VEZ POR CARGA, e o retrato novo é gravado na
+     mesma passada. Ler e gravar no mesmo efeito é de propósito: se a gravação
+     ficasse para depois, a pessoa veria o mesmo "você cresceu" em toda visita
+     até acontecer outra coisa — e um aviso que se repete deixa de ser notícia
+     e vira enfeite. */
+  const [novidades, setNovidades] = useState<string[]>([]);
+  useEffect(() => {
+    if (!data || !user) return;
+    const atual = snapshotOf(data);
+    setNovidades(changesSince(
+      readSnapshot(user.id), atual,
+      (st) => STAGE_LABEL[st as MokariStage], (e) => ENVIRONMENT_LABEL[e as 1 | 2 | 3 | 4 | 5],
+    ));
+    writeSnapshot(user.id, atual);
+  }, [data, user]);
 
   // Desligado (ou recusado): o slot não renderiza NADA. Nem card, nem moldura,
   // nem "ative o Mokari" — mesma regra da Fase 4, e aqui vale em dobro.
@@ -419,19 +485,43 @@ export default function Mokari() {
         </div>
       ) : isLoading || !data
         ? <Skeleton className="w-full h-[140px] rounded-lg" />
-        : <MokariFigure data={data} reduced={reduced} />}
+        : <MokariFigure data={data} reduced={reduced} novidades={novidades} />}
 
       <Collapsible open={openWhat} onOpenChange={setOpenWhat}>
-        <CollapsibleTrigger className="w-full flex items-center justify-center gap-1 text-xs text-muted-foreground rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+        {/* `min-h-11`: media 16px de altura e é o ÚNICO elemento clicável do
+            cartão — agora também a porta dos três números. Alvo pequeno numa
+            porta única é o pior lugar para economizar pixel. */}
+        <CollapsibleTrigger className="w-full min-h-11 flex items-center justify-center gap-1 text-xs text-muted-foreground rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
           O que é isto?
           <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", openWhat && "rotate-180")} />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <p className="text-xs text-muted-foreground pt-2">
             O Mokari é o retrato do que você registrou até aqui. O corpo cresce com o seu XP
-            acumulado. As raízes, folhas, frutos e flores vêm dos seus quatro pilares. O céu
-            acompanha o tempo de jornada. Ele nunca volta atrás: o que você construiu fica.
+            acumulado. As raízes, folhas, frutos e flores vêm dos seus quatro pilares, e continuam
+            crescendo sem limite — cada vez mais devagar, nunca parando. O céu acompanha o tempo
+            de jornada. Ele nunca volta atrás: o que você construiu fica.
           </p>
+
+          {/* OS NÚMEROS CRUS. Os três já eram calculados a cada carga e nunca
+              chegavam à tela: o `detail` existia e era jogado fora. Ficam aqui
+              dentro do "O que é isto?", e não embaixo do desenho, porque o
+              Mokari continua sendo um retrato — quem quiser o número vai
+              atrás, quem não quiser não esbarra nele. */}
+          {data && (
+            <dl className="grid grid-cols-3 gap-2 pt-3 text-center">
+              {[
+                { t: "XP acumulado", v: data.detail.xp.toLocaleString("pt-BR") },
+                { t: "registros", v: data.detail.events.toLocaleString("pt-BR") },
+                { t: data.detail.journey_days === 1 ? "dia de jornada" : "dias de jornada", v: String(data.detail.journey_days) },
+              ].map((n) => (
+                <div key={n.t} className="rounded-md border p-2">
+                  <dd className="text-sm font-medium">{n.v}</dd>
+                  <dt className="text-[11px] text-muted-foreground">{n.t}</dt>
+                </div>
+              ))}
+            </dl>
+          )}
         </CollapsibleContent>
       </Collapsible>
     </Card>

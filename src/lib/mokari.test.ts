@@ -361,7 +361,10 @@ describe("idempotência", () => {
 
   it("carrega a versão do cálculo", () => {
     expect(computeMokari([], [], REF).calc_version).toBe(MOKARI_CALC_VERSION);
-    expect(MOKARI_CALC_VERSION).toBe("mokari/1");
+    /* Subiu para /2 quando a afinidade em três degraus virou densidade
+       contínua (mokariDensity.ts). A versão existe justamente para isto: um
+       Mokari lido ontem não pode parecer outro hoje sem explicação. */
+    expect(MOKARI_CALC_VERSION).toBe("mokari/2");
   });
 });
 

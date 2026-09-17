@@ -34,6 +34,13 @@ const MOKARI_FILES = [
   "src/lib/mokariLayers.ts",
   "src/lib/mokariLayers.test.ts",
   "src/lib/mokariReasons.test.ts",
+  // A densidade sem teto e a detecção de mudança são folhas do Mokari como
+  // todo o resto: ninguém fora desta lista pode importar daqui, e é isso que
+  // mantém a regra 5 (desligar o Mokari não afeta função nenhuma).
+  "src/lib/mokariDensity.ts",
+  "src/lib/mokariDensity.test.ts",
+  "src/lib/mokariChange.ts",
+  "src/lib/mokariChange.test.ts",
   "src/hooks/useMokariPreference.tsx",
   "src/hooks/useMokariData.tsx",
   "src/components/core/Mokari.tsx",
