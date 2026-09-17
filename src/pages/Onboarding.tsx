@@ -23,6 +23,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,7 +47,7 @@ import {
 import { sleepWindowHours, formatWindowHours, timeForInput } from "@/lib/sleep";
 import SleepSchedule from "@/components/core/SleepSchedule";
 import CaptureBar from "@/components/core/CaptureBar";
-import { readFnError } from "@/lib/fnError";
+import { readFnError, isPlanCapError } from "@/lib/fnError";
 import {
   Check, Loader2, ArrowRight, ArrowLeft, Sparkles, X, Plus, Eye, Mountain,
 } from "lucide-react";
@@ -83,6 +84,21 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { profile, refresh, loading: profileLoading, isError: profileError } = useProfile();
+  /* QUANTOS PLANOS A CONTA AGUENTA ATIVOS AO MESMO TEMPO.
+     O Blueprint propõe de 2 a 4 planos e vinha com TODOS marcados; o app
+     mandava os quatro num insert só e o gatilho `enforce_active_plans_cap`
+     derrubava o LOTE INTEIRO (`PLAN_LIMIT_REACHED`, a conta grátis segura 1
+     ativo). Resultado: na conta grátis a ativação falhava 100% das vezes —
+     nem plano, nem meta, nem compromisso — e o `catch` genérico dizia
+     "Tente de novo", que nunca ia funcionar porque o limite é estrutural.
+     O clímax do onboarding era um botão que não funcionava.
+
+     Este número é só para EXIBIÇÃO e para marcar as caixas certas; quem
+     decide continua sendo o servidor. Por isso o `activate` abaixo não
+     confia nele: se vier errado ou desatualizado, a rede de segurança
+     (arquivar em vez de derrubar) segura do mesmo jeito. */
+  const { data: ent } = useEntitlements();
+  const maxActivePlans = Math.max(1, Number(ent?.limits?.max_active_plans ?? 1));
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -131,12 +147,20 @@ export default function Onboarding() {
   const [generating, setGenerating] = useState(false);
   const [blueprint, setBlueprint] = useState<BlueprintProposal | null>(null);
   const [bpFallback, setBpFallback] = useState(false);
+  // Falha RECUPERÁVEL é diferente de Blueprint indisponível. O servidor
+  // estorna a cortesia em toda falha de geração (`refund()`), então tentar de
+  // novo funciona de verdade — mas a tela tratava tudo como fim de linha e
+  // oferecia só um consolo. Prometer "a cortesia não foi consumida" sem dar
+  // o botão de tentar é prometer no vazio.
+  const [bpRetry, setBpRetry] = useState(false);
   const [plansChecked, setPlansChecked] = useState<boolean[]>([]);
   const [activateGoals, setActivateGoals] = useState(true);
   const [habitsChecked, setHabitsChecked] = useState<boolean[]>([]);
   const [planOpen, setPlanOpen] = useState<BlueprintPlan | null>(null);
   const [activating, setActivating] = useState(false);
   const [activatedPlans, setActivatedPlans] = useState<string[]>([]);
+  // Os que não couberam ativos e ficaram guardados em Meus planos.
+  const [archivedPlans, setArchivedPlans] = useState<string[]>([]);
   const [activatedGoals, setActivatedGoals] = useState<string[]>([]);
   const [activatedHabits, setActivatedHabits] = useState(0);
 
@@ -318,18 +342,25 @@ export default function Onboarding() {
   const generate = async () => {
     setGenerating(true);
     setBpFallback(false);
+    setBpRetry(false);
     try {
       const { data, error } = await supabase.functions.invoke("onboarding-blueprint", { body: {} });
       if (error) {
         const body = await readFnError(error);
         if (body?.already) { setBpFallback(true); return; }
+        // O servidor distingue "não deu certo agora, a cortesia voltou" de
+        // "o Blueprint está desligado". Só o primeiro vale um botão de
+        // tentar — no segundo, tentar de novo é enganar a pessoa.
+        if (body?.recoverable) { setBpRetry(true); return; }
         throw new Error(typeof body?.error === "string" ? body.error : "erro");
       }
       if (data?.error) throw new Error(String(data.error));
       const bp = data?.blueprint as BlueprintProposal | undefined;
       if (!bp?.plans?.length) throw new Error("erro");
       setBlueprint(bp);
-      setPlansChecked(bp.plans.map(() => true));
+      // Marcadas só as que cabem ativas. As outras continuam ali, para
+      // marcar — e o que passar da cota é GUARDADO, não perdido.
+      setPlansChecked(bp.plans.map((_, i) => i < maxActivePlans));
       setHabitsChecked(bp.habits.map(() => true));
     } catch {
       // Fallback local honesto (Emenda 4: o onboarding nunca quebra por IA):
@@ -351,19 +382,47 @@ export default function Onboarding() {
       // "rotina", e a pessoa achava que os outros não tinham sido criados.
       const chosenPlans = blueprint.plans.filter((_, i) => plansChecked[i]);
       if (chosenPlans.length) {
-        const { error } = await supabase.from("plans").insert(
-          chosenPlans.map((pl) => ({
+        /* UM DE CADA VEZ, E O QUE NÃO COUBER ATIVO VAI GUARDADO.
+           O insert em lote fazia o gatilho do limite derrubar tudo junto —
+           inclusive os planos que caberiam. Linha a linha, cada plano tem a
+           própria sorte, e a cota é descoberta pelo próprio servidor em vez
+           de adivinhada aqui.
+
+           O plano que não cabe ativo NÃO É DESCARTADO: entra como
+           'arquivado', que o limite não conta e que a tela Meus planos já
+           sabe reativar (Planos.tsx:112). Jogar fora um plano que a IA
+           escreveu sobre a vida da pessoa, na única vez em que ela ganha
+           isso de cortesia, seria o pior desfecho possível — e ela nem
+           ficaria sabendo. */
+        const ativados: string[] = [];
+        const guardados: string[] = [];
+        for (const pl of chosenPlans) {
+          const row = {
             user_id: user.id,
             title: pl.title,
             kind: pl.kind,
             pillar: pl.pillar ?? inferred ?? null,
             content: pl.content_markdown,
             origin: "blueprint",
-          }))
-        );
-        if (error) throw error;
-        applied.push(chosenPlans.length === 1 ? "1 plano" : `${chosenPlans.length} planos`);
-        setActivatedPlans(chosenPlans.map((pl) => (PLAN_KIND_META[pl.kind]?.label ?? pl.kind).toLowerCase()));
+          };
+          const rotulo = (PLAN_KIND_META[pl.kind]?.label ?? pl.kind).toLowerCase();
+          const { error } = await supabase.from("plans").insert(row);
+          if (!error) { ativados.push(rotulo); continue; }
+          if (!isPlanCapError(error)) throw error;
+          const { error: arqErr } = await supabase.from("plans").insert({ ...row, status: "arquivado" });
+          if (arqErr) throw arqErr;
+          guardados.push(rotulo);
+        }
+        if (ativados.length) {
+          applied.push(ativados.length === 1 ? "1 plano" : `${ativados.length} planos`);
+          setActivatedPlans(ativados);
+        }
+        if (guardados.length) {
+          // Dito em voz alta, e no lugar onde a pessoa pode agir: guardar em
+          // silêncio seria a mesma perda de antes, só que sem o erro.
+          applied.push(guardados.length === 1 ? "1 plano guardado" : `${guardados.length} planos guardados`);
+          setArchivedPlans(guardados);
+        }
       }
       if (activateGoals) {
         // Metas só das áreas que a pessoa ACOMPANHA: aplicar uma meta de
@@ -476,6 +535,11 @@ export default function Onboarding() {
     if (activatedPlans.length) {
       rows.push(`${activatedPlans.length === 1 ? "Seu plano" : `Seus ${activatedPlans.length} planos`} (${activatedPlans.join(", ")}): Jornada > Planos`);
     }
+    if (archivedPlans.length) {
+      // Nunca some sem dizer: o plano existe, está inteiro, e a pessoa sabe
+      // onde ele mora e o que fazer com ele.
+      rows.push(`${archivedPlans.length === 1 ? "1 plano guardado" : `${archivedPlans.length} planos guardados`} (${archivedPlans.join(", ")}): Jornada > Planos, prontos para ativar`);
+    }
     if (activatedGoals.length) rows.push(`Metas (${activatedGoals.join(", ")}): tela Hoje`);
     if (activatedHabits > 0) rows.push(`${activatedHabits === 1 ? "Seu compromisso diário" : `Seus ${activatedHabits} compromissos diários`}: tela Hoje`);
     if (sleepHrs) rows.push("Rotina de sono e check-in matinal: tela Hoje e Vitalidade");
@@ -488,11 +552,15 @@ export default function Onboarding() {
     if (battleCreated) rows.push(`Batalha "${battleCreated}": tela Batalhas`);
     rows.push("O que você acompanha: Ajustes > O que você acompanha");
     return rows;
-  }, [activatedPlans, activatedGoals, activatedHabits, sleepHrs, weightKg, birthYear, heightCm,
+  }, [activatedPlans, archivedPlans, activatedGoals, activatedHabits, sleepHrs, weightKg, birthYear, heightCm,
       sex, activity, restrictions, income, budget, foodSpend, workoutsWeek, conditions, battleCreated]);
 
+  // `min-h-11`: o link media 16px de altura. Ele é o caminho de saída de
+  // todo passo do onboarding — e, depois da correção, também a saída de uma
+  // TELA DE ERRO, onde a pessoa toca de verdade. Alvo pequeno em rota de
+  // fuga é o pior lugar para economizar pixel; o texto continua leve.
   const skipLink = (label: string, onSkip: () => void) => (
-    <button className="w-full text-xs text-muted-foreground underline" onClick={onSkip}>
+    <button className="w-full min-h-11 text-xs text-muted-foreground underline" onClick={onSkip}>
       {label}
     </button>
   );
@@ -830,12 +898,41 @@ export default function Onboarding() {
               </label>
             );
           })}
-          <Button className="w-full" onClick={activate} disabled={activating}>
+          {/* A cota dita ANTES do clique, e só quando ela morde de fato.
+              Descobrir o limite por um erro depois de escolher é a pior hora
+              — e a frase não vende nada: diz o que acontece com o resto. */}
+          {plansChecked.filter(Boolean).length > maxActivePlans && (
+            <p className="text-xs text-muted-foreground rounded-md border p-2.5">
+              Seu plano mantém {maxActivePlans === 1 ? "1 plano ativo" : `${maxActivePlans} planos ativos`} por vez.
+              Os outros ficam <strong>guardados em Jornada &gt; Planos</strong>, inteiros — é só
+              trocar qual está ativo quando quiser.
+            </p>
+          )}
+          <Button className="w-full min-h-11" onClick={activate} disabled={activating}>
             {activating
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : (<><Check className="w-4 h-4 mr-1.5" /> Ativar {plansChecked.filter(Boolean).length > 1 ? "meus planos" : "meu plano"}</>)}
           </Button>
           {skipLink("Agora não — quero explorar primeiro", next)}
+        </div>
+      )}
+
+      {/* Deu ruim, mas dá para tentar: a cortesia voltou para a conta. O
+          caminho de saída continua existindo ao lado — ninguém fica preso
+          num botão de tentar no fim do onboarding. */}
+      {!generating && !blueprint && bpRetry && (
+        <div className="space-y-3 animate-fade-up">
+          <div className="rounded-lg border p-3 space-y-1.5">
+            <p className="text-sm font-semibold">Não consegui montar seu plano agora</p>
+            <p className="text-xs text-muted-foreground">
+              Foi uma falha nossa, e ela não gastou sua cortesia: dá para tentar
+              de novo aqui mesmo.
+            </p>
+          </div>
+          <Button className="w-full min-h-11" onClick={generate}>
+            Tentar de novo
+          </Button>
+          {skipLink("Seguir sem o plano — o Conselheiro monta depois", next)}
         </div>
       )}
 
