@@ -18,6 +18,7 @@ import QueryError from "@/components/core/QueryError";
 import PlanSections from "@/components/core/PlanSections";
 import { isSectionedKind } from "@/lib/planSections";
 import { toast } from "sonner";
+import { isPlanCapError } from "@/lib/fnError";
 import {
   ClipboardList, MessageCircle, Archive, ArchiveRestore, Trash2, ChevronRight,
   UtensilsCrossed, Dumbbell, Coins, Repeat,
@@ -111,7 +112,22 @@ export default function Planos() {
 
   const setStatus = async (plan: Plan, status: "ativo" | "arquivado") => {
     const { error } = await supabase.from("plans").update({ status }).eq("id", plan.id);
-    if (error) { toast.error("Não consegui atualizar o plano. Tente de novo."); return; }
+    if (error) {
+      /* "Tente de novo" para uma coisa que NUNCA vai funcionar por repetição
+         é o pior erro que uma tela pode dar: manda a pessoa insistir no que
+         não tem saída. Reativar com a vaga ocupada esbarra em
+         `enforce_active_plans_cap` e a mensagem genérica não contava nem que
+         existe limite, nem que a troca é possível — ela é, em dois passos.
+         O erro agora ensina o caminho em vez de esconder o beco. */
+      if (isPlanCapError(error)) {
+        toast.error(
+          "Seu plano mantém um número limitado de planos ativos. Arquive o que está ativo e depois reative este — nada se perde na troca.",
+        );
+        return;
+      }
+      toast.error("Não consegui atualizar o plano. Tente de novo.");
+      return;
+    }
     toast.success(status === "arquivado" ? "Plano arquivado." : "Plano reativado.");
     setOpenId(null);
     qc.invalidateQueries({ queryKey: ["plans"] });

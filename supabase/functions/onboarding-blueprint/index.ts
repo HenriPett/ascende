@@ -119,6 +119,13 @@ REGRAS:
 • Responda SEMPRE usando a ferramenta gerar_blueprint.
 ${SAFETY_RULES}`;
 
+/** A mesma frase nas três saídas recuperáveis. Ela promete duas coisas que
+ *  o servidor de fato cumpre: a cortesia foi ESTORNADA (`refund()` zera
+ *  `blueprint_generated_at`), então tentar de novo funciona mesmo. Prometer
+ *  isso e não dar o botão de tentar era o outro metade do problema. */
+const BLUEPRINT_RETRY_MSG =
+  "Não consegui montar seu Blueprint agora. Tente de novo — a cortesia não foi consumida.";
+
 Deno.serve(async (req) => {
   const cors = corsFor(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
@@ -155,7 +162,27 @@ Deno.serve(async (req) => {
       const snapshot = await buildSnapshot(supabase, user.id);
       const { res, data } = await anthropicCall(supabase, user.id, "onboarding-blueprint", {
         model: MODEL_SMART,
-        max_tokens: 4000,
+        /* O TETO DE SAÍDA FOI DIMENSIONADO PARA UM PLANO, E HOJE SE PEDEM
+           QUATRO. Os 4.000 nasceram quando o Blueprint era um plano só
+           (`required: ["title", "content_markdown", ...]`). Depois a
+           ferramenta passou a pedir de 2 a 4 planos SEPARADOS, cada um
+           completo — "## Resumo", seções, tabelas, "## Observações" — e o
+           teto não subiu junto.
+
+           Quando a resposta bate no teto, a API não devolve erro: devolve
+           200 com `stop_reason: "max_tokens"` e o JSON da ferramenta pela
+           metade. Aí `plans` não passa na validação (conteúdo truncado cai
+           no `content.length < 80`), o servidor estorna a cortesia e
+           responde 502 — e a pessoa, no fim do onboarding, vê um consolo no
+           lugar do plano. Como quatro planos ricos às vezes cabem em 4.000 e
+           às vezes não, a falha é INTERMITENTE, que é a pior forma de ela
+           existir: não dá para reproduzir sob demanda e parece "azar".
+
+           TETO NÃO É COBRANÇA. Só se paga o que o modelo de fato escreve —
+           subir o limite não encarece nada por si, apenas para de cortar o
+           que já estava sendo gerado (e pago). O custo real desta rota é o
+           que ela sempre foi; o que muda é a resposta chegar inteira. */
+        max_tokens: 16000,
         /* SEM cache_control aqui, de propósito — não reponha.
            Escrever cache custa 1,25x a entrada e ler custa 0,1x. Nos dados
            reais de produção esta rota escrevia 70,2% da entrada e lia 0%:
@@ -178,7 +205,22 @@ Deno.serve(async (req) => {
 
       if (!res.ok || !data) {
         await refund();
-        return json({ error: "Não consegui montar seu Blueprint agora. Tente de novo em instantes — a cortesia não foi consumida.", recoverable: true }, 502);
+        return json({ error: BLUEPRINT_RETRY_MSG, recoverable: true }, 502);
+      }
+
+      /* Bater no teto de saída é um 200, não um erro — e sem este log a
+         falha fica invisível: `logUsage` grava ok=true e ninguém consegue
+         distinguir "o modelo respondeu mal" de "a resposta foi cortada".
+         Foi exatamente essa cegueira que deixou o Blueprint sumir sem
+         deixar rastro. */
+      // deno-lint-ignore no-explicit-any
+      const stop = (data as any)?.stop_reason;
+      if (stop === "max_tokens") {
+        console.error("onboarding-blueprint: resposta cortada no teto de saída", {
+          user: user.id,
+          // deno-lint-ignore no-explicit-any
+          output_tokens: (data as any)?.usage?.output_tokens ?? null,
+        });
       }
 
       // deno-lint-ignore no-explicit-any
@@ -187,7 +229,7 @@ Deno.serve(async (req) => {
       const rawPlans = Array.isArray(inp?.plans) ? inp.plans : [];
       if (!rawPlans.length) {
         await refund();
-        return json({ error: "Não consegui montar seu Blueprint agora. Tente de novo em instantes — a cortesia não foi consumida.", recoverable: true }, 502);
+        return json({ error: BLUEPRINT_RETRY_MSG, recoverable: true }, 502);
       }
 
       const inRange = (v: unknown, lo: number, hi: number) => {
@@ -226,7 +268,7 @@ Deno.serve(async (req) => {
       }).slice(0, 4);
       if (!plans.length) {
         await refund();
-        return json({ error: "Não consegui montar seu Blueprint agora. Tente de novo em instantes — a cortesia não foi consumida.", recoverable: true }, 502);
+        return json({ error: BLUEPRINT_RETRY_MSG, recoverable: true }, 502);
       }
 
       return json({
