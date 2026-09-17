@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { PILLARS, activePillarSet } from "@/lib/pillars";
 import { activeTrackerSet } from "@/lib/trackers";
 import { levelTitle, nextTitle, xpReasonLabel } from "@/lib/xp";
-import { monthStartISO } from "@/lib/format";
+import { monthStartISO, todayISO } from "@/lib/format";
 import { daysAgoISOInSP } from "@/lib/dates";
 import { distinctLocalDays } from "@/lib/localDays";
 import { Badge } from "@/components/ui/badge";
@@ -71,7 +71,12 @@ export default function Score() {
       const since7 = new Date(Date.now() - 7 * 864e5).toISOString();
       const [events, txs, habits, logs, weekXp] = await Promise.all([
         supabase.from("life_events").select("pillar,kind,occurred_at,payload").eq("user_id", user!.id).gte("occurred_at", since14),
-        supabase.from("transactions").select("kind,amount").eq("user_id", user!.id).gte("occurred_at", monthStartISO()),
+        /* O MÊS ATÉ HOJE, não o mês inteiro mais o futuro. Mesmo defeito que
+           inflava o "Gasto de hoje" na tela Hoje: sem teto, as parcelas e os
+           fixos com data à frente entravam na conta do mês corrente e o Score
+           media um dinheiro que ainda não foi gasto. */
+        supabase.from("transactions").select("kind,amount").eq("user_id", user!.id)
+          .gte("occurred_at", monthStartISO()).lte("occurred_at", todayISO()),
         supabase.from("habits").select("id").eq("user_id", user!.id).eq("active", true),
         supabase.from("habit_logs").select("log_date").eq("user_id", user!.id).gte("log_date", daysAgoISOInSP(13)),
         supabase.from("xp_log").select("points,reason,created_at").eq("user_id", user!.id).gte("created_at", since7).order("created_at", { ascending: false }).limit(60),
