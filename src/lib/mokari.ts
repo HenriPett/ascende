@@ -35,7 +35,7 @@ import { localDay } from "@/lib/localDays";
 
 /** Versão da regra de cálculo. Muda quando os limiares mudam, para que um
  *  Mokari lido ontem não pareça outro hoje sem explicação. */
-export const MOKARI_CALC_VERSION = "mokari/1";
+export const MOKARI_CALC_VERSION = "mokari/2";
 
 /**
  * O Mokari NÃO vem ligado. Um personagem que aparece sem ser convidado no app
@@ -137,6 +137,13 @@ export interface Mokari {
     /** Dias com algum registro na janela recente. Serve ao estado, e é
      *  contagem de PRESENÇA — nunca de ausência (regra 2). */
     active_days_recent: number;
+    /** Registros por pilar em toda a história (já sem peso/corpo).
+     *
+     *  É a entrada da DENSIDADE (mokariDensity.ts), o eixo que não satura. A
+     *  `affinity` continua existindo e continua sendo marca-d'água, mas ela
+     *  tem três níveis e três níveis acabam: era por isso que o desenho
+     *  parava de responder por volta do dia 40. A contagem crua não acaba. */
+    pillar_events: Record<PillarId, number>;
   };
 }
 
@@ -440,8 +447,21 @@ export function computeMokariFromTotals(
       events: totals.eventsTotal,
       journey_days: journeyDays,
       active_days_recent: activeDays,
+      pillar_events: pillarEventsFromCounts(totals.pillarCounts),
     },
   };
+}
+
+/** Normaliza a contagem por pilar: sempre os quatro, sempre número finito. */
+export function pillarEventsFromCounts(
+  counts: Readonly<Partial<Record<PillarId, number>>>,
+): Record<PillarId, number> {
+  const out = {} as Record<PillarId, number>;
+  for (const pillar of PILLARS) {
+    const n = Number(counts[pillar.id] ?? 0);
+    out[pillar.id] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  }
+  return out;
 }
 
 /* ═══ Orquestrador ════════════════════════════════════════════════════ */
@@ -474,6 +494,13 @@ export function computeMokari(
       events: contaveis.length,
       journey_days: journeyDays,
       active_days_recent: activeDays,
+      // Mesma conta da afinidade, sem os três degraus: é a contagem crua que
+      // alimenta a densidade sem teto.
+      pillar_events: pillarEventsFromCounts(
+        Object.fromEntries(PILLARS.map((p) => [
+          p.id, contaveis.filter((e) => e.pillar === p.id).length,
+        ])),
+      ),
     },
   };
 }
