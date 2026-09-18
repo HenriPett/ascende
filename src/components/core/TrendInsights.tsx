@@ -109,7 +109,7 @@ const COPY: Record<InsightKind, KindCopy> = {
     missing: { label: "Registrar o sono de hoje", to: "/app" },
   },
   refeicao_gasto_comida: {
-    pillars: ["--alimentacao", "--prosperidade"],
+    pillars: ["--vitalidade", "--prosperidade"],
     headline: {
       menor: "Nos dias em que você registrou o que comeu, seu gasto com comida foi menor.",
       maior: "Nos dias em que você registrou o que comeu, seu gasto com comida foi maior.",

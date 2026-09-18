@@ -17,7 +17,7 @@ import { Link } from "react-router-dom";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import { PILLARS, pillarById, type PillarId } from "@/lib/pillars";
+import { PILLARS, pillarById, normalizePillars, type PillarId } from "@/lib/pillars";
 import { TRACKERS } from "@/lib/trackers";
 import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
 import {
@@ -81,7 +81,16 @@ export default function Ajustes() {
     setHeightCm(profile.height_cm ? String(profile.height_cm) : "");
     setActivity(profile.activity_level ?? "nao_informar");
     setRestrictions(profile.dietary_restrictions ?? []);
-    setPillars(profile.pillars ?? []);
+    /* CRU, NÃO: um perfil que ainda não passou pela migration traz
+       `["alimentacao"]`, e a lista crua não casa com nenhum id de hoje. O
+       efeito não era cosmético — o Switch de Vitalidade nascia DESLIGADO
+       enquanto Hoje, Score, Jornada e a captura (que passam por
+       `activePillarSet`) mostravam o pilar ligado, e a seção de trackers
+       logo abaixo renderizava vazia por não casar com nada. Pior: como a
+       Vitalidade nunca aparecia ligada, ela nunca podia ser desligada.
+       Traduzir aqui é o que faz esta tela contar a MESMA história que o
+       resto do app sobre uma escolha que é da pessoa. */
+    setPillars(normalizePillars(profile.pillars));
   }, [profile]);
 
   const togglePillar = (id: PillarId, on: boolean) =>
@@ -107,7 +116,12 @@ export default function Ajustes() {
     heightCm: profile?.height_cm ? String(profile.height_cm) : "",
     activity: profile?.activity_level ?? "nao_informar",
     restrictions: (profile?.dietary_restrictions ?? []).join("|"),
-    pillars: [...(profile?.pillars ?? [])].sort().join("|"),
+    /* A MESMA tradução do estado, e não é opcional: com o retrato guardando
+       "alimentacao" e o estado já em "vitalidade", `dirty` nascia true e a
+       pessoa via "alteração não salva" numa tela que ela acabou de abrir,
+       sem ter tocado em nada. Os dois lados da comparação têm de falar a
+       mesma língua. */
+    pillars: normalizePillars(profile?.pillars).sort().join("|"),
   }), [profile]);
 
   const dirty = !!profile && (
@@ -157,11 +171,12 @@ export default function Ajustes() {
     navigate("/", { replace: true });
   };
 
-  // ── Privacidade: quais áreas o Conselheiro pode analisar ──────
+  /* ── Privacidade: quais áreas o Conselheiro pode analisar ──────
+     FUSÃO DE 17/09/2026: `alimentacao` saiu desta lista e o escopo de
+     Vitalidade passou a cobrir as duas intimidades físicas de uma vez. */
   const SCOPES: { id: string; label: string }[] = [
     { id: "prosperidade", label: "Prosperidade (finanças)" },
-    { id: "vitalidade", label: "Vitalidade (sono e treinos)" },
-    { id: "alimentacao", label: "Alimentação (refeições, peso, hidratação)" },
+    { id: "vitalidade", label: "Vitalidade (sono, treino, refeições, peso e hidratação)" },
     { id: "mente", label: "Mente & Espírito (humor, práticas, gratidão)" },
     { id: "diario", label: "Diário (trechos das suas anotações)" },
   ];
@@ -170,12 +185,37 @@ export default function Ajustes() {
     const raw = ((profile as unknown as { ai_scopes?: Record<string, boolean> })?.ai_scopes) ?? {};
     const next: Record<string, boolean> = {};
     for (const sc of SCOPES) next[sc.id] = raw[sc.id] !== false;
+    /* O interruptor fundido nasce do E das duas chaves antigas, não de uma
+       delas: `ai_scopes` é registro de CONSENTIMENTO, e sob OU uma refatoração
+       nossa devolveria ao Conselheiro peso, calorias, proteína e hidratação
+       sem a pessoa tocar em nada. É a mesma precedência que o servidor já usa
+       (`every`, não `some`) — na dúvida, o retrato fica mais pobre, nunca
+       mentiroso.
+       E a chave legada entra no ESTADO, não só no toggle: sem isto, mexer em
+       QUALQUER outro interruptor gravaria um objeto sem `alimentacao` — e
+       chave ausente significa autorizado. Ver a nota em `toggleScope`. */
+    next.vitalidade = raw.vitalidade !== false && raw.alimentacao !== false;
+    next.alimentacao = next.vitalidade;
     setScopes(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
   const toggleScope = async (id: string, on: boolean) => {
     if (!user) return;
     const next = { ...scopes, [id]: on };
+    /* ── A REGRA DA JANELA, E ELA É INEGOCIÁVEL ────────────────────────────
+       Este handler grava o objeto `ai_scopes` INTEIRO, reconstruído a partir
+       de SCOPES. Como `alimentacao` saiu da lista acima, o primeiro toque em
+       QUALQUER interruptor desta tela apagaria a chave do banco — e para
+       qualquer função ainda velha, ou num rollback, CHAVE AUSENTE SIGNIFICA
+       AUTORIZADO. Ou seja: a pessoa mexe na tela de privacidade e a
+       consequência é reabrir o que ela havia fechado. Não existe
+       consentimento para isso, e nem aviso.
+       Por isso o toggle fundido ESPELHA o valor nas duas chaves enquanto
+       existir função velha em produção. O par desta linha é a leitura
+       derivada no servidor (`_shared/lib.ts`: `vitalidade: raw.vitalidade
+       !== false && raw.alimentacao !== false`) — as duas saem JUNTAS na
+       release de contração (R3, até 30/11/2026), nunca uma sem a outra. */
+    if (id === "vitalidade") next.alimentacao = on;
     setScopes(next);
     const { error } = await supabase.from("profiles").update({ ai_scopes: next }).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar a preferência. Tente de novo."); setScopes(scopes); return; }

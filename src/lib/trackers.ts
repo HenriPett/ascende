@@ -4,8 +4,8 @@
 // painel, os exemplos da captura e a cobrança do briefing SOMEM — mas nada
 // é apagado: desligado ≠ deletado, religa em 1 toque com histórico intacto.
 //
-// Fonte única de verdade (mesmo padrão de pillars.ts): Hoje, Alimentação,
-// Vitalidade, Mente, Score, CaptureBar, Ajustes e o snapshot do servidor
+// Fonte única de verdade (mesmo padrão de pillars.ts): Hoje, Vitalidade,
+// Mente, Score, CaptureBar, Ajustes e o snapshot do servidor
 // leem TODOS daqui. Regra de composição:
 //   ativo(tracker) = pilarAtivo(tracker.pillar) && prefs[tracker.id] !== false
 import {
@@ -15,8 +15,8 @@ import {
 import { activePillarSet, type PillarId } from "@/lib/pillars";
 
 export type TrackerId =
-  | "water" | "meals" | "protein" | "weight"          // alimentação
-  | "sleep" | "naps" | "workouts"                     // vitalidade
+  | "water" | "meals" | "protein" | "weight"          // vitalidade — o que nutre
+  | "sleep" | "naps" | "workouts"                     // vitalidade — o que sustenta
   | "mood" | "practice" | "journal" | "gratitude"     // mente
   | "spend_limit";                                    // prosperidade
 
@@ -32,12 +32,14 @@ export interface TrackerMeta {
 }
 
 export const TRACKERS: TrackerMeta[] = [
-  // Alimentação
-  { id: "meals", pillar: "alimentacao", label: "Refeições e calorias", desc: "Foto do prato, descrição e metas calóricas", icon: UtensilsCrossed, eventKinds: ["meal"] },
-  { id: "protein", pillar: "alimentacao", label: "Proteína", desc: "Meta e acompanhamento diário de proteína", icon: Beef, eventKinds: [] },
-  { id: "water", pillar: "alimentacao", label: "Água", desc: "Hidratação em 1 toque e meta diária", icon: Droplet, eventKinds: ["water"] },
-  { id: "weight", pillar: "alimentacao", label: "Peso e corpo", desc: "Peso, meta e evolução corporal", icon: Scale, eventKinds: ["weight", "body"] },
-  // Vitalidade
+  /* Vitalidade, os sete. A fusão de 17/09/2026 juntou num pilar só o que
+     nutre (refeições, proteína, água, peso) e o que sustenta (sono, sonecas,
+     treinos). O agrupamento continua aqui porque ele é verdadeiro e legível —
+     o que morreu foi o pilar separado, não a distinção. */
+  { id: "meals", pillar: "vitalidade", label: "Refeições e calorias", desc: "Foto do prato, descrição e metas calóricas", icon: UtensilsCrossed, eventKinds: ["meal"] },
+  { id: "protein", pillar: "vitalidade", label: "Proteína", desc: "Meta e acompanhamento diário de proteína", icon: Beef, eventKinds: [] },
+  { id: "water", pillar: "vitalidade", label: "Água", desc: "Hidratação em 1 toque e meta diária", icon: Droplet, eventKinds: ["water"] },
+  { id: "weight", pillar: "vitalidade", label: "Peso e corpo", desc: "Peso, meta e evolução corporal", icon: Scale, eventKinds: ["weight", "body"] },
   { id: "sleep", pillar: "vitalidade", label: "Sono", desc: "Rotina de sono, check-in matinal e metas", icon: Moon, eventKinds: ["sleep"] },
   { id: "naps", pillar: "vitalidade", label: "Sonecas", desc: "Cochilos contados à parte do sono da noite", icon: BedDouble, eventKinds: ["nap"] },
   { id: "workouts", pillar: "vitalidade", label: "Treinos", desc: "Registro de treinos, grupos musculares e meta semanal", icon: Dumbbell, eventKinds: ["workout"] },

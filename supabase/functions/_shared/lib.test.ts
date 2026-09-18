@@ -25,6 +25,7 @@ import {
   extractEventsAndMemories, isMemoryReadable, isUserOwnedMemory, type MemoryRow,
   sleepWakeDay, resolveSleepDays, SLEEP_MORNING_UNTIL_H,
   trendLines, INSIGHT_PILARES, type InsightRow,
+  canonicalPillar, canonicalPillarId, withCanonicalPillar, buildSnapshot,
 } from "./lib.ts";
 
 const USER = "11111111-1111-1111-1111-111111111111";
@@ -68,6 +69,8 @@ function fakeDb(seed: Row[] = []) {
     not(c: string, _op: string, v: any) { this.filters.push(["not_in", c, v]); return this; }
     // deno-lint-ignore no-explicit-any
     in(c: string, v: any) { this.filters.push(["in", c, v]); return this; }
+    // deno-lint-ignore no-explicit-any
+    gte(c: string, v: any) { this.filters.push(["gte", c, v]); return this; }
     order() { return this; }
     limit(n: number) { this.max = n; return this; }
     maybeSingle() { this.single = true; return this; }
@@ -77,6 +80,7 @@ function fakeDb(seed: Row[] = []) {
         if (kind === "eq") return r[col] === val;
         if (kind === "neq") return r[col] !== val;
         if (kind === "in") return (val as unknown[]).includes(r[col]);
+        if (kind === "gte") return String(r[col] ?? "") >= String(val);
         if (kind === "not_in") {
           return !String(val).replace(/[()"]/g, "").split(",").includes(String(r[col]));
         }
@@ -545,8 +549,12 @@ Deno.test("extração · ARQUIVO (bulk) nunca tem o dia deslocado", async () => 
  * Tudo aqui é função pura: sem banco, sem relógio, sem rede.
  */
 
+/* Três pilares, não quatro. Desde a fusão de 17/09/2026 a chave `alimentacao`
+   não chega até aqui: quem monta os escopos (buildSnapshot) resolve a fusão
+   antes, com `vitalidade && alimentacao`. Deixar a chave morta neste objeto
+   faria estes testes continuarem verdes enquanto o retrato vazasse. */
 const TODOS_OS_ESCOPOS = {
-  prosperidade: true, vitalidade: true, alimentacao: true, mente: true, diario: true,
+  prosperidade: true, vitalidade: true, mente: true, diario: true,
 };
 
 /** Uma linha de `insights` como o banco a devolve. */
@@ -569,7 +577,7 @@ const bloco = (linhas: string[]) => linhas.join("\n").replace(/\u00a0/g, " ");
 Deno.test("tendências · escopo fechado não vaza pelo pilar que ficou aberto", () => {
   const insights = [
     ins({ kind: "sono_gasto_seguinte" }),                      // vitalidade × prosperidade
-    ins({ kind: "refeicao_gasto_comida" }),                    // alimentacao × prosperidade
+    ins({ kind: "refeicao_gasto_comida" }),                    // vitalidade × prosperidade
     ins({ kind: "treino_sono", result: { high_group_median: 7.4, low_group_median: 6.8 } }),
   ];
   // Ela desligou a análise de prosperidade em Ajustes.
@@ -601,7 +609,7 @@ Deno.test("tendências · com todos os pilares fechados, o bloco não existe", (
   const linhas = trendLines(
     [ins({ kind: "sono_gasto_seguinte" })],
     [],
-    { prosperidade: false, vitalidade: false, alimentacao: false, mente: false, diario: false },
+    { prosperidade: false, vitalidade: false, mente: false, diario: false },
   );
   // Nem o cabeçalho, nem a linha de "nenhuma leitura": silêncio é a resposta.
   assertEquals(linhas, []);
@@ -970,20 +978,40 @@ Deno.test("tendências · o mesmo vale quando o escondido também não tem leitu
 });
 
 Deno.test("tendências · universo podado mostra o que TEM e cala sobre o que falta", () => {
-  /* `alimentacao: false` esconde exatamente uma análise (refeições × gasto).
-     Sobram duas: uma com tendência, outra sem leitura. A com tendência aparece;
-     a lista de ausências, que se lê como exaustiva, não. */
+  /* A FUSÃO SIMPLIFICOU ESTE CASO, e o teste registra a simplificação.
+
+     Antes havia DOIS caminhos podados: fechar prosperidade ou fechar
+     alimentacao escondia parte do universo. Agora só resta um — `treino_sono`
+     é a única análise de pilar único, e fechar prosperidade é a única forma de
+     esconder parte do bloco sem esconder o bloco inteiro. Menos estado, mesma
+     garantia: sobra uma leitura verdadeira, e a lista de ausências, que se lê
+     como exaustiva, não aparece. */
   const texto = bloco(trendLines(
-    [ins({ kind: "sono_gasto_seguinte" })],
+    [ins({ kind: "treino_sono", result: { high_group_median: 7.4, low_group_median: 6.8 } })],
     [],
-    { ...TODOS_OS_ESCOPOS, alimentacao: false },
+    { ...TODOS_OS_ESCOPOS, prosperidade: false },
   ));
-  assert(texto.includes("Sono × gasto do dia seguinte"), "a leitura verdadeira sumiu junto");
+  assert(texto.includes("Treino × sono"), "a leitura verdadeira sumiu junto");
   assertFalse(texto.includes("Ainda sem leitura"), "afirmou ausência sobre um universo podado");
   assertFalse(texto.includes("Refeições"), "nomeou a análise escondida");
+  assertFalse(texto.includes("Sono × gasto"), "nomeou a análise escondida");
   // E o cabeçalho não pode ensinar a dizer o que o bloco parou de afirmar.
   assertFalse(texto.includes('"ainda sem leitura" são respostas'));
   assert(texto.includes('"Ficou parecido" é resposta completa'));
+});
+
+Deno.test("tendências · fechar Vitalidade fecha TAMBÉM refeições × gasto com comida", () => {
+  /* O contrato da fusão, do lado que importa: quem fecha o pilar do corpo
+     fecha a análise de comida junto. Sob OU — a alternativa que foi recusada —
+     esta análise voltaria a aparecer sozinha para quem havia fechado
+     `alimentacao`, sem consentimento e sem aviso. */
+  const linhas = trendLines(
+    [ins({ kind: "refeicao_gasto_comida" }), ins({ kind: "treino_sono" })],
+    [],
+    { ...TODOS_OS_ESCOPOS, vitalidade: false },
+  );
+  // As três análises tocam vitalidade: com ela fechada, o bloco não existe.
+  assertEquals(linhas, []);
 });
 
 Deno.test("tendências · sem poda, a ausência continua sendo dita (e com a contagem)", () => {
@@ -1005,4 +1033,151 @@ Deno.test("tendências · sem poda, a ausência continua sendo dita (e com a con
     [], TODOS_OS_ESCOPOS,
   ));
   assert(contagem.includes("faltam 9 dias"));
+});
+
+
+/* ══ A FUSÃO: O PILAR É TABELA, E O ESCOPO É CONTRATO ══════════════════════
+
+   Duas garantias, e as duas falham em SILÊNCIO se alguém as remover:
+
+   1. O pilar de um evento é derivado do `kind`, no código — ainda não é o
+      servidor quem impõe isso (o campo só sai do CAPTURE_TOOL na release de
+      migração), mas a função que deriva já existe e já está testada aqui.
+   2. Um perfil que fechou só `alimentacao` — e que NÃO tem a chave nova —
+      continua com peso, calorias, proteína e hidratação fora do retrato,
+      mesmo lido pela função NOVA. É este teste que prova que a migration é
+      OPCIONAL, e portanto que a ordem do deploy deixou de ser risco.          */
+
+Deno.test("pilar · o kind manda, sempre — e o palpite do modelo é ignorado", () => {
+  assertEquals(canonicalPillar("transaction"), "prosperidade");
+  for (const k of ["sleep", "nap", "workout"]) assertEquals(canonicalPillar(k), "vitalidade");
+  for (const k of ["meal", "water", "weight", "body"]) assertEquals(canonicalPillar(k), "vitalidade");
+  for (const k of ["mood", "gratitude", "practice", "journal"]) assertEquals(canonicalPillar(k), "mente");
+  // Mesmo que o modelo devolva outra coisa (prompt em cache, instância velha),
+  // o kind vence: é a diferença entre derivar e confiar.
+  assertEquals(canonicalPillar("meal", "prosperidade"), "vitalidade");
+  assertEquals(canonicalPillar("sleep", "alimentacao"), "vitalidade");
+});
+
+Deno.test("pilar · `note` é DECISÃO, não mais chute do modelo", () => {
+  /* `note` nunca esteve no mapa da descrição do tool: o modelo escolhia o
+     pilar de toda anotação livre sem instrução nenhuma. Agora está escrito. */
+  assertEquals(canonicalPillar("note"), "mente");
+  assertEquals(canonicalPillar("note", "prosperidade"), "mente");
+});
+
+Deno.test("pilar · o apelido `alimentacao` fica para sempre", () => {
+  /* Um Record de uma entrada que cobre linha antiga, cliente desatualizado e
+     rollback. Ele NÃO sai na release de contração. */
+  assertEquals(canonicalPillar("kind_que_nao_existe", "alimentacao"), "vitalidade");
+  assertEquals(canonicalPillarId("alimentacao"), "vitalidade");
+  assertEquals(canonicalPillarId("vitalidade"), "vitalidade");
+  // Pilar inventado não vira pilar: plano sem pilar é caso previsto.
+  assertEquals(canonicalPillarId("saude"), null);
+  assertEquals(canonicalPillarId(undefined), null);
+  // Já um EVENTO sempre tem pilar: sem pista nenhuma, cai onde faz menos estrago.
+  assertEquals(canonicalPillar("kind_que_nao_existe", "saude"), "mente");
+});
+
+Deno.test("pilar · toda proposta sai do servidor já canônica", () => {
+  const saida = withCanonicalPillar([
+    { kind: "meal", pillar: "alimentacao", summary: "Almoço" },
+    { kind: "workout", summary: "Treino" },                    // sem o campo
+    { kind: "transaction", pillar: "mente", summary: "Mercado" },
+    null,
+  ]);
+  assertEquals(saida[0].pillar, "vitalidade");
+  assertEquals(saida[1].pillar, "vitalidade");
+  assertEquals(saida[2].pillar, "prosperidade");
+  assertEquals(saida[3], null);
+  assertEquals(saida[0].summary, "Almoço", "a normalização mexeu em outro campo");
+});
+
+Deno.test("escopo · quem fechou só `alimentacao`, SEM a chave nova, continua fechado", async () => {
+  /* O TESTE QUE TORNA A MIGRATION OPCIONAL.
+
+     Perfil como ele está hoje no banco de quem desligou a análise de comida
+     em Ajustes: `vitalidade: true`, `alimentacao: false`, e nenhuma chave
+     nova. Lido pela função NOVA, o retrato não pode conter nada do corpo — é
+     a LEITURA DERIVADA que segura isso, não a migration. Se este teste passar,
+     a migration pode rodar antes, depois, no meio ou nunca. */
+  const hoje = new Date().toISOString();
+  const retratoCom = (scopes: Record<string, unknown>) => {
+    const { db } = fakeDb();
+    const seed = (tabela: string, linhas: Row[]) => {
+      for (const l of linhas) db.from(tabela).insert(l).run();
+    };
+    seed("profiles", [{
+      user_id: USER, name: "Ana", ai_scopes: scopes,
+      pillars: ["vitalidade", "alimentacao"],
+      calorie_goal_kcal: 2000, protein_goal_g: 140, water_goal_ml: 3000,
+      weight_goal_kg: 78, weekly_workouts_goal: 4, sleep_goal_h: 8,
+    }]);
+    seed("life_events", [
+      { user_id: USER, pillar: "alimentacao", kind: "weight", occurred_at: hoje, payload: { kg: 101.5 } },
+      { user_id: USER, pillar: "alimentacao", kind: "body", occurred_at: hoje, payload: { body_fat_pct: 28 } },
+      { user_id: USER, pillar: "alimentacao", kind: "meal", occurred_at: hoje, payload: { calories: 650, protein_g: 40, description: "Frango com arroz" } },
+      { user_id: USER, pillar: "alimentacao", kind: "water", occurred_at: hoje, payload: { ml: 1500 } },
+      { user_id: USER, pillar: "vitalidade", kind: "workout", occurred_at: hoje, payload: { description: "Costas" } },
+    ]);
+    seed("insights", [{
+      user_id: USER, kind: "refeicao_gasto_comida", status: "tendencia", sample_size: 28,
+      period_start: "2026-08-15", period_end: "2026-09-12",
+      result: { high_group_median: 41, low_group_median: 74 },
+      computed_at: "2026-09-12T10:00:00Z",
+    }]);
+    return buildSnapshot(db, USER);
+  };
+
+  const proibidos = [
+    "PESO:", "COMPOSIÇÃO CORPORAL", "101.5",
+    "META CALÓRICA", "kcal",
+    "PROTEÍNA", "HIDRATAÇÃO", "REFEIÇÕES DE HOJE", "Frango com arroz",
+    "Refeições × gasto com comida",
+  ];
+
+  /* CONTROLE, e ele não é cerimônia: sem esta metade, um retrato que voltasse
+     VAZIO (banco falso mudo, exceção engolida, consulta renomeada) passaria
+     no teste anunciando uma privacidade que na verdade é um bug. Com o escopo
+     ABERTO, cada string proibida tem de aparecer. */
+  const aberto = await retratoCom({ vitalidade: true, alimentacao: true });
+  for (const esperado of proibidos) {
+    assert(
+      aberto.includes(esperado),
+      `o teste está cego: "${esperado}" não aparece nem com o escopo ABERTO`,
+    );
+  }
+
+  const retrato = await retratoCom({ vitalidade: true, alimentacao: false });
+  for (const proibido of proibidos) {
+    assertFalse(
+      retrato.includes(proibido),
+      `vazou "${proibido}" para quem fechou a análise do corpo (a chave nova nem existe no perfil)`,
+    );
+  }
+
+  /* E o que ela fechou some INTEIRO: sono e treino vão junto, porque o escopo
+     é do pilar fundido. É o custo assumido do E — perda de utilidade,
+     visível e reversível com um toque —, e não o custo do OU, que seria
+     devolver a análise do corpo sem ela ter pedido. */
+  assertFalse(retrato.includes("META DE TREINOS"), "meio corpo visível voltou a existir");
+  assertFalse(retrato.includes("META DE SONO"), "meio corpo visível voltou a existir");
+
+  // A linha de privacidade existe, e fala em português, não em id de banco.
+  assert(retrato.includes("PRIVACIDADE:"));
+  assert(retrato.includes("Vitalidade"), "a linha de privacidade não nomeou a área");
+  assertFalse(retrato.includes("alimentacao"), "id cru do sistema foi entregue ao modelo");
+  assertFalse(/Pilares ativos:.*\balimentacao\b/.test(retrato));
+});
+
+Deno.test("escopo · com a chave nova já gravada, o resultado é o MESMO", () => {
+  /* Idempotência da leitura derivada: `!== false && !== false`. Perfil
+     migrado, perfil não migrado e perfil pós-rollback chegam ao mesmo lugar. */
+  const deriva = (raw: Record<string, unknown>) =>
+    raw.vitalidade !== false && raw.alimentacao !== false;
+  assertFalse(deriva({ vitalidade: true, alimentacao: false }));   // não migrado
+  assertFalse(deriva({ vitalidade: false, alimentacao: false }));  // migrado (E)
+  assertFalse(deriva({ vitalidade: false }));                      // chave antiga já removida
+  assert(deriva({ vitalidade: true, alimentacao: true }));
+  assert(deriva({}));                                              // conta nova: tudo aberto
 });
