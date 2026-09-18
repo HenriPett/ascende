@@ -1,11 +1,14 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import Mokari from "@/components/core/Mokari";
 import MokariInvite from "@/components/core/MokariInvite";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
-  ChevronRight, Layers, BarChart3, ClipboardList, Swords,
+  ChevronRight, Layers, BarChart3, ClipboardList, Swords, Users,
   AlertTriangle, RefreshCw, Loader2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -108,6 +111,45 @@ function HubSection({
   );
 }
 
+/** O estado do Social em UMA LINHA: quantos grupos, e o desafio em curso.
+ *
+ *  Consulta própria e barata (duas contagens), fora de `useJornadaData` porque
+ *  o Social é opcional: quem nunca entrou num grupo não deve pagar nem uma
+ *  consulta a mais para ver um hub que não fala dele.
+ *
+ *  Ela NUNCA traz contagem de não-lidos, de recados novos nem de convites
+ *  pendentes — nada que possa virar bolinha. O hub diz onde as coisas estão;
+ *  ele não cria urgência. */
+function useSocialHubQuery() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["social-hub", user?.id],
+    enabled: !!user,
+    staleTime: 1000 * 60 * 5,
+    queryFn: async () => {
+      const { data: vinculos, error } = await supabase
+        .from("group_members").select("group_id").eq("user_id", user!.id);
+      if (error) throw error;
+      const ids = (vinculos ?? []).map((v) => v.group_id);
+      if (!ids.length) return { grupos: 0, desafio: null as string | null };
+
+      const hoje = todayISO();
+      const { data: desafios } = await supabase
+        .from("challenges").select("name,ends_on")
+        .in("group_id", ids).gte("ends_on", hoje)
+        .order("ends_on", { ascending: true }).limit(1);
+      const d = (desafios ?? [])[0] as { name: string; ends_on: string } | undefined;
+      return {
+        grupos: ids.length,
+        desafio: d
+          ? `${d.name.toLowerCase()} termina ${new Date(d.ends_on + "T00:00:00")
+            .toLocaleDateString("pt-BR", { weekday: "long" })}`
+          : null,
+      };
+    },
+  });
+}
+
 export default function Jornada() {
   const { profile } = useProfile();
   const { level } = useXp();
@@ -117,14 +159,15 @@ export default function Jornada() {
   const plans = useJornadaPlansQuery();
   const habits = useJornadaHabitsQuery();
   const battles = useBattlesTodayQuery();
+  const social = useSocialHubQuery();
 
   const algumErro = activity.isError || trends.isError || plans.isError
-    || habits.isError || battles.isError;
+    || habits.isError || battles.isError || social.isError;
   const recarregando = activity.isFetching || trends.isFetching || plans.isFetching
-    || habits.isFetching || battles.isFetching;
+    || habits.isFetching || battles.isFetching || social.isFetching;
   const recarregar = () => {
     void activity.refetch(); void trends.refetch(); void plans.refetch();
-    void habits.refetch(); void battles.refetch();
+    void habits.refetch(); void battles.refetch(); void social.refetch();
   };
 
   /* ── Pilares ── */
@@ -187,6 +230,25 @@ export default function Jornada() {
       : undefined;
   const planState = planCount > 0
     ? `${planCount} ${planCount === 1 ? "plano ativo" : "planos ativos"}${plans.data?.latest ? ` · ${plans.data.latest}` : ""}`
+    : undefined;
+
+  /* ── Social: uma linha, e nada mais ───────────────────────────────────
+        Estado em uma linha, no mesmo formato das outras seções, e SEM badge,
+        SEM bolinha e SEM contador de não-lidos — o `dots` do HubSection só
+        carrega cor de pilar, e é para continuar assim. Bolinha vermelha é o
+        motor de "abre o app", que é justamente o que o Dilema 4 proíbe.
+        Quem nunca abrir o Social não deve sentir que ele existe: sem grupo,
+        a linha diz o estado e o convite fica em tom baixo, como em Batalhas. */
+  const grupos = social.data?.grupos ?? 0;
+  const socialState = grupos > 0
+    ? `${grupos} ${grupos === 1 ? "grupo" : "grupos"}${social.data?.desafio ? ` · ${social.data.desafio}` : ""}`
+    : undefined;
+  const socialInvite = grupos === 0
+    ? {
+      line: "Nenhum grupo",
+      label: "Criar um grupo, se fizer sentido",
+      to: appPath("social"),
+    }
     : undefined;
 
   /* ── Batalhas: tom baixo e condicional, de propósito. É o assunto mais
@@ -306,6 +368,15 @@ export default function Jornada() {
           error={plans.isError || habits.isError}
           state={planState}
           invite={planInvite}
+        />
+        <HubSection
+          to={appPath("social")}
+          title="Social"
+          icon={Users}
+          loading={social.isLoading}
+          error={social.isError}
+          state={socialState}
+          invite={socialInvite}
         />
         <HubSection
           to={appPath("batalhas")}

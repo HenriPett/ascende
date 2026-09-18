@@ -32,6 +32,7 @@ const Batalhas = lazy(() => import("@/pages/Batalhas"));
 const Planos = lazy(() => import("@/pages/Planos"));
 const Ajustes = lazy(() => import("@/pages/Ajustes"));
 const Assinatura = lazy(() => import("@/pages/Assinatura"));
+const Social = lazy(() => import("@/pages/Social"));
 
 /** Prefixo da área autenticada. */
 export const APP_BASE = "/app";
@@ -45,9 +46,16 @@ export interface AppRoute {
   page: string;
   /**
    * `legacy` = existia antes da Fase 4 e é CONGELADA: não pode sumir, mudar de
-   * caminho nem virar redirect. `fase-4` = nasceu agora.
+   * caminho nem virar redirect. Os outros valores dizem QUAL entrega criou a
+   * rota — e alargar esta união é erro de compilação de propósito: acrescentar
+   * rota nova obriga a passar por aqui, que é o ponto do arquivo inteiro.
+   *
+   * `social` não é número de fase porque o Social não tem um: os documentos o
+   * chamam de trilha, não de fase. Inventar "fase-7" aqui seria registrar uma
+   * procedência que não existe em lugar nenhum — e este arquivo é, antes de
+   * tudo, um registro de procedência.
    */
-  since: "legacy" | "fase-4";
+  since: "legacy" | "fase-4" | "social";
 }
 
 /**
@@ -83,6 +91,23 @@ export const APP_ROUTES: readonly AppRoute[] = [
   { path: "ajustes", Component: Ajustes, page: "Ajustes", since: "legacy" },
   // ─── Fase 4 ───
   { path: "jornada", Component: Jornada, page: "Jornada", since: "fase-4" },
+  /* ─── Social ───
+     A ROTA FALTOU, e o buraco só apareceu quando alguém CLICOU: o cartão em
+     Pilares.tsx:180 e a linha do hub em Jornada.tsx apontavam para
+     /app/social, e o caminho não existia — 404 em cima de um link que o
+     próprio app oferece. É o vão clássico de trabalho em paralelo: quem fez a
+     tela achou que a rota vinha junto, quem cuidava das rotas não soube que
+     havia tela nova.
+
+     É exatamente para isso que esta tabela é DADO e não JSX solto: para uma
+     rota não nascer — nem morrer — sem ninguém ver. Ela não impediu o buraco
+     porque ninguém passou por aqui; o que ela faz é garantir que, uma vez
+     escrita, a rota tenha teste e não possa ser removida em silêncio.
+
+     UMA rota só, e o grupo aberto vive na query (`?g=`): ver Social.tsx:99.
+     Não há /app/social/:id, e é decisão — sub-rota por grupo faria o endereço
+     carregar a identidade de um grupo privado. */
+  { path: "social", Component: Social, page: "Social", since: "social" },
 ] as const;
 
 /**

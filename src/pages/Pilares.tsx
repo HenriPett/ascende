@@ -8,7 +8,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { PILLARS, activePillarSet, normalizePillars, type PillarId } from "@/lib/pillars";
-import { ChevronRight, Swords, ClipboardList, Plus, Loader2, Layers } from "lucide-react";
+import { ChevronRight, Swords, ClipboardList, Plus, Loader2, Layers, Users } from "lucide-react";
 import FirstTimeTip from "@/components/core/FirstTimeTip";
 import QueryError from "@/components/core/QueryError";
 
@@ -164,6 +164,27 @@ export default function Pilares() {
               <p className="font-semibold">Batalhas</p>
               <p className="text-xs text-muted-foreground truncate">
                 As lutas que você escolheu enfrentar — sem julgamento, com método
+              </p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+          </Link>
+        </Card>
+
+        {/* Social: transversal como Batalhas, e pelo mesmo motivo — não é área
+            da vida, é jeito de percorrer as outras. Aqui, e NÃO como sexto alvo
+            da barra: a barra tem cinco alvos e um só protagonista dourado, e
+            negociar isso seria resolver o problema errado.
+            Sem badge e sem bolinha, hoje e sempre: bolinha vermelha é o motor
+            de "abre o app", que o Dilema 4 proíbe. */}
+        <Card className="border-gold/30">
+          <Link to="/app/social" className="flex items-center gap-4 p-4">
+            <div className="w-11 h-11 rounded-md grid place-items-center shrink-0 bg-gold/10">
+              <Users className="w-5 h-5 text-gold" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold">Social</p>
+              <p className="text-xs text-muted-foreground truncate">
+                Um grupo pequeno que se acompanha na semana — sem plateia, sem placar
               </p>
             </div>
             <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
