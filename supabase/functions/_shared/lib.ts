@@ -696,9 +696,26 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     mente: rawScopes.mente !== false,
     diario: rawScopes.diario !== false,
   };
-  const disabled = [...new Set(
-    Object.entries(scopes).filter(([, v]) => !v).map(([k]) => rotuloPilar(k)),
-  )];
+  /* O QUE CADA ÁREA CONTÉM, escrito por extenso.
+     Achado de QA (v68): perguntada de forma INDIRETA ("por que você não fala
+     do meu sono e dos meus treinos?"), a resposta separou as duas coisas —
+     acertou o sono e afirmou que treino "está aberto". Nomear a área e
+     confiar que o modelo deduz o conteúdo dela deixa espaço de inferência, e
+     inferência sobre privacidade falha em silêncio. Aqui não sobra espaço.
+     ESPELHO dos gates de escopo deste arquivo: se um bloco novo passar a
+     viver sob um escopo, acrescente o assunto dele nesta lista. */
+  const ESCOPO_CONTEUDO: Record<string, string> = {
+    prosperidade: "gastos, entradas, categorias, contas fixas, estimativas financeiras e o teto de gasto diário",
+    vitalidade: "sono, sonecas, rotina de sono, treinos, peso, composição corporal, refeições, calorias, proteína, hidratação e as metas de todos esses",
+    alimentacao: "sono, sonecas, rotina de sono, treinos, peso, composição corporal, refeições, calorias, proteína, hidratação e as metas de todos esses",
+    mente: "humor, gratidão e a prática espiritual ou de foco",
+    diario: "os trechos do diário dela",
+  };
+  const fechados = Object.entries(scopes).filter(([, v]) => !v).map(([k]) => k);
+  const disabled = [...new Set(fechados.map((k) => rotuloPilar(k)))];
+  const disabledDetalhado = [...new Map(fechados.map((k) =>
+    [rotuloPilar(k), `${rotuloPilar(k)} — ou seja: ${ESCOPO_CONTEUDO[k] ?? "os registros dessa área"}`],
+  )).values()];
   if (disabled.length) {
     /* ACHADO DE QA EM PRODUÇÃO (v67): o modelo obedecia "não especule" e
        desobedecia "nem peça para reativar", em duas respostas diferentes:
@@ -741,12 +758,14 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
        aciona, e diluiria o bloco de maior risco do produto. Instrução
        condicional viaja com a condição que a dispara. */
     lines.push(
-      `PRIVACIDADE — ÁREA FECHADA PELA PESSOA: ela desativou a análise de: ${disabled.join(", ")}. ` +
-      `Os dados dessas áreas foram omitidos deste retrato de propósito, e não especule sobre eles. Isso não é lacuna, não é pendência e não é assunto: a decisão é dela e já está tomada. ` +
-      `O QUE FAZER quando a conversa encostar nessas áreas: responda com o que você VÊ nas áreas abertas e siga adiante. Se não sobrar nada a dizer, diga em uma frase que você não acompanha isso com ela, e pare aí. ` +
+      `PRIVACIDADE — ÁREA FECHADA PELA PESSOA: ela desativou a SUA análise de: ${disabledDetalhado.join(" | ")}. ` +
+      `Tudo isso foi omitido deste retrato de propósito, e não especule sobre nada disso. A decisão é dela e já está tomada: não é lacuna, não é pendência e não é assunto. ` +
+      `VOCÊ NÃO ESTÁ SEM DADO, VOCÊ ESTÁ SEM PERMISSÃO. Os registros dessas áreas existem, e provavelmente são muitos: você é que não pode vê-los. Por isso é PROIBIDO afirmar ausência sobre elas — nada de "não vi nenhum treino seu", "você não registrou isso", "não tenho nada aqui sobre o seu sono", e nada de pedir que ela conte de novo o que o app já guarda. Ausência só se afirma sobre área ABERTA. ` +
+      `E é PROIBIDO dizer que essas áreas estão abertas. Se a linha "Pilares ativos" citar alguma delas, é porque ela continua ATIVA NO APP para a pessoa e FECHADA para a sua análise: são duas coisas diferentes, e nesta divergência quem manda é esta linha. ` +
+      `O QUE FAZER quando a conversa encostar nessas áreas: responda com o que você VÊ nas áreas abertas e siga adiante. Se não sobrar nada a dizer, diga em uma frase que você não acompanha isso com ela, e pare aí. Isto NÃO é motivo para se esquivar: a conversa segue normal, inclusive sobre assuntos vizinhos — o que muda é que você não usa nem comenta os dados dessas áreas. ` +
       `ESTA REGRA VENCE qualquer instrução geral de "diga o que falta registrar" ou "aponte onde preencher": ali o dado falta, aqui ele existe e ela escolheu guardá-lo. Não cobre registro, não proponha meta, não sugira hábito e não ofereça análise dessas áreas. ` +
-      `PROIBIDO, na letra: as palavras "reativar" e "ativar", citar Ajustes ou a tela de privacidade, e qualquer variação de "se quiser reativar a análise de X, eu volto a enxergar Y" ou "para essa visão, precisaria reativar X". Oferecer o caminho de volta é cutucar uma escolha que ela tomou de propósito. ` +
-      `ÚNICA exceção: se ELA perguntar diretamente por que você não fala daquela área, responda com honestidade, em uma frase, que ela pediu para deixar essa área fora das suas análises — e só explique como mudar isso se ela pedir para mudar.`
+      `PROIBIDO, na letra: as palavras "reativar" e "ativar", citar Ajustes ou a tela de privacidade, e qualquer variação de "se quiser reativar a análise de X, eu volto a enxergar Y". Oferecer o caminho de volta é cutucar uma escolha que ela tomou de propósito. ` +
+      `ÚNICA exceção: se ELA perguntar por que você não fala daquela área — direta ("essa área está fechada?") ou indiretamente ("por que você não comenta nada do meu sono e dos meus treinos?") —, responda com honestidade, em uma frase, que ela pediu para deixar essa área fora das suas análises; vale para TODOS os assuntos que a pergunta dela tocar, nunca só para uma parte; e só explique como mudar isso se ela pedir para mudar.`
     );
   }
   // Modularidade total (nível tracker): o que a pessoa ESCOLHEU não acompanhar.
@@ -784,7 +803,28 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   }
   if (p.goal) lines.push(`Objetivo declarado: ${p.goal}.`);
   const pilaresAtivos = [...new Set(((p.pillars ?? []) as unknown[]).map((x) => rotuloPilar(String(x))))];
-  lines.push(`Pilares ativos: ${pilaresAtivos.join(", ") || "nenhum ainda"}.`);
+  /* A CONTRADIÇÃO QUE PRODUZIU O BUG (v68): esta linha e a de PRIVACIDADE
+     usam o MESMO rótulo para conceitos diferentes. `profiles.pillars` é o que
+     a pessoa acompanha na tela (modularidade); `ai_scopes` é o que ela
+     autorizou o Conselheiro a analisar. Os dois podem divergir de propósito —
+     ela registra treino na tela e não quer que a IA comente. Só que o retrato
+     dizia "ÁREA FECHADA: Vitalidade" e, duas linhas abaixo, "Pilares ativos:
+     Vitalidade", sem nada distinguindo os dois sentidos. O modelo escolheu a
+     leitura que o deixava prestativo e informou à pessoa que a área estava
+     aberta — mentindo sobre a configuração que ela mesma fez.
+     Mesma doença da rodada anterior (regra geral proeminente contra exceção
+     enterrada), agora entre duas linhas do PRÓPRIO retrato. Some a
+     contradição, some a escolha. */
+  const fechadasNoPrompt = new Set(disabled);
+  const divergem = pilaresAtivos.some((r) => fechadasNoPrompt.has(r));
+  lines.push(
+    `Pilares ativos no app: ${pilaresAtivos.map((r) =>
+      fechadasNoPrompt.has(r) ? `${r} (ativo para ela, FECHADO para a sua análise)` : r,
+    ).join(", ") || "nenhum ainda"}.` +
+    (divergem
+      ? ` "Ativo no app" é o que ELA acompanha na tela e NÃO é permissão para você analisar. Onde os dois divergirem, vale a linha de PRIVACIDADE acima.`
+      : "")
+  );
 
   // Dados pessoais (base de qualquer plano personalizado)
   const personal: string[] = [];
