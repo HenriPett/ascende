@@ -127,10 +127,14 @@ function useSocialHubQuery() {
     enabled: !!user,
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
+      /* `v_meus_grupos` em vez de `group_members`: a view já filtra o que é
+         MEU e já sabe dizer o que está VIGENTE — um combinado que terminou não
+         deve continuar contando como "2 grupos" no hub. */
       const { data: vinculos, error } = await supabase
-        .from("group_members").select("group_id").eq("user_id", user!.id);
+        .from("v_meus_grupos").select("id,vigente");
       if (error) throw error;
-      const ids = (vinculos ?? []).map((v) => v.group_id);
+      const ids = ((vinculos ?? []) as { id: string; vigente: boolean }[])
+        .filter((g) => g.vigente).map((g) => g.id);
       if (!ids.length) return { grupos: 0, desafio: null as string | null };
 
       const hoje = todayISO();
