@@ -83,9 +83,18 @@ const mentionsMokari = (text: string) => /mokari/i.test(text);
 describe("regra 5 — desativar o Mokari não afeta função nenhuma", () => {
   it("nada além do próprio Mokari e dos pontos de integração o menciona", () => {
     const permitido = new Set([...MOKARI_FILES, ...INTEGRATION_POINTS]);
+    /* COMENTÁRIO NÃO É CONHECIMENTO — mesma razão já escrita acima de
+       stripComments, agora aplicada também aqui. A regra 5 é sobre o que o
+       código FAZ: um `if (mokariEnabled)` dentro do XP é a violação. Um
+       comentário que cita `lib/mokari.ts` como PRECEDENTE de desenho ("regra
+       ética como função pura, com teste que falha quando alguém a remove") não
+       liga nada a nada — e reprovar por isso ensinaria a apagar a procedência,
+       que é justamente o que esta casa manda escrever.
+       Achado ao construir o Social (18/09/2026): os módulos novos citam o
+       Mokari como precedente, e o teste os acusava de conhecê-lo. */
     const intrusos = allSourceFiles()
       .filter((f) => !permitido.has(f))
-      .filter((f) => mentionsMokari(read(f)));
+      .filter((f) => mentionsMokari(stripComments(read(f))));
 
     // Se este teste falhar, a pergunta NÃO é "adiciono na lista?". É: por que
     // esta parte do app precisa saber que o Mokari existe? Se a resposta

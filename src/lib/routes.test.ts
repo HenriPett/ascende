@@ -13,7 +13,8 @@
 // conferida contra o que o app realmente resolve, via matchRoutes — o mesmo
 // matcher do react-router em produção, não uma imitação.
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { matchRoutes, Navigate, type RouteObject } from "react-router-dom";
 import {
   APP_ROUTES, FROZEN_LEGACY_PATHS, EXTERNALLY_LINKED, QUERY_DEPENDENT,
@@ -109,9 +110,83 @@ describe("nenhuma rota de /app pode sumir", () => {
     expect(bloco).not.toContain("<Navigate");
   });
 
+  it("TODA rota da tabela resolve — não só as congeladas", () => {
+    /* O buraco que deixou /app/social nascer morto: a garantia de resolução
+       existia só para FROZEN_LEGACY_PATHS, e rota NOVA não entra nessa lista
+       (ela é dos caminhos anteriores à Fase 4, copiada à mão para que remover
+       doa). Resultado: uma entrada nova podia ficar meses sem nenhuma prova de
+       que abre alguma coisa — ou, como aconteceu, nem ser escrita.
+       Isto cobre a tabela INTEIRA, para sempre, sem lista para manter. */
+    for (const r of APP_ROUTES) {
+      const url = appPath(r.path);
+      expect(pageFor(url), `${url} está na tabela e NÃO RESOLVE`).toBe(r.page);
+    }
+  });
+
+  it("todo `page` é único — o teste compara contra rótulo, e rótulo repetido confunde", () => {
+    const pages = APP_ROUTES.map((r) => r.page);
+    expect(new Set(pages).size, `rótulos repetidos: ${pages.join(", ")}`).toBe(pages.length);
+  });
+
   it("não há caminho duplicado (duas telas disputando o mesmo endereço)", () => {
     const paths = APP_ROUTES.map((r) => r.path);
     expect(new Set(paths).size).toBe(paths.length);
+  });
+});
+
+/* ═══ Todo link do app aponta para algum lugar ════════════════════════ */
+
+describe("nenhum link do app leva a 404", () => {
+  /* O ACHADO QUE ORIGINOU ESTE BLOCO (18/09/2026): o cartão do Social em
+     Pilares.tsx e a linha do hub em Jornada.tsx apontavam para /app/social, e
+     a rota não existia. Ninguém errou de propósito — quem fez a tela achou que
+     a rota vinha junto, quem cuidava das rotas não soube que havia tela nova.
+     Só apareceu porque uma pessoa CLICOU.
+
+     Nenhum teste podia pegar isso, porque nenhum olhava para a ponta de lá: os
+     testes provavam que as rotas existiam, nunca que os LINKS chegavam a
+     alguma. Este olha. É a varredura que fecha o vão entre quem escreve tela e
+     quem escreve rota — que é onde este tipo de buraco mora sempre. */
+
+  /** Todo arquivo de src, menos os testes. */
+  function fontesDoApp(dir = "src", out: string[] = []): string[] {
+    for (const entry of readdirSync(dir)) {
+      const caminho = join(dir, entry);
+      if (statSync(caminho).isDirectory()) { fontesDoApp(caminho, out); continue; }
+      if (/\.(ts|tsx)$/.test(entry) && !/\.test\.tsx?$/.test(entry)) out.push(caminho);
+    }
+    return out;
+  }
+
+  /** Comentários fora: este arquivo e o routes.ts CITAM caminhos para explicar
+   *  regras, e explicar não pode reprovar. */
+  const semComentarios = (t: string) =>
+    t.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").map((l) => l.replace(/\/\/.*$/, "")).join("\n");
+
+  /** Os destinos que o app monta: literais "/app/..." e chamadas appPath("..."). */
+  function destinosDe(fonte: string): string[] {
+    const texto = semComentarios(fonte);
+    const literais = [...texto.matchAll(/["'`](\/app(?:\/[a-z0-9-]*)?)(?:[?#][^"'`]*)?["'`]/g)]
+      .map((m) => m[1]);
+    const porHelper = [...texto.matchAll(/appPath\(\s*["']([a-z0-9-]*)["']\s*\)/g)]
+      .map((m) => appPath(m[1]));
+    return [...literais, ...porHelper];
+  }
+
+  it("todo destino /app montado no código resolve para uma tela", () => {
+    const quebrados: string[] = [];
+    let conferidos = 0;
+    for (const arquivo of fontesDoApp()) {
+      for (const destino of destinosDe(readFileSync(arquivo, "utf8"))) {
+        conferidos++;
+        if (!pageFor(destino)) quebrados.push(`${destino}  ← ${arquivo}`);
+      }
+    }
+    // Guarda contra o no-op: se o varredor parar de achar destinos, ele passa
+    // sem olhar nada — e um teste que tranquiliza sem provar é pior que nenhum.
+    expect(conferidos, "o varredor não achou destino nenhum; a regex quebrou")
+      .toBeGreaterThan(10);
+    expect(quebrados, `Links para rota inexistente:\n  ${quebrados.join("\n  ")}`).toEqual([]);
   });
 });
 
@@ -140,6 +215,27 @@ describe("query string e hash preservados", () => {
       expect(pageFor(url)).toBe("Assinatura");
       expect(new URL(url, "https://ascende.site").searchParams.get("status")).toBe(status);
     }
+  });
+
+  it("o link de CONVITE do Social resolve com a query que ele carrega", () => {
+    /* O convite é a única porta de entrada do Social (C6: sem descoberta
+       pública, só convite direto), e ele viaja FORA do app — a pessoa manda o
+       link para um amigo por WhatsApp. Social.tsx:501 monta
+       `${origin}/app/social?convite=<código>`, e o grupo aberto vive em `?g=`.
+       Se o caminho parar de resolver, não quebra uma tela: quebra todo convite
+       já enviado, e quem recebeu não tem como saber o que era.
+
+       NOTA DE DÍVIDA, e ela é real: `social` NÃO está em QUERY_DEPENDENT nem em
+       EXTERNALLY_LINKED, embora seja as duas coisas. Os dois registros exigem
+       que a chave esteja em FROZEN_LEGACY_PATHS, que é a lista dos caminhos
+       ANTERIORES à Fase 4 — rota nova não cabe lá, e forçar seria mentir sobre
+       a procedência. Enquanto os registros não souberem expressar "nova E
+       linkada de fora", esta asserção é a cobertura. */
+    const comConvite = `${appPath("social")}?convite=ABC123`;
+    const comGrupo = `${appPath("social")}?g=7f3e`;
+    expect(pageFor(comConvite), "o link de convite deixou de resolver").toBe("Social");
+    expect(pageFor(comGrupo)).toBe("Social");
+    expect(new URL(comConvite, "https://ascende.site").searchParams.get("convite")).toBe("ABC123");
   });
 
   it("toda rota marcada como dependente de query está entre as congeladas", () => {

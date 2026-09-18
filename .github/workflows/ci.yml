@@ -73,3 +73,81 @@ jobs:
         run: |
           # Garante que o arquivo de banco não ficou com marcadores de conflito
           ! grep -nE '^(<<<<<<<|=======|>>>>>>>)' supabase/setup.sql
+
+  # ─────────────────────────────────────────────────────────────────────
+  # PRIVACIDADE DO SOCIAL, EM POSTGRES DE VERDADE
+  #
+  # O Social é a primeira camada do Ascende em que a linha de uma pessoa é
+  # lida por outra. A defesa dela são ~35 políticas de RLS, e a diferença
+  # entre "a política está certa" e "a política ESTÁ certa" só aparece quando
+  # três usuários com identidades diferentes tentam ler um do outro — o que
+  # nenhum teste de TypeScript alcança.
+  #
+  # POR QUE ISTO NÃO PODE FICAR NO "rode antes de subir": o autoteste
+  # estrutural é o que detecta uma tabela NOVA do Social nascendo com
+  # privilégio para a service_role. Um teste de privacidade que não roda
+  # sozinho é um teste que alguém vai esquecer de rodar exatamente no commit
+  # em que ele importava.
+  #
+  # Job separado de propósito: se o Postgres ficar lento ou instável, ele não
+  # segura o retorno do lint e dos testes de unidade.
+  # ─────────────────────────────────────────────────────────────────────
+  privacidade-do-social:
+    name: Privacidade do Social (RLS com usuários de verdade)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ascende
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      PSQL: psql -h localhost -U postgres -d ascende -v ON_ERROR_STOP=1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Levanta o schema do zero (stub do auth, setup e migrations em ordem)
+        run: |
+          set -euo pipefail
+          # O schema `auth` é do GoTrue e não existe num Postgres de baunilha;
+          # o stub entrega só o que as políticas chamam (auth.uid, auth.role).
+          $PSQL -q -f supabase/tests/_stub_auth.sql
+          $PSQL -q -f supabase/setup.sql
+          # Ordem lexicográfica = ordem cronológica (o nome começa no
+          # timestamp). É a MESMA ordem do `supabase db push`, e é de
+          # propósito: se a cadeia não aplica do zero aqui, ela não aplica
+          # num ambiente novo.
+          for m in supabase/migrations/*.sql; do
+            echo "── $(basename "$m")"
+            $PSQL -q -f "$m"
+          done
+
+      - name: As quatro revogações, com três pessoas de verdade
+        run: |
+          set -euo pipefail
+          $PSQL -f supabase/tests/social_quatro_revogacoes.sql
+
+          falhas=$($PSQL -tAc "select count(*) filter (where not ok) from _r")
+          total=$($PSQL -tAc "select count(*) from _r")
+          echo "verificações: $total · falhas: $falhas"
+
+          # GUARDA CONTRA O NO-OP SILENCIOSO, e ela não é paranoia: um arquivo
+          # de teste que pare de rodar (renomeado, esvaziado, com um `\q` no
+          # meio) reporta zero falhas — e zero falhas de zero verificações é
+          # exatamente o relatório que tranquiliza sem provar nada.
+          if [ "$total" -lt 30 ]; then
+            echo "::error::só $total verificações rodaram (esperado 40+). O arquivo de teste parou de rodar — isso é falha, não sucesso."
+            exit 1
+          fi
+          if [ "$falhas" != "0" ]; then
+            echo "::error::$falhas verificação(ões) de privacidade falharam. Cada uma é um vazamento ou uma revogação que não revoga."
+            $PSQL -c "select n, coalesce(obs,'') from _r where not ok order by n"
+            exit 1
+          fi
