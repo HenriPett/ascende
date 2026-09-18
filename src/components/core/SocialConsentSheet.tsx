@@ -82,7 +82,16 @@ export default function SocialConsentSheet({
   onSalvar: (proximos: { key: SocialMetricKey; meta: number }[]) => Promise<boolean>;
   /** "entrar" muda só os rótulos dos botões: a folha é a mesma, e é de
    *  propósito — quem revisita reconhece a tela em que decidiu. */
-  modo: "entrar" | "revisar";
+  /** O ATO que abriu esta folha, e não o estado do consentimento:
+   *  · `entrar`  — acabei de aceitar um convite. Ainda não sou membro no meu
+   *                próprio entendimento, e o botão fecha a entrada.
+   *  · `criar`   — acabei de criar o grupo. Já sou dona dele: "Entrar no
+   *                grupo" seria o app me convidando para onde eu já estou.
+   *  · `revisar` — abri pela engrenagem, a qualquer momento.
+   *  A distinção existe porque o modo já foi derivado de "ainda não consenti
+   *  nada" uma vez, e aí a dona de um grupo de três semanas lia "Entrar no
+   *  grupo" toda vez que abria a folha. */
+  modo: "entrar" | "criar" | "revisar";
 }) {
   /* O estado é chave → META, não um conjunto de chaves, e isso não é detalhe
      de implementação: `group_data_consents.goal_value` é NOT NULL, então não
@@ -240,7 +249,8 @@ export default function SocialConsentSheet({
           >
             {salvando
               ? <Loader2 className="w-4 h-4 animate-spin" />
-              : modo === "entrar" ? "Entrar no grupo" : "Salvar"}
+              : modo === "entrar" ? "Entrar no grupo"
+                : modo === "criar" ? "Começar assim" : "Salvar"}
           </Button>
 
           {/* O caminho de verdade: dá para ser só torcida. Na revisão ele vira
@@ -249,7 +259,9 @@ export default function SocialConsentSheet({
             variant="ghost" className="w-full min-h-11 text-muted-foreground"
             disabled={salvando} onClick={() => salvar([])}
           >
-            {modo === "entrar" ? "Entrar sem compartilhar nada ainda →" : "Desligar tudo"}
+            {modo === "entrar" ? "Entrar sem compartilhar nada ainda →"
+              : modo === "criar" ? "Começar sem compartilhar nada →"
+                : "Desligar tudo"}
           </Button>
         </div>
       </SheetContent>

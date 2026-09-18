@@ -160,8 +160,16 @@ export default function SocialInviteSheet({
             {abertos.map((c) => (
               <div key={c.id} className="flex items-center gap-2">
                 <p className="text-sm text-muted-foreground flex-1 min-w-0">
-                  <span className="font-mono">{c.id.slice(0, 5)}</span>
-                  {" · "}criado {dia(c.criadoEm)}{" · "}vence {dia(c.expiraEm)}
+                  {/* SEM PREFIXO DO CÓDIGO, e é impossível ter um: o banco
+                      guarda só o `sha256` do código, de propósito — "este link
+                      não aparece de novo" é promessa de schema, não de tela.
+                      O que estava aqui era o prefixo do `id` DA LINHA
+                      (`afe93…`), que não tem relação nenhuma com o código que
+                      a pessoa tem na mão (`56AB43…`): com dois convites
+                      abertos, cancelar virava chute. Identificar pelas DATAS é
+                      o que ela consegue conferir — ela sabe quando pediu cada
+                      um. */}
+                  criado {dia(c.criadoEm)}{" · "}vence {dia(c.expiraEm)}
                 </p>
                 <Button
                   variant="ghost" size="sm"
