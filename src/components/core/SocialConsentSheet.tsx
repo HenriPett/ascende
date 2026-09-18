@@ -99,6 +99,16 @@ export default function SocialConsentSheet({
      tela só teria número absoluto, e número absoluto ao lado de número
      absoluto já é um ranking, mesmo sem coluna de posição. */
   const [sel, setSel] = useState<Map<SocialMetricKey, number>>(new Map());
+  /* O QUE ELA ESTÁ DIGITANDO, antes de virar número.
+     Sem isto o campo era controlado pelo valor já grampeado em 1..7, e aí
+     TODO estado intermediário do teclado era inalcançável: apagar o campo dava
+     `Number("") || 0` -> `max(1, …)` -> 1, e digitar um dígito depois do que já
+     estava lá fazia "5"+"6" = "56" -> 7. O campo aceitava exatamente dois
+     valores, 1 e 7, e nenhum dos dois era o que ela quis digitar.
+     A regra continua a mesma (1 a 7); o que muda é QUANDO ela é aplicada —
+     ao sair do campo, não a cada tecla. Um campo vazio é um estado legítimo
+     de digitação, não um zero a ser corrigido. */
+  const [rascunho, setRascunho] = useState<Map<SocialMetricKey, string>>(new Map());
   const [salvando, setSalvando] = useState(false);
 
   // Reabrir com o estado do banco, não com o que ficou da vez anterior: esta
@@ -106,6 +116,7 @@ export default function SocialConsentSheet({
   useEffect(() => {
     if (!open) return;
     setSel(new Map(linhas.filter((l) => l.ligado).map((l) => [l.key, l.meta ?? META_PADRAO])));
+    setRascunho(new Map());
   }, [open, linhas]);
 
   const alternar = (k: SocialMetricKey, on: boolean) =>
@@ -115,12 +126,31 @@ export default function SocialConsentSheet({
       return proximo;
     });
 
-  const mudarMeta = (k: SocialMetricKey, bruto: string) =>
-    setSel((atual) => {
-      if (!atual.has(k)) return atual;
-      const n = Math.max(1, Math.min(7, Math.round(Number(bruto.replace(/\D/g, "")) || 0)));
-      return new Map(atual).set(k, n);
-    });
+  /** O texto vira meta. Fora do componente porque é a regra, e regra que mora
+   *  dentro de um `onChange` é regra que ninguém consegue testar nem achar.
+   *  Vazio ou lixo devolve `null` — "ainda não é um número" é diferente de
+   *  "é um número ruim", e só o segundo merece ser corrigido. */
+  const metaDoTexto = (bruto: string): number | null => {
+    const digitos = bruto.replace(/\D/g, "");
+    if (!digitos) return null;
+    return Math.max(1, Math.min(7, Number(digitos)));
+  };
+
+  // A CADA TECLA: guarda o que ela digitou, no máximo dois dígitos, e não
+  // grampeia nada. É isto que deixa o campo passar por vazio.
+  const mudarMeta = (k: SocialMetricKey, bruto: string) => {
+    if (!sel.has(k)) return;
+    setRascunho((atual) => new Map(atual).set(k, bruto.replace(/\D/g, "").slice(0, 2)));
+  };
+
+  // AO SAIR DO CAMPO: aí sim vale a régua. Saiu com o campo vazio, mantém o
+  // que estava — apagar um número não é pedir para combinar zero, e zero não
+  // existe aqui (o banco tem `check (goal_value > 0)`).
+  const confirmarMeta = (k: SocialMetricKey) => {
+    const n = metaDoTexto(rascunho.get(k) ?? "");
+    if (n !== null) setSel((atual) => (atual.has(k) ? new Map(atual).set(k, n) : atual));
+    setRascunho((atual) => { const p = new Map(atual); p.delete(k); return p; });
+  };
 
   const salvar = async (lista: { key: SocialMetricKey; meta: number }[]) => {
     setSalvando(true);
@@ -208,8 +238,10 @@ export default function SocialConsentSheet({
                     <span className="text-xs text-muted-foreground">Eu combino</span>
                     <Input
                       inputMode="numeric" className="h-11 w-16 text-center"
-                      value={String(sel.get(l.key) ?? META_PADRAO)}
+                      value={rascunho.get(l.key) ?? String(sel.get(l.key) ?? META_PADRAO)}
                       onChange={(e) => mudarMeta(l.key, e.target.value)}
+                      onBlur={() => confirmarMeta(l.key)}
+                      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                       aria-label={`Quantas vezes por semana você combina ${l.label}`}
                     />
                     <span className="text-xs text-muted-foreground">
@@ -245,7 +277,9 @@ export default function SocialConsentSheet({
         <div className="pt-4 space-y-2">
           <Button
             className="w-full min-h-11" disabled={salvando}
-            onClick={() => salvar([...sel].map(([key, meta]) => ({ key, meta })))}
+            onClick={() => salvar([...sel].map(([key, meta]) => ({
+              key, meta: metaDoTexto(rascunho.get(key) ?? "") ?? meta,
+            })))}
           >
             {salvando
               ? <Loader2 className="w-4 h-4 animate-spin" />
