@@ -103,7 +103,17 @@ export type SocialMetricKey =
 
 export interface SocialMetric {
   key: SocialMetricKey;
-  /** Como a pessoa lê esta métrica na tela. */
+  /** Como a pessoa lê esta métrica na tela.
+   *
+   *  O RÓTULO CURTO NÃO MORA AQUI, e a ausência é decisão: ele é coluna de
+   *  `shareable_metrics` (`label_curto`) e sai pronto nas views. Este arquivo
+   *  continua sendo a ALLOWLIST de métricas — quem decide o que pode sair do
+   *  aparelho — e deixa de ser fonte de rótulo. Metade do par no banco e
+   *  metade aqui é exatamente como duas verdades nascem, e esta casa já tem a
+   *  cicatriz: o autoteste 14 existe porque catálogo e código divergiram uma
+   *  vez, em 18/09/2026, e ninguém errou — os dois lados foram briefados
+   *  diferente. "Curto é para ver, longo é para escolher", e os dois vêm do
+   *  mesmo lugar. */
   label: string;
   /** O que o ZERO desta métrica diz sobre ela, em voz alta, para o grupo.
    *  É o campo que justifica a entrada no catálogo — e o que alguém terá de

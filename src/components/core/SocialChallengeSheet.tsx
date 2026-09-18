@@ -7,9 +7,9 @@ import {
 import { Loader2 } from "lucide-react";
 import { CATALOGO_VISIVEL } from "@/components/core/socialPhrases";
 import {
-  FULL_DAY_SIGNALS, fullDayThreshold, groupWeekGoal, WEEK_DAYS_PER_PERSON,
+  FULL_DAY_SIGNALS, fullDayThreshold, WEEK_DAYS_PER_PERSON,
 } from "@/lib/socialChallenge";
-import { SHAREABLE_METRICS, type SocialMetricKey } from "@/lib/socialMetrics";
+import type { SocialMetricKey } from "@/lib/socialMetrics";
 import { cn } from "@/lib/utils";
 
 /**
@@ -50,11 +50,13 @@ const DURACOES = [
 const PADRAO: SocialMetricKey = "dia_inteiro";
 
 export default function SocialChallengeSheet({
-  open, onOpenChange, pessoasNoGrupo, criando, onCriar,
+  open, onOpenChange, criando, onCriar,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  pessoasNoGrupo: number;
+  /* `pessoasNoGrupo` saiu junto com a estimativa: ele só existia para
+     multiplicar o tamanho do grupo pela régua da casa. Prop que sobrevive ao
+     motivo dela é a próxima a ser usada para reinventar a mesma conta. */
   criando: boolean;
   onCriar: (d: {
     nome: string; metricKey: SocialMetricKey; comeca: string; termina: string;
@@ -76,13 +78,25 @@ export default function SocialChallengeSheet({
     weekday: "long", day: "2-digit", month: "long",
   });
 
-  /* A ESTIMATIVA da meta, antes de criar. A meta de verdade é a SOMA do que
-     cada um combinar na folha de consentimento (`group_data_consents
-     .goal_value`) — aqui o número sai de `pessoas × 5`, a régua da casa, para
-     a pessoa ter a ordem de grandeza antes de decidir. Os dois dias de folga
-     por pessoa já estão DENTRO dela, e mostrar a conta é o que impede o
-     desafio de ser lido como "sete dias ou você falhou". */
-  const metaArredondada = Math.round(groupWeekGoal(pessoasNoGrupo) * (dias / 7));
+  /* ─── A ESTIMATIVA "pessoas × 5" SAIU DAQUI, e não foi por simplificação ──
+     Ela multiplicava o TAMANHO DO GRUPO pela régua da casa e anunciava "a meta
+     do grupo: por volta de 20". Dois erros, e o segundo é o grave:
+
+     1. **Denominador errado.** `barra_do_grupo` só soma quem tem consentimento
+        ATIVO naquela métrica. Contar o grupo inteiro inflava a meta com gente
+        que não compartilha aquele sinal — o mesmo erro de denominador do
+        "faltam X — dá Y por pessoa" que acabou de sair da folha do desafio.
+     2. **Consertá-lo pelo caminho óbvio seria pior.** O número "certo" seria
+        "quantas pessoas consentiram esta métrica" — e isso é exatamente o
+        DENOMINADOR DE PARTICIPAÇÃO que a condição B4-b proíbe: "o buraco é,
+        ele mesmo, informação". Escrever "4 pessoas compartilham este sinal"
+        entrega quem NÃO compartilha, por subtração, para o grupo inteiro.
+
+     Então não há número aqui. Não é lacuna: a meta de verdade sempre foi a
+     SOMA do que cada um combinar na própria folha de consentimento, e essa
+     frase continua escrita abaixo. A regra do 5-de-7 também fica — ela é
+     doutrina sobre a meta DE CADA UM, que é diferente de uma conta sobre o
+     grupo. */
 
   const ehDiaInteiro = metrica === "dia_inteiro";
   const precisa = fullDayThreshold(FULL_DAY_SIGNALS.length);
@@ -200,19 +214,19 @@ export default function SocialChallengeSheet({
             </p>
           </div>
 
-          {/* A conta, antes de criar. Um combinado cuja meta a pessoa só
-              descobre depois não é um combinado. */}
+          {/* Como a meta se forma, antes de criar. Um combinado cuja regra a
+              pessoa só descobre depois não é um combinado — mas a regra é
+              COMO a conta se faz, não um número inventado sobre o grupo. */}
           <div className="rounded-lg border bg-muted/40 p-3 space-y-1.5">
             <p className="text-sm font-medium">
-              A meta do grupo: por volta de {metaArredondada}{" "}
-              {ehDiaInteiro ? "dias inteiros" : SHAREABLE_METRICS[metrica].label.toLowerCase()}
+              A meta é a soma do que cada um combinar
             </p>
             <p className="text-xs text-muted-foreground">
-              {pessoasNoGrupo} {pessoasNoGrupo === 1 ? "pessoa" : "pessoas"} × {WEEK_DAYS_PER_PERSON} por
-              semana. São cinco de sete de propósito: os dois dias de folga por pessoa já
-              estão dentro da meta — o grupo pode fechar 100% com todo mundo descansando
-              dois dias. A meta final é a soma do que cada um combinar: quem combinar
-              menos não puxa ninguém para baixo, só combina menos.
+              Cada pessoa escolhe quantas vezes por semana ela combina, na folha dela —
+              o padrão é {WEEK_DAYS_PER_PERSON} de 7, e são cinco de propósito: os dois dias
+              de folga por pessoa já estão dentro da meta, então o grupo pode fechar tudo
+              com todo mundo descansando dois dias. Quem combinar menos não puxa ninguém
+              para baixo, só combina menos. E só entra na soma quem compartilha este sinal.
             </p>
             {ehDiaInteiro && (
               <p className="text-xs text-muted-foreground border-t pt-1.5">

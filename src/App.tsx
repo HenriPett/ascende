@@ -20,6 +20,9 @@ const NotFound = lazy(() => import("@/pages/NotFound"));
 // As páginas de /app vivem no registro de rotas: é ele que o teste usa para
 // provar que nenhuma rota antiga sumiu ou virou redirect (src/lib/routes.ts).
 import { APP_ROUTES } from "@/lib/routes";
+// Fica no bundle inicial de propósito: ele precisa rodar ANTES do primeiro
+// <Navigate> de RequireAuth, que é quem apaga o `?convite=` da URL.
+import { GuardaDoConvite } from "@/components/social/ConviteEmTransito";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -62,6 +65,9 @@ export default function App() {
       <TooltipProvider>
         <BrowserRouter>
           <AnalyticsGate />
+          {/* Guarda o `?convite=` antes que o redirecionamento para /auth ou
+              /onboarding leve a URL embora. Ver ConviteEmTransito.tsx. */}
+          <GuardaDoConvite />
           <Suspense fallback={<Splash />}>
           <Routes>
             <Route path="/" element={<Landing />} />

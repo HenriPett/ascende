@@ -340,8 +340,16 @@
   /* Brilho suave dourado — anel de nível, destaques */
   .gold-glow { filter: drop-shadow(0 0 10px hsl(var(--gold) / 0.45)); }
 
-  /* Dourado para TEXTO pequeno: mais escuro no claro (contraste AA), vivo no escuro */
-  .text-gold-ink { color: hsl(40 90% 34%); }
+  /* Dourado para TEXTO pequeno: mais escuro no claro (contraste AA), vivo no
+     escuro. A luminosidade do tema claro caiu de 34% para 30% em 18/09/2026,
+     e não foi ajuste de gosto: era o ÚNICO fail de contraste entre 30 nós de
+     texto da área Social, medido no elemento real — 4,23:1 sobre `bg-card` e
+     4,04:1 sobre `bg-accent/40`, contra os 4,5:1 exigidos. Atingia justamente
+     o "voltou hoje", que é a coisa que o desenho mais quer que se note.
+     Com 30%: 5,2:1 e 5,0:1. Mesma matiz, mesma saturação — a mesma cirurgia
+     que este arquivo já fez em `.text-vitalidade-ink`. O escuro não muda (já
+     dá 11,5:1), e quem usa a classe em outras telas só ganha contraste. */
+  .text-gold-ink { color: hsl(40 90% 30%); }
   .dark .text-gold-ink { color: hsl(44 95% 62%); }
 
   /* Sálvia para TEXTO — mesma doutrina do dourado acima, e pelo mesmo motivo:
@@ -356,6 +364,18 @@
      lá a tinta é o próprio token. */
   .text-vitalidade-ink { color: hsl(150 38% 36%); }
   .dark .text-vitalidade-ink { color: hsl(var(--vitalidade)); }
+
+  /* Lilás para TEXTO e para objeto gráfico pequeno — a MESMA doutrina do
+     dourado e da sálvia acima, e pelo mesmo motivo: a cor que identifica o
+     pilar não é obrigada a ser a cor que carrega tinta. Nasceu para os dots
+     de gratidão no Social, que são objetos de 7px: o token `--mente`
+     (258 65% 62%) sobre o marfim dá ~3,1:1 — no limite do mínimo de objeto
+     gráfico, e reprovado para o texto que acompanha. Catorze pontos de
+     luminosidade a menos levam a 4,6:1, que passa em AA em qualquer tamanho.
+     O token do pilar NÃO muda: o céu, os gráficos e o glow continuam iguais.
+     No escuro o token já passa com folga, então lá a tinta é o próprio token. */
+  .text-mente-ink { color: hsl(258 60% 48%); }
+  .dark .text-mente-ink { color: hsl(var(--mente)); }
 
   /* Celebração sutil quando uma meta do dia é batida (1x por dia) */
   @keyframes goal-hit {

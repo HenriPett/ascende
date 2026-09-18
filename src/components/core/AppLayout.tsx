@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { levelTitle } from "@/lib/xp";
 import { NAV, appPath } from "@/lib/routes";
+import { RetomarConvite } from "@/components/social/ConviteEmTransito";
 import { cn } from "@/lib/utils";
 
 /* Navegação da Fase 4:  Hoje · Jornada · [REGISTRAR] · Conselheiro · avatar
@@ -388,6 +389,9 @@ export default function AppLayout() {
         </header>
 
         <main id="conteudo" tabIndex={-1} className="container pb-32 lg:pb-10 pt-5 focus:outline-none">
+          {/* Alguém que abriu um convite ANTES de ter conta chega aqui pela
+              primeira vez: é o instante em que entrar num grupo faz sentido. */}
+          <RetomarConvite />
           <Outlet />
         </main>
 

@@ -41,6 +41,10 @@ const SOCIAL_FILES = [
   "src/lib/socialMetrics.test.ts",
   "src/lib/socialChallenge.ts",
   "src/lib/socialChallenge.test.ts",
+  "src/lib/socialSemana.ts",
+  "src/lib/socialSemana.test.ts",
+  "src/lib/socialConvite.ts",
+  "src/lib/socialConvite.test.ts",
   "src/lib/socialNotifications.ts",
   "src/lib/socialNotifications.test.ts",
   "src/lib/socialIsolation.test.ts",
@@ -321,5 +325,142 @@ describe("pureza — a data de referência entra por parâmetro", () => {
       expect(/Date\.now\(\)/.test(fonte), `${f} lê o relógio`).toBe(false);
       expect(/new Date\(\s*\)/.test(fonte), `${f} lê o relógio`).toBe(false);
     }
+  });
+});
+
+describe("Adendo 3 — a marca de cumprido não existe no cartão de terceiro", () => {
+  /* Regra do Fiel, vinculante (18/09/2026), e ela NÃO é calculável: é uma
+     propriedade de como o componente está escrito. Um teste de unidade
+     renderizaria a ficha e veria o glifo sumir; não veria alguém devolvê-lo
+     por outro canal — um fundo, uma borda, um `font-semibold`, uma opacidade,
+     uma ordenação. Por isso este teste LÊ O CÓDIGO.
+
+     A razão da regra, para quem cair aqui por causa de uma falha: marcar
+     "cumpriu" na frente dos outros PREMIA QUEM ESCOLHEU A META MODESTA — e
+     isso corrompe o DENOMINADOR, que é a peça sobre a qual a C3 e a doutrina
+     do "0 de 6" se apoiam. No instante em que a meta baixa rende mais marcas,
+     a pessoa aprende a baixar a meta. */
+
+  const DA_TELA = allSourceFiles("src/components/social");
+
+  it("a varredura acha os componentes do Social — senão ela passa sem olhar", () => {
+    expect(DA_TELA.length, "não achei os componentes da tela do Social")
+      .toBeGreaterThan(8);
+  });
+
+  it("todo uso de `cumpriu` na tela está preso a `souEu`", () => {
+    const infratores: string[] = [];
+    let usos = 0;
+    for (const f of DA_TELA) {
+      for (const [i, linha] of stripComments(read(f)).split("\n").entries()) {
+        if (!/\bcumpriu\b/.test(linha)) continue;
+        usos++;
+        if (!/\bsouEu\b/.test(linha)) infratores.push(`${f}:${i + 1}  ${linha.trim()}`);
+      }
+    }
+    expect(usos, "ninguém mais lê `cumpriu` na tela — o teste ficou vazio e tranquiliza à toa")
+      .toBeGreaterThan(0);
+    expect(
+      infratores,
+      "Marca de cumprimento fora do meu próprio cartão:\n  " + infratores.join("\n  ") +
+      "\nNo cartão de terceiro não existe marca em forma nenhuma — só o número.",
+    ).toEqual([]);
+  });
+
+  it("nenhum canal de cumprimento volta por cor, peso ou opacidade", () => {
+    /* Os canais que já foram usados uma vez (o fundo verde) ou que são os
+       próximos candidatos óbvios. `cn(...)` condicional com qualquer um destes
+       ao lado de `cumpriu` é o mesmo placar por outra porta. */
+    const CANAIS = [
+      /bg-vitalidade\//, /border-vitalidade\//, /text-vitalidade(?!-ink)/,
+      /font-(semi)?bold/, /opacity-/,
+    ];
+    const infratores: string[] = [];
+    for (const f of DA_TELA) {
+      for (const [i, linha] of stripComments(read(f)).split("\n").entries()) {
+        if (!/\bcumpr|\bmarcar\b/.test(linha)) continue;
+        for (const canal of CANAIS) {
+          if (canal.test(linha)) infratores.push(`${f}:${i + 1}  ${linha.trim()}`);
+        }
+      }
+    }
+    expect(infratores, "Cumprimento voltando por cor/peso/opacidade:\n  " + infratores.join("\n  "))
+      .toEqual([]);
+  });
+});
+
+describe("a trilha do grid não pode ser dimensionada pelo nome de ninguém", () => {
+  /* ACHADO ALTA, medido por dois caminhos independentes (réplica de CSS puro e
+     dado real do banco): um `display_name` de 40 caracteres — que é o
+     `maxLength` que o PRÓPRIO campo oferece — fazia a página rolar de lado em
+     390px, e inflava TODOS os cartões da coluna junto.
+
+       documentElement.scrollWidth 433 × clientWidth 390   (43px de estouro)
+       grid-template-columns 395,58px  com o container em 316px
+       cartão "Maria Fernanda Albuquerque Nascimento Jr" = 396px
+       cartão "Você" (quatro caracteres) ................. 396px
+
+     Isolado por eliminação: sem as fichas o estouro permanece; sem o NOME a
+     trilha cabe exata (316). E trocar os rótulos longos pelos curtos no DOM
+     não mudou nada — ou seja, não é a migration que falta.
+
+     POR QUE `truncate` NÃO SALVA, que é a parte contraintuitiva: `truncate` é
+     `white-space: nowrap`, e nowrap resolve o DESENHO do texto, não a
+     contribuição de `min-content` do item. O `min-w-0` do `<p>` derruba o
+     mínimo automático daquele item flex; não derruba o `min-content` dele. O
+     CARTÃO é o único elo da cadeia que continuava com `min-width: auto`
+     (`main.container`, `.max-w-3xl`, o `Card` e o `.grid` já têm `0px`), então
+     era ele quem empurrava a trilha — e a trilha é UMA SÓ em coluna única.
+
+     Isto é layout, e o vitest não resolve CSS: este teste não mede largura
+     nenhuma. Ele trava a única coisa que dá para travar aqui, e que é
+     exatamente o que alguém apaga por achar que é sobra — a CLASSE, no lugar
+     certo. */
+
+  const CARTAO = "src/components/social/CartaoDaPessoa.tsx";
+  const FICHA = "src/components/social/FichaDaMetrica.tsx";
+
+  /** A string de classes da casca do cartão: é a que carrega `rounded-xl`. */
+  function cascaDoCartao(): string {
+    const achadas = [...stripComments(read(CARTAO)).matchAll(/"([^"]*rounded-xl[^"]*)"/g)]
+      .map((m) => m[1]);
+    expect(achadas.length, "não achei a casca do cartão — o teste ficaria vazio")
+      .toBeGreaterThan(0);
+    return achadas.join(" ");
+  }
+
+  it("o cartão de pessoa carrega `min-w-0` — ele é o item do grid", () => {
+    expect(
+      /\bmin-w-0\b/.test(cascaDoCartao()),
+      "O cartão perdeu o `min-w-0`. Sem ele, o `min-content` do nome dimensiona a " +
+      "trilha `auto` do grid, a trilha dimensiona TODOS os cartões da coluna, e a " +
+      "página rola de lado em 390px com um nome de 40 caracteres (o maxLength do " +
+      "próprio campo). `truncate` não substitui: nowrap resolve o desenho do texto, " +
+      "não a contribuição de min-content.",
+    ).toBe(true);
+  });
+
+  it("o contêiner das fichas carrega `min-w-0` pela mesma razão", () => {
+    const linha = stripComments(read(FICHA))
+      .split("\n").find((l) => l.includes("CLASSES_DO_CONTAINER"));
+    expect(linha, "não achei CLASSES_DO_CONTAINER — o teste ficaria vazio").toBeTruthy();
+    expect(
+      /\bmin-w-0\b/.test(linha ?? ""),
+      "O contêiner das fichas perdeu o `min-w-0`. A fração é `whitespace-nowrap` e o " +
+      "`max-w-full` da ficha é porcentagem — que não resolve durante a medição " +
+      "intrínseca da trilha —, então o que não encolhe aqui sobe pela árvore.",
+    ).toBe(true);
+  });
+
+  it("o comentário que explica o porquê continua junto da classe", () => {
+    /* A classe sozinha é indefensável: ela parece sobra. Quem a apagar daqui a
+       seis meses tem de esbarrar no motivo ANTES, e o motivo mora no fonte —
+       não neste teste, que a pessoa pode nem rodar antes de apagar. */
+    const fonte = read(CARTAO);
+    expect(
+      /min-width:\s*auto|min-content/.test(fonte),
+      `${CARTAO} perdeu a explicação do min-w-0. Sem ela a classe vira sobra aos ` +
+      "olhos de quem não viveu o bug, e some na próxima limpeza.",
+    ).toBe(true);
   });
 });
