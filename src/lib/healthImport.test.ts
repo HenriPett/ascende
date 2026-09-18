@@ -220,7 +220,7 @@ describe("importação de peso (Hevy medidas)", () => {
   it("lê o peso e a data de cada pesagem", () => {
     expect(result.events).toHaveLength(3);
     expect(result.events[0]).toMatchObject({
-      kind: "weight", pillar: "alimentacao", day: "2025-09-12", kg: 116.5,
+      kind: "weight", pillar: "vitalidade", day: "2025-09-12", kg: 116.5,
       summary: "Peso: 116,5 kg",
     });
   });

@@ -74,7 +74,11 @@ export interface BlueprintProposal {
 
 /** Rótulo e pilar visual de cada tipo de plano do blueprint. */
 export const PLAN_KIND_META: Record<string, { label: string; colorVar: string }> = {
-  alimentar: { label: "Alimentação", colorVar: "--alimentacao" },
+  // Alimentar e treino compartilham a cor porque compartilham o pilar desde a
+  // fusão de 17/09/2026. A cor nunca foi o que distinguia estes dois cartões:
+  // o rótulo e o ícone já fazem isso, e em "Meus planos" cada um tem seção
+  // própria com título.
+  alimentar: { label: "Alimentação", colorVar: "--vitalidade" },
   treino: { label: "Treino", colorVar: "--vitalidade" },
   financeiro: { label: "Financeiro", colorVar: "--prosperidade" },
   rotina: { label: "Rotina", colorVar: "--mente" },

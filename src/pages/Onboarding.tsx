@@ -55,15 +55,14 @@ import { cn } from "@/lib/utils";
 import { brl } from "@/lib/format";
 
 /* Tinta do chip aceso, por pilar. Branco sobre a cor cheia reprovava o mínimo
-   AA de 4,5:1 em três dos quatro (prosperidade 2,74:1, vitalidade 3,79:1,
-   alimentação 4,03:1) — a tinta escura da casa resolve os três (6,71 · 4,85 ·
-   4,57). Mente é o caso em que NENHUMA das duas passa (branco 4,49, tinta
-   4,10): fica no branco, que é o melhor disponível, e o token --mente é que
-   precisa escurecer. */
+   AA de 4,5:1 em prosperidade (2,74:1) e em vitalidade — 3,79:1 quando ela era
+   coral, 4,04:1 agora que é sálvia, e por pouco continua reprovando. A tinta
+   escura da casa resolve os dois (6,71:1 e 4,55:1). Mente é o caso em que
+   NENHUMA das duas passa (branco 4,49, tinta 4,10): fica no branco, que é o
+   melhor disponível, e o token --mente é que precisa escurecer. */
 const CHIP_INK: Record<PillarId, string> = {
   prosperidade: "text-primary-foreground",
   vitalidade: "text-primary-foreground",
-  alimentacao: "text-primary-foreground",
   mente: "text-white",
 };
 
@@ -251,7 +250,9 @@ export default function Onboarding() {
       if (Object.keys(patch).length && !(await patchProfile(patch))) return;
       if (w && w > 20 && w < 400) {
         await supabase.from("life_events").insert({
-          user_id: user.id, pillar: "alimentacao", kind: "weight",
+          // O pilar da linha é derivado do `kind` (canonicalPillar, no
+          // servidor): peso é Vitalidade desde a fusão de 17/09/2026.
+          user_id: user.id, pillar: "vitalidade", kind: "weight",
           payload: { kg: w, summary: `Peso: ${String(w).replace(".", ",")} kg` }, source: "form",
         });
       }
@@ -311,8 +312,10 @@ export default function Onboarding() {
   const suggestPillars = () => {
     setPillars((cur) => {
       const s = new Set<PillarId>(cur);
-      if (tmb || workoutsWeek !== "" || sleepHrs) s.add("vitalidade");
-      if (numeric(foodSpend) || restrictions.length) s.add("alimentacao");
+      /* Uma auto-ativação só, e é o que conserta o empate antigo: "quero
+         emagrecer comendo melhor" acendia Vitalidade por acidente de ordem do
+         array. Agora comida e corpo são o mesmo pilar, e o empate some. */
+      if (tmb || workoutsWeek !== "" || sleepHrs || numeric(foodSpend) || restrictions.length) s.add("vitalidade");
       if (numeric(income) || numeric(budget)) s.add("prosperidade");
       return [...s];
     });
@@ -543,7 +546,7 @@ export default function Onboarding() {
     if (activatedGoals.length) rows.push(`Metas (${activatedGoals.join(", ")}): tela Hoje`);
     if (activatedHabits > 0) rows.push(`${activatedHabits === 1 ? "Seu compromisso diário" : `Seus ${activatedHabits} compromissos diários`}: tela Hoje`);
     if (sleepHrs) rows.push("Rotina de sono e check-in matinal: tela Hoje e Vitalidade");
-    if (numeric(weightKg)) rows.push("Peso registrado: Alimentação > Corpo");
+    if (numeric(weightKg)) rows.push("Peso registrado: Vitalidade > Meu corpo");
     if (numeric(birthYear) || numeric(heightCm) || sex !== "nao_informar" || activity !== "nao_informar" || restrictions.length) {
       rows.push("Idade, corpo, atividade e restrições: Ajustes > Sobre você");
     }

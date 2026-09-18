@@ -58,10 +58,9 @@ const FALLBACK_COPY: KindCopy = {
   hint: "Toque em uma seção para ver os detalhes ou alterar só ela.",
 };
 
-const KIND_VAR: Record<string, string> = {
-  alimentar: "--alimentacao",
-  treino: "--vitalidade",
-};
+/* Alimentar e treino viraram a mesma cor com a fusão, então o mapa virou
+   constante: rótulo e ícone é que distinguem os dois, e sempre foram eles. */
+const PLAN_VAR = "--vitalidade";
 
 export default function PlanSections({
   content,
@@ -86,8 +85,9 @@ export default function PlanSections({
   if (!parsed) return <Markdown content={content} doc />;
 
   const copy = KIND_COPY[kind] ?? FALLBACK_COPY;
-  const accent = KIND_VAR[kind] ? `hsl(var(${KIND_VAR[kind]}))` : "hsl(var(--gold))";
-  const accentSoft = KIND_VAR[kind] ? `hsl(var(${KIND_VAR[kind]}) / 0.35)` : "hsl(var(--gold) / 0.35)";
+  const temCor = kind === "alimentar" || kind === "treino";
+  const accent = temCor ? `hsl(var(${PLAN_VAR}))` : "hsl(var(--gold))";
+  const accentSoft = temCor ? `hsl(var(${PLAN_VAR}) / 0.35)` : "hsl(var(--gold) / 0.35)";
 
   const resumo = parsed.sections.find((s) => s.role === "resumo");
   const observacoes = parsed.sections.find((s) => s.role === "observacoes");

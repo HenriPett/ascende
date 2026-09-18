@@ -24,7 +24,7 @@ import {
   serviceClient, assertRateLimit, isTrivialMessage, extractEventsAndMemories,
   buildSnapshot, MODEL_SMART, MODEL_FAST, SAFETY_RULES,
   CAPTURE_SYSTEM, CAPTURE_TOOL, STATEMENT_SYSTEM, STATEMENT_TOOL, normalizeStatementItems,
-  attachMemorySources,
+  attachMemorySources, withCanonicalPillar,
 } from "../_shared/lib.ts";
 import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage, settleUsage } from "../_shared/usage.ts";
 import {
@@ -650,7 +650,13 @@ Deno.serve(async (req) => {
         }
       }
       // deno-lint-ignore no-explicit-any
-      const events = Array.isArray(inp.events) ? (inp.events as any[]) : [];
+      /* Caminho de IMAGEM: não passa por extractEventsAndMemories, então o
+         pilar canônico é aplicado aqui — mesmo ponto de estrangulamento que
+         capture/index.ts tem. Sem isto os eventos chegam SEM `pillar` (o campo
+         saiu do CAPTURE_TOOL) e `saveEventsServer` os descarta em silêncio:
+         a pessoa manda a foto do prato, lê "Li a foto 📸", confirma, e nada
+         é gravado. */
+      const events = withCanonicalPillar(Array.isArray(inp.events) ? (inp.events as any[]) : []);
       if (!events.length) {
         await waSendText(from, `Não encontrei nada registrável nessa imagem. Funciona bem com: foto do prato, print de Pix/compra, tela de app de treino. Análise de composição corporal é no app: ${url}/app/vitalidade`);
         return new Response("ok", { status: 200 });

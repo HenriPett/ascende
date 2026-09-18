@@ -3,6 +3,7 @@ import { todayISO } from "@/lib/format";
 import { localDay } from "@/lib/localDays";
 import { isPlausibleBodyWeightKg, BODY_WEIGHT_RANGE_LABEL } from "@/lib/bodyWeight";
 import { existingRecordKeys, isDuplicateError } from "@/lib/dataSources";
+import { canonicalPillar } from "@/lib/pillars";
 
 /** Evento PROPOSTO pela IA (capture / ai-chat). Só vira registro após o usuário confirmar. */
 export interface ProposedEvent {
@@ -444,7 +445,14 @@ export function lifeEventRow(
 ) {
   return {
     user_id: userId,
-    pillar: ev.pillar,
+    /* O SEGUNDO CINTO DA FUSÃO, e é ele que faz a ordem do deploy não
+       importar. O pilar não é mais escolhido pelo modelo (o campo saiu do
+       CAPTURE_TOOL): o servidor já o deriva do `kind` na saída. Derivar de
+       novo aqui cobre o que o servidor não alcança — uma instância ainda
+       velha no ar, uma proposta que ficou aberta na tela durante o deploy,
+       uma aba antiga com JS em cache. A linha entra no banco canônica de
+       qualquer um dos três jeitos. */
+    pillar: canonicalPillar(ev.kind, ev.pillar),
     kind: ev.kind,
     payload: buildEventPayload(ev, sleepSchedule),
     source,

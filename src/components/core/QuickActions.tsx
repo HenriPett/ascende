@@ -399,7 +399,7 @@ export default function QuickActions() {
   };
 
   const addWater = (ml: number, label: string) =>
-    insert(`w${ml}`, { pillar: "alimentacao", kind: "water", payload: { ml, summary: `Água: ${ml} ml` } },
+    insert(`w${ml}`, { pillar: "vitalidade", kind: "water", payload: { ml, summary: `Água: ${ml} ml` } },
       `${label} registrada (+${ml} ml). +2 XP`);
 
   const logMood = (score: number, emoji: string, label: string) =>
@@ -467,16 +467,16 @@ export default function QuickActions() {
         )}
         {showMeal && (
           <Link
-            to="/app/alimentacao"
+            to="/app/vitalidade?s=comida"
             className="shrink-0 h-11 px-3 rounded-full border bg-card text-xs font-medium flex items-center gap-1.5 hover:bg-muted/60 active:scale-95 transition-all"
           >
-            <Camera className="w-3.5 h-3.5" style={{ color: "hsl(var(--alimentacao))" }} /> Refeição
+            <Camera className="w-3.5 h-3.5" style={{ color: "hsl(var(--vitalidade))" }} /> Refeição
           </Link>
         )}
         {showExpense && <QuickExpense disabled={!!savingKey} />}
         {showWorkout && (
           <Link
-            to="/app/vitalidade"
+            to="/app/vitalidade?s=treino"
             className="shrink-0 h-11 px-3 rounded-full border bg-card text-xs font-medium flex items-center gap-1.5 hover:bg-muted/60 active:scale-95 transition-all"
           >
             <Dumbbell className="w-3.5 h-3.5" style={{ color: "hsl(var(--vitalidade))" }} /> Treino

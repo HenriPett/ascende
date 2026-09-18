@@ -12,8 +12,9 @@ import { useMokariPreference } from "@/hooks/useMokariPreference";
 import { useMokariData } from "@/hooks/useMokariData";
 import { useAuth } from "@/hooks/useAuth";
 import { snapshotOf, readSnapshot, writeSnapshot, changesSince } from "@/lib/mokariChange";
-import type { Mokari as MokariData, MokariStage, PillarAffinity } from "@/lib/mokari";
+import type { Mokari as MokariData, MokariOrgan, MokariStage, PillarAffinity } from "@/lib/mokari";
 import { leafCount, fruitCount, flowerCount, rootCount, marksToGo } from "@/lib/mokariDensity";
+import { MOKARI_ORGANS } from "@/lib/mokari";
 import {
   VIEWBOX, STAGE_ANCHORS, STATE_STYLE, STAGE_LABEL, ENVIRONMENT_LABEL,
   leafSlotsFor, fruitSlotsFor, flowerSlotsFor, rootPathsFor, leafAngle, budSlot, markScale, GROUND_Y,
@@ -25,7 +26,7 @@ import {
  *
  * Uma imagem por combinação seriam 4 × 3⁴ × 5 × 5 = 8.100 arquivos. São 27
  * peças que se sobrepõem: ambiente → raízes → corpo → folhas → frutos →
- * flores → expressão. As marcas de pilar nunca têm coordenada própria: elas se
+ * flores → expressão. As marcas de órgão nunca têm coordenada própria: elas se
  * posicionam pelas ÂNCORAS que a peça de corpo publica, então trocar o estágio
  * move tudo junto.
  *
@@ -52,9 +53,47 @@ function useReducedMotion(): boolean {
   return reduced;
 }
 
-const pillarVar = (id: PillarId) => PILLARS.find((p) => p.id === id)!.colorVar;
-const color = (id: PillarId, alpha = 1) =>
-  alpha === 1 ? `hsl(var(${pillarVar(id)}))` : `hsl(var(${pillarVar(id)}) / ${alpha})`;
+/* ── A UNIDADE DO MOKARI É O ÓRGÃO, NÃO O PILAR ────────────────────────────
+ *
+ * O contrato antigo dizia "cada pilar tem uma peça e uma só". Não era esse o
+ * invariante de verdade: o invariante é "cada órgão tem UMA fonte, e nenhuma
+ * fonte alimenta dois órgãos" — e esse sobreviveu inteiro à fusão. O que morreu
+ * foi o acoplamento órgão↔pilar: são 4 órgãos ← 4 grupos de `kind` ← 3 pilares,
+ * porque Vitalidade desenha DUAS peças (a raiz sustenta — sono e treino; a
+ * folha nutre — comida e água).
+ *
+ * Por que a cor virou token de órgão: `color()` lia a cor do PILAR. Com
+ * Vitalidade numa cor só, raiz e folha ficariam do mesmo tom — regressão
+ * visual do conquistado pela porta dos fundos, exatamente como o `data ?? []`
+ * já furou a regra 1 pela camada de dados e não pelo cálculo. Com token de
+ * órgão, ZERO pixel muda na árvore e ela deixa de ser refém da paleta de
+ * pilares para sempre. */
+type OrganId = MokariOrgan;
+
+/* Fruto e flor continuam apontando para a var do pilar: lá não há colisão
+   (um pilar, um órgão), e criar token novo só para ter simetria seria inventar
+   um lugar a mais onde a cor pode divergir de si mesma. */
+const ORGAN_VAR: Record<OrganId, string> = {
+  raiz: "--mokari-raiz",
+  folha: "--mokari-folha",
+  fruto: "--prosperidade",
+  flor: "--mente",
+};
+const color = (id: OrganId, alpha = 1) =>
+  alpha === 1 ? `hsl(var(${ORGAN_VAR[id]}))` : `hsl(var(${ORGAN_VAR[id]}) / ${alpha})`;
+
+/** Os atos que alimentam cada órgão — em português, e é de propósito: ninguém
+ *  registra "um pilar", registra um treino. A frase não precisa ser reescrita
+ *  na próxima vez que a arquitetura de pilares mudar. */
+const ORGAN_ATO: Record<OrganId, string> = {
+  raiz: "treino ou sono",
+  folha: "comida ou água",
+  fruto: "dinheiro",
+  flor: "mente",
+};
+const ORGAN_PECA: Record<OrganId, string> = {
+  raiz: "raiz", folha: "folha", fruto: "fruto", flor: "flor",
+};
 
 /* ── 1. AMBIENTE — a única camada que conta TEMPO ─────────────────────────
    Deliberado: o tempo passa para quem registra e para quem não registra. É a
@@ -113,14 +152,14 @@ function Environment({ step }: { step: 1 | 2 | 3 | 4 | 5 }) {
   );
 }
 
-/* ── 2. RAÍZES — Vitalidade. Sustentação, não músculo ────────────────────
+/* ── 2. RAÍZES — o que SUSTENTA: sono e treino. Não músculo ─────────────
    Cumpre a regra 3 por construção: nada aqui muda com peso ou composição
    corporal, porque nada disso chega ao cálculo (MokariEvent não tem payload). */
 function Roots({ stage, count, opacity }: { stage: MokariStage; count: number; opacity: number }) {
   const n = rootCount(count);
   if (n < 1) return null;
   return (
-    <g fill="none" stroke={color("vitalidade")} strokeLinecap="round" opacity={opacity} aria-hidden>
+    <g fill="none" stroke={color("raiz")} strokeLinecap="round" opacity={opacity} aria-hidden>
       {rootPathsFor(stage, n).map((d, i) => (
         // A primeira raiz de cada lado é a mais grossa: a mais antiga é a que
         // sustenta. As novas nascem finas e vão engrossando com o tempo.
@@ -182,7 +221,7 @@ function Body({ stage, canopyScaleX }: { stage: MokariStage; canopyScaleX: numbe
   );
 }
 
-/* ── 4. FOLHAS — Alimentação ─────────────────────────────────────────── */
+/* ── 4. FOLHAS — o que NUTRE: comida e água ──────────────────────────── */
 function Leaves({
   stage, count, towardStem, opacity,
 }: { stage: MokariStage; count: number; towardStem: number; opacity: number }) {
@@ -193,14 +232,14 @@ function Leaves({
   return (
     <g aria-hidden>
       {n >= 9 && (
-        <ellipse cx="120" cy={STAGE_ANCHORS[stage].auraCenter.y} rx="34" ry="20" fill={color("alimentacao", 0.07)} />
+        <ellipse cx="120" cy={STAGE_ANCHORS[stage].auraCenter.y} rx="34" ry="20" fill={color("folha", 0.07)} />
       )}
       {slots.map((slot, i) => (
         <ellipse
           key={i}
           cx={slot.x} cy={slot.y}
           rx={LEAF_LENGTH * markScale(i, base)} ry={4 * markScale(i, base)}
-          fill={color("alimentacao", Math.min(1, 0.85 + opacity))}
+          fill={color("folha", Math.min(1, 0.85 + opacity))}
           transform={`rotate(${leafAngle(slot, towardStem)} ${slot.x} ${slot.y})`}
         />
       ))}
@@ -208,14 +247,14 @@ function Leaves({
   );
 }
 
-/* ── 5. FRUTOS — Prosperidade. Colheita, não moeda ──────────────────────
+/* ── 5. FRUTOS — o dinheiro. Colheita, não moeda ────────────────────────
    Moeda lê como cobiça; fruto lê como colheita. */
 function Fruits({
   stage, count, opacity,
 }: { stage: MokariStage; count: number; opacity: number }) {
   const n = fruitCount(count);
   if (n < 1) return null;
-  const fill = color("prosperidade", Math.min(1, 1 - 0 + opacity));
+  const fill = color("fruto", Math.min(1, 1 - 0 + opacity));
   return (
     <g aria-hidden>
       {fruitSlotsFor(stage, n).map((slot, i) => (
@@ -240,14 +279,14 @@ function Fruits({
   );
 }
 
-/* ── 6. FLORES E AURA — Mente ───────────────────────────────────────────
+/* ── 6. FLORES E AURA — a mente ─────────────────────────────────────────
    Usam os slots de índice ímpar para não empilhar sobre as folhas. */
 function Flowers({
   stage, count, anchors, opacity,
 }: { stage: MokariStage; count: number; anchors: StageAnchors; opacity: number }) {
   const n = flowerCount(count);
   if (n < 1) return null;
-  const petal = color("mente", Math.min(1, 1 + opacity));
+  const petal = color("flor", Math.min(1, 1 + opacity));
   return (
     <g aria-hidden>
       {n >= 5 && (
@@ -345,12 +384,15 @@ function MokariFigure({ data, reduced, novidades }: {
   const anchors = STAGE_ANCHORS[data.stage];
   const style = STATE_STYLE[data.state];
   const lean = style.lean + anchors.lean;
-  const ev = data.detail.pillar_events;
+  const ev = data.detail.organ_events;
 
-  /* O pilar mais perto da próxima marca. Empate resolve pela ordem dos
-     pilares, que é estável — assim a frase não troca sozinha a cada carga. */
-  const proximo = PILLARS
-    .map((p) => ({ nome: p.name, faltam: marksToGo(ev[p.id] ?? 0) }))
+  /* O ÓRGÃO mais perto da próxima marca — não o pilar. A frase fala do que a
+     pessoa vê crescer ("uma raiz nova"), e do ato que faz crescer, porque com
+     Vitalidade desenhando duas peças "faltam 2 registros de Vitalidade" deixou
+     de dizer qual das duas. Empate resolve pela ordem fixa abaixo, que é
+     estável — assim a frase não troca sozinha a cada carga. */
+  const proximo = MOKARI_ORGANS
+    .map((o) => ({ ato: ORGAN_ATO[o], peca: ORGAN_PECA[o], faltam: marksToGo(ev[o] ?? 0) }))
     .sort((a, b) => a.faltam - b.faltam)[0] ?? null;
 
   const destaque = PILLARS.filter((p) => (data.affinity[p.id] ?? 0) >= 2).map((p) => p.name);
@@ -363,16 +405,19 @@ function MokariFigure({ data, reduced, novidades }: {
       <svg viewBox={VIEWBOX} role="img" aria-label={aria} className="w-full h-[140px]">
         <defs>
           <radialGradient id="mokari-aura">
-            <stop offset="0%" stopColor={color("mente", 0.18)} />
-            <stop offset="100%" stopColor={color("mente", 0)} />
+            <stop offset="0%" stopColor={color("flor", 0.18)} />
+            <stop offset="100%" stopColor={color("flor", 0)} />
           </radialGradient>
           <radialGradient id="mokari-dawn">
             <stop offset="0%" stopColor="hsl(var(--gold) / 0.10)" />
             <stop offset="100%" stopColor="hsl(var(--gold) / 0)" />
           </radialGradient>
+          {/* O céu é AMBIENTE, não órgão: ele conta tempo, não registro.
+              Por isso ele fala com a var do pilar da mente direto, e não passa
+              pelo mapa de órgãos — que é sobre marcas que a pessoa constrói. */}
           <radialGradient id="mokari-sky">
-            <stop offset="0%" stopColor={color("mente", 0.08)} />
-            <stop offset="100%" stopColor={color("mente", 0)} />
+            <stop offset="0%" stopColor="hsl(var(--mente) / 0.08)" />
+            <stop offset="100%" stopColor="hsl(var(--mente) / 0)" />
           </radialGradient>
         </defs>
 
@@ -385,17 +430,17 @@ function MokariFigure({ data, reduced, novidades }: {
         >
           <g transform={`rotate(${lean} ${anchors.rootOrigin.x} ${anchors.rootOrigin.y})`}>
             <Roots
-              stage={data.stage} count={ev.vitalidade}
+              stage={data.stage} count={ev.raiz}
               opacity={Math.min(1, 1 + style.markOpacityBonus)}
             />
             <Body stage={data.stage} canopyScaleX={style.canopyScaleX} />
             <Leaves
-              stage={data.stage} count={ev.alimentacao}
+              stage={data.stage} count={ev.folha}
               towardStem={style.leafTowardStem} opacity={style.markOpacityBonus}
             />
-            <Fruits stage={data.stage} count={ev.prosperidade} opacity={style.markOpacityBonus} />
+            <Fruits stage={data.stage} count={ev.fruto} opacity={style.markOpacityBonus} />
             <Flowers
-              stage={data.stage} count={ev.mente}
+              stage={data.stage} count={ev.flor}
               anchors={anchors} opacity={style.markOpacityBonus}
             />
             <Buds stage={data.stage} affinity={data.affinity} />
@@ -428,8 +473,8 @@ function MokariFigure({ data, reduced, novidades }: {
       {proximo && (
         <p className="text-xs text-muted-foreground text-center">
           {proximo.faltam === 1
-            ? `1 registro de ${proximo.nome} e seu Mokari cresce de novo`
-            : `${proximo.faltam} registros de ${proximo.nome} e seu Mokari cresce de novo`}
+            ? `1 registro de ${proximo.ato} e nasce uma ${proximo.peca} nova`
+            : `${proximo.faltam} registros de ${proximo.ato} e nasce uma ${proximo.peca} nova`}
         </p>
       )}
     </>
@@ -498,9 +543,10 @@ export default function Mokari() {
         <CollapsibleContent>
           <p className="text-xs text-muted-foreground pt-2">
             O Mokari é o retrato do que você registrou até aqui. O corpo cresce com o seu XP
-            acumulado. As raízes, folhas, frutos e flores vêm dos seus quatro pilares, e continuam
-            crescendo sem limite — cada vez mais devagar, nunca parando. O céu acompanha o tempo
-            de jornada. Ele nunca volta atrás: o que você construiu fica.
+            acumulado. As raízes vêm do que sustenta você — treino e sono. As folhas, do que
+            nutre — comida e água. Os frutos vêm do dinheiro; as flores, da mente. As quatro
+            peças continuam crescendo sem limite — cada vez mais devagar, nunca parando. O céu
+            acompanha o tempo de jornada. Ele nunca volta atrás: o que você construiu fica.
           </p>
 
           {/* OS NÚMEROS CRUS. Os três já eram calculados a cada carga e nunca

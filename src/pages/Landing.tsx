@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { PILLARS } from "@/lib/pillars";
+import { PILLARS, pillarById } from "@/lib/pillars";
 import {
   ArrowRight, Lock, Sparkles, MessageCircle, TrendingUp, Moon,
   UtensilsCrossed, Check, Camera, Mic, ScanLine, Paperclip, Swords, ShieldCheck,
@@ -37,13 +37,13 @@ const DEMOS = [
     text: "Corri 5km hoje cedo e já bebi 2 litros de água",
     events: [
       { label: "Treino: corrida 5km (Pernas, Cardio)", pillar: "vitalidade" },
-      { label: "Água: 2L", pillar: "alimentacao" },
+      { label: "Água: 2L", pillar: "vitalidade" },
     ],
   },
   {
     text: "Almocei frango com salada e fiz minha oração de manhã",
     events: [
-      { label: "Refeição: frango com salada", pillar: "alimentacao" },
+      { label: "Refeição: frango com salada", pillar: "vitalidade" },
       { label: "Prática: oração", pillar: "mente" },
     ],
   },
@@ -86,7 +86,13 @@ function CaptureDemo() {
       </div>
       <div className="mt-3 space-y-1.5 min-h-[124px]">
         {current.events.slice(0, shown).map((ev, i) => {
-          const meta = PILLARS.find((p) => p.id === ev.pillar)!;
+          /* Sem o `!`, e é a diferença entre um evento a menos e uma TELA
+             BRANCA na página pública: o `pillar` destes eventos é string crua
+             de um roteiro escrito à mão, e uma fusão de pilares que passe por
+             aqui sem atualizar o roteiro derrubaria a landing inteira para
+             quem nunca nem entrou no app. Pilar desconhecido: some a linha. */
+          const meta = pillarById(ev.pillar);
+          if (!meta) return null;
           return (
             <div key={`${demo}-${i}`} className="flex items-center gap-2.5 rounded-md border p-2.5 animate-fade-up">
               <Check className="w-4 h-4 text-success shrink-0" />
@@ -138,11 +144,11 @@ function parseLocalEvents(raw: string): LocalEvent[] {
   if (sono) events.push({ label: `Sono: ${sono[1].replace(".", ",")}h`, pillar: "vitalidade" });
 
   if (/almo[çc]|jant|lanch|caf[ée] da manh|refei[çc]|comi\b/.test(t))
-    events.push({ label: "Refeição registrada", pillar: "alimentacao" });
+    events.push({ label: "Refeição registrada", pillar: "vitalidade" });
 
   const agua = t.match(/(\d+(?:[.,]\d+)?)\s*l(?:itros?)?\b/);
   if (/[áa]gua/.test(t))
-    events.push({ label: agua ? `Água: ${agua[1].replace(".", ",")}L` : "Hidratação registrada", pillar: "alimentacao" });
+    events.push({ label: agua ? `Água: ${agua[1].replace(".", ",")}L` : "Hidratação registrada", pillar: "vitalidade" });
 
   if (/or(?:ei|a[çc][ãa]o)|medit|culto|devocional|ter[çc]o|gratid[ãa]o/.test(t))
     events.push({ label: "Prática registrada", pillar: "mente" });
@@ -187,7 +193,10 @@ function TryItDemo() {
           {result.length > 0 ? (
             <>
               {result.map((ev, i) => {
-                const meta = PILLARS.find((p) => p.id === ev.pillar)!;
+                // Mesma razão do roteiro acima: o parser local devolve string
+                // crua, e `!` sobre lista desatualizada é tela branca.
+                const meta = pillarById(ev.pillar);
+                if (!meta) return null;
                 return (
                   <div key={i} className="flex items-center gap-2.5 rounded-md border p-2.5 animate-fade-up">
                     <Check className="w-4 h-4 text-success shrink-0" />
@@ -417,7 +426,7 @@ export default function Landing() {
       {/* ─── Pilares ─── */}
       <section className="container py-16 md:py-24 max-w-4xl">
         <h2 className="font-display text-3xl md:text-4xl font-semibold text-center">
-          Uma vida só. Quatro pilares.
+          Uma vida só. Três pilares.
         </h2>
         <p className="text-center text-muted-foreground mt-3 mb-10 max-w-xl mx-auto">
           A maioria entra pelo corpo e pelo dinheiro. O resto você descobre no caminho:
@@ -664,7 +673,7 @@ export default function Landing() {
             </h3>
             <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
               <li>• Captura por frase, voz e foto — no app e pelo WhatsApp (áudio transcrito na hora, foto de prato e print de Pix viram registro)</li>
-              <li>• Conselheiro que vê os 4 pilares, no app e pelo WhatsApp (a conversa continua nos dois)</li>
+              <li>• Conselheiro que vê a sua vida inteira — dinheiro, corpo e mente —, no app e pelo WhatsApp (a conversa continua nos dois)</li>
               <li>• Retrospectiva semanal, briefing diário (Ascende+) e avisos no WhatsApp</li>
               <li>• Raio-X de 60 segundos das finanças, importação de fatura e batalhas contra vícios</li>
               <li>• Importação do histórico que já existe em outros apps: o export do App Saúde do iPhone e CSV de sono, treino, peso e alimentação — lido no próprio aparelho</li>

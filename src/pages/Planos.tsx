@@ -45,8 +45,14 @@ const EMPTY_STATE_QUESTION =
 const KIND_LABEL: Record<string, string> = {
   alimentar: "Alimentar", treino: "Treino", financeiro: "Financeiro", rotina: "Rotina", outro: "Plano",
 };
+/* Alimentar e treino são a MESMA cor desde a fusão, e está certo assim: a cor
+   nunca foi o que distinguia esses cartões — o rótulo ("Alimentar"/"Treino"),
+   o ícone (UtensilsCrossed/Dumbbell) e a seção com título próprio já fazem
+   isso. Ressuscitar o coral como cor de TIPO DE PLANO, sem pilar por trás,
+   recriaria exatamente a incoerência que a fusão removeu: uma cor de categoria
+   que não corresponde a categoria nenhuma do app. */
 const KIND_VAR: Record<string, string> = {
-  alimentar: "--alimentacao", treino: "--vitalidade", financeiro: "--prosperidade", rotina: "--mente",
+  alimentar: "--vitalidade", treino: "--vitalidade", financeiro: "--prosperidade", rotina: "--mente",
 };
 const KIND_ICON: Record<string, LucideIcon> = {
   alimentar: UtensilsCrossed, treino: Dumbbell, financeiro: Coins, rotina: Repeat,

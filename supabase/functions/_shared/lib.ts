@@ -1238,7 +1238,7 @@ export const SAFETY_RULES = `
 ━━━ BATALHAS (lutas pessoais: pornografia, redes sociais, cigarro, apostas etc.) ━━━
 • Recaída se acolhe, nunca se julga. O dado importante da recaída é o gatilho — ajude a pessoa a enxergar o padrão (ex.: recaídas em noites de sono ruim, em dias de humor baixo, em madrugadas). Reforce que os dias limpos acumulados não se perdem.
 • Ao notar padrão severo em batalhas de álcool, drogas ou apostas (recaídas quase diárias, sinais de abstinência física, dívidas ou perdas relevantes), diga com clareza e carinho que isso merece acompanhamento profissional e aponte caminhos concretos no Brasil: CAPS (unidades públicas de saúde mental), Alcoólicos Anônimos, Narcóticos Anônimos, Jogadores Anônimos. O Ascende é apoio, não tratamento.
-• NUNCA trate comida como inimigo nem incentive "batalha contra comer". Se a pessoa enquadrar alimentação como guerra/restrição, redirecione com gentileza para hábitos positivos no pilar Alimentação (ex.: "fazer uma refeição de verdade") — guerra contra comida alimenta compulsão. Sinais de transtorno alimentar merecem indicação de profissional.
+• NUNCA trate comida como inimigo nem incentive "batalha contra comer". Se a pessoa enquadrar alimentação como guerra/restrição, redirecione com gentileza para hábitos positivos no pilar Vitalidade (ex.: "fazer uma refeição de verdade") — guerra contra comida alimenta compulsão. Sinais de transtorno alimentar merecem indicação de profissional.
 ━━━ COMO VOCÊ ESCREVE ━━━
 • Português do Brasil, direto e sem rodeio. Frase que a pessoa precisa reler duas vezes é frase para reescrever. Corte palavra que não faz trabalho.
 • NÚMEROS EM FORMATO BRASILEIRO, sempre: vírgula decimal e espaço antes da unidade — "1,5 L", "7,5 h", "6,5 kg", "R$ 47,90". Os dados que você recebe podem vir com ponto decimal e unidade colada ("1.5L", "7.5h"): traduza antes de escrever. Datas em dia/mês ("12/03", "12 de março"), nunca no formato americano.
@@ -1386,13 +1386,6 @@ export const CAPTURE_TOOL = {
                 "e corrige. NUNCA invente a data e NUNCA devolva data no futuro — todo relato aqui é de algo " +
                 "que já aconteceu, e data futura vira registro invisível.",
             },
-            pillar: {
-              type: "string",
-              enum: ["prosperidade", "vitalidade", "alimentacao", "mente"],
-              description:
-                "Pilar: transaction→prosperidade; sleep/nap/workout→vitalidade; " +
-                "meal/water/weight→alimentacao; mood/gratitude/practice→mente.",
-            },
             summary: { type: "string", description: "Resumo curto em português para o usuário confirmar. Ex.: 'Gasto de R$ 47 em Mercado' ou 'Treino de costas'." },
             amount: { type: "number", description: "Valor em reais (apenas para transaction)." },
             tx_kind: { type: "string", enum: ["income", "expense"], description: "Entrada ou saída (apenas para transaction)." },
@@ -1429,7 +1422,11 @@ export const CAPTURE_TOOL = {
             mood_label: { type: "string", description: "Palavra do próprio usuário para o humor. Ex.: ansioso, animado, cansado." },
             mood_score: { type: "number", description: "Humor de 1 (péssimo) a 5 (ótimo), inferido do relato." },
           },
-          required: ["kind", "pillar", "summary"],
+          // `pillar` saiu daqui: ver canonicalPillar. Não é economia de
+          // token (são ~75 tokens de prefixo cacheado, ruído) — é
+          // confiabilidade: campo que a pessoa não consegue auditar não pode
+          // depender de escritor probabilístico quando o código o deriva.
+          required: ["kind", "summary"],
         },
       },
     },
@@ -2057,11 +2054,11 @@ export async function extractEventsAndMemories(
     // data vem do próprio CSV, não de alguém falando, e 555 noites exportadas
     // são dado histórico que ninguém está nomeando por "ontem".
     const sp = spParts();
-    const events = bulk
+    const events = withCanonicalPillar(bulk
       ? rawEvents.slice(0, EXTRACTION_MAX_EVENTS)
       : resolveSleepDays(
         rawEvents.slice(0, EXTRACTION_MAX_EVENTS), sp.dateIso, Number(sp.timeHm.slice(0, 2)),
-      );
+      ));
     const rawMems = Array.isArray(tu?.input?.memories) ? tu.input.memories : [];
     const learned = await persistMemories(supabase, userId, rawMems, known, memoryCap);
     return { ok: true, events, learned, capped: rawEvents.length >= EXTRACTION_MAX_EVENTS };

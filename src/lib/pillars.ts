@@ -1,6 +1,12 @@
-import { Coins, HeartPulse, Apple, Sparkles, type LucideIcon } from "lucide-react";
+import { Coins, HeartPulse, Sparkles, type LucideIcon } from "lucide-react";
 
-export type PillarId = "prosperidade" | "vitalidade" | "alimentacao" | "mente";
+/* FUSÃO DE 17/09/2026 — `alimentacao` foi ABSORVIDO por `vitalidade`.
+   Não é renomeação de dois num terceiro: é uma direção só, e é por isso que a
+   rota /app/vitalidade, o token --vitalidade, o default de `habits.pillar` e
+   os gatilhos do banco não precisaram mudar. Estreitar a união AQUI é o que
+   dá erro de compilação em todo consumidor tipado — e erro de compilação é o
+   tipo bom de falha. */
+export type PillarId = "prosperidade" | "vitalidade" | "mente";
 
 export interface PillarMeta {
   id: PillarId;
@@ -14,22 +20,23 @@ export interface PillarMeta {
 
 export const PILLARS: PillarMeta[] = [
   { id: "prosperidade", name: "Prosperidade", attribute: "Prosperidade", desc: "Dinheiro sob controle, sem ansiedade", icon: Coins, colorVar: "--prosperidade", route: "/app/prosperidade" },
-  { id: "vitalidade", name: "Vitalidade", attribute: "Vitalidade", desc: "Corpo, sono, treino e energia", icon: HeartPulse, colorVar: "--vitalidade", route: "/app/vitalidade" },
-  { id: "alimentacao", name: "Alimentação", attribute: "Nutrição", desc: "Comer bem, dentro do seu orçamento", icon: Apple, colorVar: "--alimentacao", route: "/app/alimentacao" },
+  // A comida vem em QUARTO lugar na frase, sempre. É deliberado: o risco desta
+  // fusão não é a cor nem o ícone, é o pilar passar a ler como app de dieta.
+  // Por isso a maçã morreu e ficou o HeartPulse.
+  { id: "vitalidade", name: "Vitalidade", attribute: "Vitalidade", desc: "Corpo, sono, treino e o que você come", icon: HeartPulse, colorVar: "--vitalidade", route: "/app/vitalidade" },
   { id: "mente", name: "Mente & Espírito", attribute: "Serenidade", desc: "Humor, gratidão e sua prática espiritual", icon: Sparkles, colorVar: "--mente", route: "/app/mente" },
 ];
 
-/* ── FUSÃO DE 17/09/2026 — `alimentacao` foi ABSORVIDO por `vitalidade` ───
-   Não é renomeação de dois num terceiro: é uma direção só. `alimentacao`
-   continua no banco em linha antiga, em perfil não migrado e em proposta
-   gravada por uma instância anterior ao deploy. As funções desta seção são o
-   inteiro do que o front sabe sobre isso — em vez de um `|| "alimentacao"`
-   espalhado por cada consulta, que é como um apelido temporário vira eterno
-   sem ninguém conseguir listar onde ele está.
+/* ── O valor legado, e o único lugar em que ele vive ─────────────────────
+   `alimentacao` continua no banco em linha antiga, em perfil não migrado e em
+   proposta gravada por uma instância anterior ao deploy. As funções desta
+   seção são o inteiro do que o front sabe sobre isso — em vez de um
+   `|| "alimentacao"` espalhado por cada consulta, que é como um apelido
+   temporário vira eterno sem ninguém conseguir listar onde ele está.
 
-   A REGRA, e ela resolve três bugs do mesmo tipo em lugares diferentes: toda
-   leitura de `pillar` vinda do BANCO passa por uma destas funções. Escrita
-   grava só o id canônico; leitura aceita os dois. Comparar
+   A REGRA, e ela resolveu três bugs do mesmo tipo em lugares diferentes:
+   toda leitura de `pillar` vinda do BANCO passa por uma destas funções.
+   Escrita grava só o id canônico; leitura aceita os dois. Comparar
    `linha.pillar === "vitalidade"` na mão é o bug — ele não falha em voz alta,
    só devolve zero para quem mais registrou. */
 
@@ -133,8 +140,10 @@ export const isPillarActive = (pillars: string[] | null | undefined, id: PillarI
  *  local e instantânea; empates resolvidos pela ordem dos padrões. */
 const GOAL_PATTERNS: [PillarId, RegExp][] = [
   ["prosperidade", /dinheiro|d[íi]vida|salário|salario|orçamento|orcamento|gastar|gasto|poupar|economi|renda|financ|investir|juntar|reserva|bolso|conta/i],
-  ["vitalidade", /trein|academia|muscul|massa|emagrec|peso|corr|forç|forca|energia|dormir|sono|condicionamento|shape|corpo/i],
-  ["alimentacao", /comer|comida|diet|aliment|nutri|prote[íi]na|caloria|refei|cozinh|açúcar|acucar/i],
+  // Os dois regexes de antes, fundidos. Não é só higiene: "quero emagrecer
+  // comendo melhor" casava com os DOIS e caía em Vitalidade por acidente da
+  // ordem do array. O empate deixou de existir junto com o segundo pilar.
+  ["vitalidade", /trein|academia|muscul|massa|emagrec|peso|corr|forç|forca|energia|dormir|sono|condicionamento|shape|corpo|comer|comida|diet|aliment|nutri|prote[íi]na|caloria|refei|cozinh|açúcar|acucar/i],
   ["mente", /ansied|estresse|medita|orar|oraç|oracao|f[ée]\b|deus|gratid|foco|clareza|paz|mente|humor|espírito|espirito|h[áa]bito de leitura/i],
 ];
 export function inferPillarFromGoal(goal: string): PillarId | null {
@@ -149,15 +158,14 @@ export function inferPillarFromGoal(goal: string): PillarId | null {
  *  desligou Vitalidade — Sugestão 1). */
 const EXAMPLES_BY_PILLAR: Record<PillarId, string[]> = {
   prosperidade: ["Gastei 47 no mercado", "Recebi 250 de um freela", "Paguei 89 de internet"],
-  vitalidade: ["Treinei pernas hoje", "Dormi umas 6h, tô meio cansado", "Corri 5km de manhã"],
-  alimentacao: ["Almocei frango com arroz", "Tomei 2 copos de água agora", "Café da manhã: pão e ovo"],
+  vitalidade: ["Treinei pernas hoje", "Dormi umas 6h, tô meio cansado", "Almocei frango com arroz"],
   mente: ["Orei de manhã, tô mais leve", "Dia meio ansioso, humor ruim", "Meditei 10 minutos"],
 };
 const COMBO_EXAMPLES: [PillarId[], string][] = [
   [["prosperidade", "vitalidade"], "Gastei 47 no mercado e treinei pernas"],
-  [["alimentacao", "mente"], "Almocei frango com arroz, orei de manhã"],
+  [["vitalidade", "mente"], "Almocei frango com arroz, orei de manhã"],
   [["vitalidade", "mente"], "Dormi mal e acordei ansioso"],
-  [["prosperidade", "alimentacao"], "Gastei 32 no almoço fora"],
+  [["prosperidade", "vitalidade"], "Gastei 32 no almoço fora"],
 ];
 export function captureExamplesFor(pillars?: string[] | null): string[] {
   const active = activePillarSet(pillars);

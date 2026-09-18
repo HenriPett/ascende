@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Swords, Plus, Loader2, LifeBuoy, Archive, ArchiveRestore, MessageCircle, Apple } from "lucide-react";
+import { Swords, Plus, Loader2, LifeBuoy, Archive, ArchiveRestore, MessageCircle, UtensilsCrossed } from "lucide-react";
 import {
   type Battle, type BattleCheckin as Checkin,
   BATTLE_TEMPLATES, COMMON_TRIGGERS, MILESTONES,
@@ -125,17 +125,23 @@ function CreateBattle({
           {foodWarning && (
             <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm space-y-2">
               <p className="font-medium flex items-center gap-1.5">
-                <Apple className="w-4 h-4 text-alimentacao" /> Comida não é inimigo
+                <UtensilsCrossed className="w-4 h-4 text-vitalidade" /> Comida não é inimigo
               </p>
               <p className="text-muted-foreground text-xs">
                 Guerra contra comida costuma alimentar exatamente a compulsão que se quer vencer.
                 O caminho que funciona é construir o positivo: um hábito como <em>"fazer uma refeição
-                de verdade"</em> no pilar Alimentação. Se a questão for gasto com delivery, crie a
+                de verdade"</em> em Vitalidade. Se a questão for gasto com delivery, crie a
                 batalha "Compras por impulso". E se a relação com comida anda pesada, um
                 nutricionista ou psicólogo é o melhor aliado que existe.
               </p>
+              {/* O compromisso positivo nasce da conversa: o Conselheiro
+                  propõe e grava com confirmação, que é o caminho que sobrou
+                  quando a lista de hábitos saiu da Vitalidade — ela era
+                  transversal e vivia no pilar errado. */}
               <Button asChild size="sm" variant="outline">
-                <Link to="/app/vitalidade">Criar hábito positivo</Link>
+                <Link to={`/app/conselheiro?q=${encodeURIComponent("Me ajude a criar um compromisso diário positivo com a comida, em vez de uma batalha contra ela")}`}>
+                  Criar compromisso positivo
+                </Link>
               </Button>
             </div>
           )}

@@ -15,12 +15,11 @@
 //   cai no blueprint local (TMB), sem quebrar.
 import {
   serviceClient, requireUser, assertRateLimit, corsFor, buildSnapshot,
-  MODEL_SMART, SAFETY_RULES,
+  MODEL_SMART, SAFETY_RULES, canonicalPillarId, VALID_PILLARS,
 } from "../_shared/lib.ts";
 import { anthropicCall } from "../_shared/usage.ts";
 import { getFlags } from "../_shared/entitlements.ts";
 
-const VALID_PILLARS = ["prosperidade", "vitalidade", "alimentacao", "mente"];
 
 const BLUEPRINT_TOOL = {
   name: "gerar_blueprint",
@@ -54,7 +53,7 @@ const BLUEPRINT_TOOL = {
               type: "string", enum: ["alimentar", "treino", "financeiro", "rotina"],
               description: "Área do plano. Um plano por área, sem repetir.",
             },
-            pillar: { type: "string", enum: VALID_PILLARS, description: "Pilar do plano: alimentar→alimentacao; treino→vitalidade; financeiro→prosperidade; rotina→vitalidade ou mente." },
+            pillar: { type: "string", enum: VALID_PILLARS, description: "Pilar do plano: alimentar→vitalidade; treino→vitalidade; financeiro→prosperidade; rotina→vitalidade ou mente." },
             title: { type: "string", description: "Título curto e pessoal, específico DESTA área. Ex.: 'Alimentação para massa magra com R$ 800/mês'." },
             content_markdown: {
               type: "string",
@@ -240,7 +239,7 @@ Deno.serve(async (req) => {
       // deno-lint-ignore no-explicit-any
       const habits = (Array.isArray(inp.habits) ? inp.habits : []).flatMap((h: any) => {
         const name = String(h?.name ?? "").trim().slice(0, 60);
-        const pillar = VALID_PILLARS.includes(h?.pillar) ? String(h.pillar) : null;
+        const pillar = canonicalPillarId(h?.pillar);
         const key = name.toLowerCase();
         if (name.length < 3 || !pillar || seen.has(key)) return [];
         seen.add(key);
@@ -261,7 +260,7 @@ Deno.serve(async (req) => {
         seenKinds.add(kind);
         return [{
           kind,
-          pillar: VALID_PILLARS.includes(pl?.pillar) ? String(pl.pillar) : null,
+          pillar: canonicalPillarId(pl?.pillar),
           title,
           content_markdown: content.slice(0, 20000),
         }];

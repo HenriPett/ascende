@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { pillarById } from "@/lib/pillars";
 
 /* Dados das linhas de estado do hub /app/jornada.
  *
@@ -28,8 +29,18 @@ export function usePillarActivityQuery() {
       const { data, error } = await supabase.from("life_events")
         .select("pillar").eq("user_id", user!.id).gte("occurred_at", since);
       if (error) throw error;
+      /* O balde é o pilar CANÔNICO, não o que está gravado na linha. Enquanto
+         o backfill não rodar — e enquanto houver instância velha da função no
+         ar escrevendo `alimentacao` —, agrupar pelo valor cru joga essas
+         linhas num balde que nenhum consumidor lê: as telas pedem
+         `counts[p.id]` para os três pilares que existem. O efeito é a
+         atividade do pilar do corpo aparecendo menor do que foi, silenciosa e
+         proporcional a quanto tempo a função velha ficar no ar. */
       const c: Record<string, number> = {};
-      for (const e of data ?? []) c[e.pillar] = (c[e.pillar] ?? 0) + 1;
+      for (const e of data ?? []) {
+        const id = pillarById(String(e.pillar))?.id ?? String(e.pillar);
+        c[id] = (c[id] ?? 0) + 1;
+      }
       return c;
     },
   });

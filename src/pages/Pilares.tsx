@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { PILLARS, activePillarSet, type PillarId } from "@/lib/pillars";
+import { PILLARS, activePillarSet, normalizePillars, type PillarId } from "@/lib/pillars";
 import { ChevronRight, Swords, ClipboardList, Plus, Loader2, Layers } from "lucide-react";
 import FirstTimeTip from "@/components/core/FirstTimeTip";
 import QueryError from "@/components/core/QueryError";
@@ -34,7 +34,11 @@ export default function Pilares() {
   const activatePillar = async (id: PillarId) => {
     if (!user || activating) return;
     setActivating(id);
-    const next = [...new Set([...(profile?.pillars ?? []), id])];
+    /* Normaliza ANTES de acrescentar. A leitura já traduz o apelido, então
+       nada se perderia sem isto — mas gravar a lista crua de volta
+       perpetuaria `alimentacao` no banco a cada ativação, e apelido que se
+       reescreve sozinho nunca chega ao fim do prazo de remoção. */
+    const next = [...new Set([...normalizePillars(profile?.pillars), id])];
     const { error } = await supabase.from("profiles").update({ pillars: next }).eq("user_id", user.id);
     setActivating(null);
     if (error) { toast.error("Não consegui ativar agora. Tente de novo."); return; }

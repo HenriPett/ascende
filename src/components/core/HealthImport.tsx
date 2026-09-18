@@ -60,12 +60,12 @@ const HISTORICO_MAX = 1000;
 const KIND_META: Record<string, { icon: LucideIcon; colorVar: string; plural: string }> = {
   sleep: { icon: Moon, colorVar: "--vitalidade", plural: "noites de sono" },
   workout: { icon: Dumbbell, colorVar: "--vitalidade", plural: "treinos" },
-  weight: { icon: Scale, colorVar: "--alimentacao", plural: "pesagens" },
-  water: { icon: Droplet, colorVar: "--alimentacao", plural: "dias de hidratação" },
+  weight: { icon: Scale, colorVar: "--vitalidade", plural: "pesagens" },
+  water: { icon: Droplet, colorVar: "--vitalidade", plural: "dias de hidratação" },
   // "registros de alimentação", e não "refeições": o mesmo formato cobre
   // linha-por-refeição (MyFitnessPal) e total-do-dia (Cronometer), e chamar
   // 120 dias de total de "120 refeições" seria mentira.
-  meal: { icon: UtensilsCrossed, colorVar: "--alimentacao", plural: "registros de alimentação" },
+  meal: { icon: UtensilsCrossed, colorVar: "--vitalidade", plural: "registros de alimentação" },
 };
 
 /** O resultado pode vir do CSV ou do export do App Saúde. As duas formas são

@@ -4,6 +4,7 @@ import {
   MODEL_SMART, MODEL_FAST, SAFETY_RULES, extractEventsAndMemories,
   STATEMENT_TOOL, STATEMENT_SYSTEM, normalizeStatementItems,
   ATTACHMENT_EXTRACT_MAX_CHARS, EXTRACTION_MAX_EVENTS, attachMemorySources,
+  canonicalPillarId, VALID_PILLARS,
 } from "../_shared/lib.ts";
 import { anthropicCall, reserveUsage, reserveUsageWindows, releaseUsage, settleUsage } from "../_shared/usage.ts";
 import {
@@ -90,7 +91,7 @@ REGRAS:
 A. UM TURNO NÃO PEDE E NÃO ENTREGA AO MESMO TEMPO. Se você está pedindo dados, esta resposta NÃO traz plano e você NÃO chama registrar_plano. Se você está entregando o plano, o texto PARA de pedir: é proibido escrever "ainda preciso das suas respostas", "assim que você me responder eu monto" ou equivalente ao lado de um plano entregue. No lugar disso, o plano declara o que assumiu em "Premissas que assumi" e o texto convida a corrigir ("se algum desses pontos estiver diferente do seu caso, me diga e eu refaço"). Pedir e entregar na mesma mensagem se contradiz na cara da pessoa e joga fora a confiança na resposta inteira, inclusive na parte correta dela.
 B. SAÚDE NUNCA SE ASSUME. Lesão, dor, condição de saúde e medicamento entram no plano SOMENTE se estiverem no retrato ou se a pessoa tiver dito nesta conversa. É PROIBIDO escrever "sem lesões", "sem lesões conhecidas", "sem restrições" ou "nenhuma condição relatada" como premissa: ausência de dado não é ausência de lesão, e essa suposição é a única do protocolo que pode machucar alguém. Faltando esse dado: diga em UMA frase que você não sabe se existe lesão ou condição, entregue a versão conservadora do plano (carga moderada, progressão lenta, movimentos de baixo impacto, nada de exercício de risco para coluna, ombro ou joelho) e evite justamente o que dependeria do dado que falta. Idade, sexo, altura, dias disponíveis e nível de atividade podem virar premissa declarada; saúde, não.
 0. NUNCA afirme que a pessoa pulou, esqueceu ou deixou de preencher uma etapa, e nunca cite telas ou etapas que não estejam listadas no retrato: você não sabe o que o app perguntou a ela. Metas (calórica, proteína, treinos, sono, teto de gasto) não são perguntadas em formulário nenhum: elas nascem de um plano ativado. Peça dados de forma neutra, sem atribuir culpa ou causa.
-1. Se QUALQUER dado obrigatório estiver ausente, NÃO gere o plano completo. Responda curto, em UMA única mensagem de perguntas: diga em uma frase por que precisa dos dados e liste TUDO o que falta de uma vez (nunca em conta-gotas), indicando onde preencher (idade, sexo, altura, atividade e restrições em Ajustes na seção "Sobre você"; peso na aba Alimentação; condições e medicamentos na Vitalidade; renda e teto em Ajustes). A pessoa também pode responder direto na conversa: aceite e use.
+1. Se QUALQUER dado obrigatório estiver ausente, NÃO gere o plano completo. Responda curto, em UMA única mensagem de perguntas: diga em uma frase por que precisa dos dados e liste TUDO o que falta de uma vez (nunca em conta-gotas), indicando onde preencher (idade, sexo, altura, atividade e restrições em Ajustes na seção "Sobre você"; peso, condições e medicamentos na aba Vitalidade; renda e teto em Ajustes). A pessoa também pode responder direto na conversa: aceite e use.
 2. A lista de dados obrigatórios acima é FECHADA: você não pode inventar pré-requisitos novos. NÃO são pré-requisito de nenhum plano (nunca segure a entrega por eles): meta de peso, meta de sono, peso atual para plano de TREINO, metas calóricas para plano de treino, horários exatos da rotina, preferências de exercício. Se forem úteis e você não os tiver, assuma um padrão razoável, declare a premissa e siga; se a pessoa quiser ajustar depois, ela ajusta.
 3. Depois que a pessoa responder à sua rodada de perguntas, gere o plano NA MESMA resposta, mesmo que algo secundário continue faltando: comece com a seção "Premissas que assumi" listando cada suposição. Perguntar de novo após uma rodada respondida é proibido, e responder "vou assumir X, gerando agora" SEM o plano junto também: frases como "gerando agora" ou "gero na próxima mensagem" são proibidas — ou o plano está nesta resposta (com registrar_plano chamado), ou você ainda está na sua única rodada de perguntas. Só gere o plano completo sem premissas quando tiver tudo. Ao gerar, vá fundo: quantidades, horários, valores em reais, alternativas econômicas, adaptações às condições de saúde e medicamentos do retrato.
 4. Exceção ampliada: se a pessoa disser explicitamente para gerar mesmo sem os dados, gere a versão provisória com "Premissas que assumi" imediatamente, sem nenhuma pergunta.
@@ -138,7 +139,7 @@ const SAVE_PLAN_TOOL = {
     properties: {
       title: { type: "string", description: "Título curto do plano. Ex.: 'Plano alimentar para ganho de massa'." },
       kind: { type: "string", enum: ["alimentar", "treino", "financeiro", "rotina", "outro"] },
-      pillar: { type: "string", enum: ["prosperidade", "vitalidade", "alimentacao", "mente"], description: "Pilar principal do plano." },
+      pillar: { type: "string", enum: VALID_PILLARS, description: "Pilar principal do plano." },
       content_markdown: { type: "string", description: "O plano COMPLETO em markdown: seções, quantidades, horários, valores. Autossuficiente." },
       daily_calories_kcal: { type: "number", description: "OBRIGATÓRIO em planos alimentares: a meta calórica diária do plano. O app aplica como meta acompanhada na tela Hoje." },
       daily_protein_g: { type: "number", description: "Meta diária de proteína em gramas (obrigatória em planos alimentares que a definem)." },
@@ -170,7 +171,7 @@ const PROPOSE_HABITS_TOOL = {
               type: "string",
               description: "Nome curto e concreto, começando com verbo, cumprível no pior dia. Ex.: 'Registrar os gastos do dia', 'Caminhar 15 minutos'. Máx. ~50 caracteres.",
             },
-            pillar: { type: "string", enum: ["prosperidade", "vitalidade", "alimentacao", "mente"] },
+            pillar: { type: "string", enum: VALID_PILLARS },
             why: { type: "string", description: "UMA frase ligando o compromisso à meta da pessoa. Ex.: 'É o que sustenta o plano no seu bolso.'" },
           },
           required: ["name", "pillar"],
@@ -562,7 +563,10 @@ Deno.serve(async (req) => {
       return {
         title: String(inp.title).slice(0, 120),
         kind: ["alimentar", "treino", "financeiro", "rotina", "outro"].includes(inp.kind) ? inp.kind : "outro",
-        pillar: ["prosperidade", "vitalidade", "alimentacao", "mente"].includes(inp.pillar) ? inp.pillar : null,
+        // Tolerante na leitura, canônico na escrita: uma instância velha da
+        // função (ou um prompt ainda em cache) continua propondo `alimentacao`,
+        // e o plano dela entra em `plans.pillar` já como `vitalidade`.
+        pillar: canonicalPillarId(inp.pillar),
         content: String(inp.content_markdown).slice(0, 20000),
         daily_calories_kcal: inRange(inp.daily_calories_kcal, 800, 8000),
         daily_protein_g: inRange(inp.daily_protein_g, 20, 400),
@@ -699,7 +703,6 @@ Deno.serve(async (req) => {
     // Compromissos diários propostos: cartão de escolha no app, nada é
     // criado automaticamente. Hábito imposto é a "régua genérica" que o
     // posicionamento condena — aqui eles nascem da meta da pessoa.
-    const VALID_PILLARS = ["prosperidade", "vitalidade", "alimentacao", "mente"];
     const habitsBlock = blocks.find((b) => b.type === "tool_use" && b.name === "propor_habitos");
     // deno-lint-ignore no-explicit-any
     const rawHabits = (habitsBlock?.input as any)?.habits;
@@ -707,7 +710,7 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const habitProposal = (Array.isArray(rawHabits) ? rawHabits : []).flatMap((h: any) => {
       const name = String(h?.name ?? "").trim().slice(0, 60);
-      const pillar = VALID_PILLARS.includes(h?.pillar) ? String(h.pillar) : null;
+      const pillar = canonicalPillarId(h?.pillar);
       const key = name.toLowerCase();
       if (name.length < 3 || !pillar || seenNames.has(key)) return [];
       seenNames.add(key);

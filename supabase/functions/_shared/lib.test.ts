@@ -25,7 +25,7 @@ import {
   extractEventsAndMemories, isMemoryReadable, isUserOwnedMemory, type MemoryRow,
   sleepWakeDay, resolveSleepDays, SLEEP_MORNING_UNTIL_H,
   trendLines, INSIGHT_PILARES, type InsightRow,
-  canonicalPillar, canonicalPillarId, withCanonicalPillar, buildSnapshot,
+  canonicalPillar, canonicalPillarId, withCanonicalPillar, buildSnapshot, CAPTURE_TOOL,
 } from "./lib.ts";
 
 const USER = "11111111-1111-1111-1111-111111111111";
@@ -1040,9 +1040,8 @@ Deno.test("tendências · sem poda, a ausência continua sendo dita (e com a con
 
    Duas garantias, e as duas falham em SILÊNCIO se alguém as remover:
 
-   1. O pilar de um evento é derivado do `kind`, no código — ainda não é o
-      servidor quem impõe isso (o campo só sai do CAPTURE_TOOL na release de
-      migração), mas a função que deriva já existe e já está testada aqui.
+   1. O pilar de um evento é derivado do `kind`, no código. O campo saiu do
+      CAPTURE_TOOL, então não existe mais um caminho em que o modelo o escolha.
    2. Um perfil que fechou só `alimentacao` — e que NÃO tem a chave nova —
       continua com peso, calorias, proteína e hidratação fora do retrato,
       mesmo lido pela função NOVA. É este teste que prova que a migration é
@@ -1077,6 +1076,14 @@ Deno.test("pilar · o apelido `alimentacao` fica para sempre", () => {
   assertEquals(canonicalPillarId(undefined), null);
   // Já um EVENTO sempre tem pilar: sem pista nenhuma, cai onde faz menos estrago.
   assertEquals(canonicalPillar("kind_que_nao_existe", "saude"), "mente");
+});
+
+Deno.test("pilar · o campo saiu do tool — não há mais como o modelo escolher", () => {
+  const ev = ((CAPTURE_TOOL.input_schema.properties as Record<string, any>)
+    .events.items) as Record<string, any>;
+  assertFalse("pillar" in ev.properties, "o campo `pillar` voltou ao CAPTURE_TOOL");
+  assertFalse((ev.required as string[]).includes("pillar"));
+  assertEquals(ev.required, ["kind", "summary"]);
 });
 
 Deno.test("pilar · toda proposta sai do servidor já canônica", () => {

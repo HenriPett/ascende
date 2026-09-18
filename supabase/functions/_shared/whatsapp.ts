@@ -16,6 +16,7 @@
 //   WHATSAPP_CRON_SECRET      segredo do agendador (whatsapp-notify)
 //   APP_URL                   ex.: https://ascende.site (links de retorno)
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { canonicalPillar } from "./lib.ts";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -610,7 +611,14 @@ export async function saveEventsServer(
   let saved = 0, xp = 0;
   const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
   for (const ev of events) {
-    if (!ev || typeof ev.kind !== "string" || typeof ev.pillar !== "string") continue;
+    /* A guarda exige `kind`, e SÓ `kind`. Ela também exigia `pillar`, e isso
+       virou uma armadilha no dia em que o campo saiu do CAPTURE_TOOL: o
+       caminho de imagem do WhatsApp passou a entregar eventos sem ele, e cada
+       um era descartado aqui — em silêncio, depois de a pessoa já ter lido
+       "Li a foto" e confirmado. Pilar não é mais dado de entrada: é derivado
+       do `kind`, logo abaixo. Exigir o que o código calcula é pedir para
+       perder captura. */
+    if (!ev || typeof ev.kind !== "string") continue;
     if (ev.kind === "transaction" && Number(ev.amount) > 0) {
       const occurred = /^\d{4}-\d{2}-\d{2}$/.test(String(ev.occurred_at ?? "")) &&
           String(ev.occurred_at) <= todayIso
@@ -663,8 +671,13 @@ export async function saveEventsServer(
     // em _shared/lib.ts): o gravador escreve o que a pessoa confirmou, nada mais.
     const evDay = String(ev.occurred_at ?? "").slice(0, 10);
     const retroDay = /^\d{4}-\d{2}-\d{2}$/.test(evDay) && evDay < todayIso ? evDay : null;
+    /* O pilar é derivado AQUI, e não confiado ao que veio na proposta: no
+       WhatsApp a proposta fica guardada entre uma mensagem e outra, então ela
+       pode ter sido escrita por uma instância anterior ao deploy e só ser
+       confirmada depois dele. É o mesmo cinto de `lifeEventRow` no cliente. */
     const { error } = await supabase.from("life_events").insert({
-      user_id: userId, pillar: ev.pillar, kind: ev.kind, payload, source: "whatsapp",
+      user_id: userId, pillar: canonicalPillar(String(ev.kind ?? ""), ev.pillar),
+      kind: ev.kind, payload, source: "whatsapp",
       ...(retroDay ? { occurred_at: `${retroDay}T12:00:00-03:00` } : {}),
     });
     if (error) { console.error("wa save event", error.message); continue; }

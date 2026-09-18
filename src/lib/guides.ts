@@ -20,7 +20,7 @@ export const GUIDES = {
   },
   pilares: {
     title: "As áreas da sua vida",
-    text: "Cada pilar é uma área: dinheiro, corpo, alimentação, mente. Toque em um para ver os detalhes e registrar coisas daquela área. Não precisa cuidar de tudo de uma vez — comece por um.",
+    text: "Cada pilar é uma área: dinheiro, corpo (sono, treino e comida) e mente. Toque em um para ver os detalhes e registrar coisas daquela área. Não precisa cuidar de tudo de uma vez — comece por um.",
   },
   batalhas: {
     title: "Um lugar para as suas lutas",

@@ -352,10 +352,7 @@ export function createAppleHealthScanner(): AppleHealthScanner {
       const kg = Math.round(w.kg * 10) / 10;
       const pct = fat.get(day);
       events.push({
-        // `alimentacao` e não `vitalidade`: é o pilar que o resto do app usa
-        // para peso (ver o mesmo comentário em healthImport.ts), e divergir
-        // faria o peso importado não aparecer junto do registrado à mão.
-        kind: "weight", pillar: "alimentacao",
+        kind: "weight", pillar: "vitalidade",
         occurred_at: isoOf(w.at), day, kg,
         summary: `Peso: ${String(kg).replace(".", ",")} kg`
           + (pct ? ` · ${String(Math.round(pct * 10) / 10).replace(".", ",")}% de gordura` : ""),
@@ -386,7 +383,7 @@ export function createAppleHealthScanner(): AppleHealthScanner {
       const total = Math.round(ml);
       if (!(total > 0)) continue;
       events.push({
-        kind: "water", pillar: "alimentacao",
+        kind: "water", pillar: "vitalidade",
         occurred_at: isoNoon(day), day, ml: total,
         summary: `Água: ${total} ml`,
       });

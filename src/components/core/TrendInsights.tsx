@@ -122,7 +122,7 @@ const COPY: Record<InsightKind, KindCopy> = {
     highLabel: "Dias em que você registrou",
     lowLabel: "Dias sem nenhum registro",
     format: money,
-    missing: { label: "Registrar uma refeição", to: "/app/alimentacao" },
+    missing: { label: "Registrar uma refeição", to: "/app/vitalidade?s=comida" },
   },
   treino_sono: {
     pillars: ["--vitalidade"],
@@ -137,7 +137,7 @@ const COPY: Record<InsightKind, KindCopy> = {
     highSuffix: "de sono",
     lowLabel: "Em dias sem treino",
     format: hours,
-    missing: { label: "Registrar um treino", to: "/app/vitalidade" },
+    missing: { label: "Registrar um treino", to: "/app/vitalidade?s=treino" },
   },
 };
 

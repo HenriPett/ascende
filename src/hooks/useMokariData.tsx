@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { todayISOInSP, daysAgoISOInSP } from "@/lib/dates";
-import { PILLARS } from "@/lib/pillars";
+import { PILLARS, pillarMatchValues, type PillarId } from "@/lib/pillars";
 import {
-  computeMokariFromTotals, IGNORED_KINDS, RECENT_WINDOW_DAYS,
+  computeMokariFromTotals, IGNORED_KINDS, ORGAN_KINDS, RECENT_WINDOW_DAYS,
   type Mokari, type MokariEvent, type MokariTotals,
 } from "@/lib/mokari";
 
@@ -25,6 +25,12 @@ import {
  * uma linha, e só a janela recente de sete dias traz eventos, porque sete dias
  * é pequeno por natureza. Exato, sem teto.
  *
+ * O DESENHO, porém, não conta por pilar: conta por ÓRGÃO. Desde que Vitalidade
+ * absorveu Alimentação (17/09/2026), um pilar desenha duas peças — a raiz
+ * sustenta, a folha nutre —, e o que separa as duas é o `kind`, não o pilar.
+ * A regra inteira, com o piso de transição e o porquê de cada leitura, está em
+ * lib/mokari.ts, no bloco OS QUATRO ÓRGÃOS. Aqui só se consulta.
+ *
  * REGRA 3 EM DOIS LUGARES, e os dois importam: as contagens excluem
  * IGNORED_KINDS (peso/corpo) no filtro, e a soma de XP usa
  * `xp_total_mokari`, que exclui os motivos de peso em SQL. `xp_total` NÃO
@@ -36,6 +42,12 @@ import {
 /** Filtro PostgREST dos kinds que o Mokari não vê. Montado a partir da
  *  constante para não existir uma segunda lista aqui. */
 const KIND_FILTER = `(${IGNORED_KINDS.join(",")})`;
+
+/** Mesmo filtro, acrescido dos kinds do órgão VIZINHO. É o recorte que impede
+ *  a mesma refeição de alimentar raiz e folha depois do backfill — ver o piso
+ *  de transição em organEventsFromCounts. */
+const kindFilterExcept = (kinds: readonly string[]) =>
+  `(${[...IGNORED_KINDS, ...kinds].join(",")})`;
 
 export function useMokariData(enabled: boolean) {
   const { user } = useAuth();
@@ -49,12 +61,36 @@ export function useMokariData(enabled: boolean) {
       const desde = daysAgoISOInSP(RECENT_WINDOW_DAYS - 1);
       const uid = user!.id;
 
-      const contaPilar = (pillar: string) => supabase.from("life_events")
+      /* Leitor TOLERANTE (`in`, não `eq`): enquanto houver linha histórica
+         dizendo `alimentacao`, contar só `vitalidade` zeraria a afinidade de
+         quem mais registrou — e raízes e folhas sumiriam da árvore de quem já
+         as tinha. Regressão do conquistado é o que a regra 1 proíbe, e ela já
+         foi furada uma vez por esta mesma camada — ver "VAZIO SÓ PODE
+         SIGNIFICAR VAZIO", algumas linhas abaixo. */
+      const contaPilar = (pillar: PillarId) => supabase.from("life_events")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", uid).eq("pillar", pillar)
+        .eq("user_id", uid).in("pillar", pillarMatchValues(pillar))
         .not("kind", "in", KIND_FILTER);
 
-      const [xpRes, totalRes, inicioRes, recentesRes, ...pilarRes] = await Promise.all([
+      /* As contagens dos ÓRGÃOS. Fruto e flor não aparecem aqui porque saem de
+         graça de `contaPilar` (prosperidade e mente) — a fusão não os tocou.
+         Raiz e folha precisam de duas leituras cada: por kind, que é o desenho
+         certo, e por pilar, que é o piso que segura hábito cumprido e linha
+         incoerente. Todas são `head: true`: contam sem trazer corpo. */
+      const contaKind = (kinds: readonly string[]) => supabase.from("life_events")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", uid).in("kind", kinds as string[]);
+      const contaPilarCru = (pillar: string, excetoKinds: readonly string[]) =>
+        supabase.from("life_events")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", uid).eq("pillar", pillar)
+          .not("kind", "in", kindFilterExcept(excetoKinds));
+
+      const [
+        xpRes, totalRes, inicioRes, recentesRes,
+        raizKindRes, raizPilarRes, folhaKindRes, folhaPilarRes,
+        ...pilarRes
+      ] = await Promise.all([
         supabase.rpc("xp_total_mokari", { uid }),
         supabase.from("life_events")
           .select("id", { count: "exact", head: true })
@@ -68,18 +104,26 @@ export function useMokariData(enabled: boolean) {
           .eq("user_id", uid)
           .gte("occurred_at", `${desde}T00:00:00-03:00`)
           .order("occurred_at", { ascending: true }).limit(1000),
+        contaKind(ORGAN_KINDS.raiz),
+        contaPilarCru("vitalidade", ORGAN_KINDS.folha),
+        contaKind(ORGAN_KINDS.folha),
+        // O pilar absorvido, lido pelo nome que ele tinha: é exatamente o que
+        // a folha contava antes da fusão, e é isso que o piso preserva.
+        contaPilarCru("alimentacao", ORGAN_KINDS.raiz),
         ...PILLARS.map((p) => contaPilar(p.id)),
       ]);
 
       /* VAZIO SÓ PODE SIGNIFICAR VAZIO.
          Antes daqui, `data ?? []` transformava falha de leitura em história
          inexistente — e o Mokari de quem tinha Árvore em flor voltava a
-         Broto, com afinidade zero nos quatro pilares. Regressão do
+         Broto, com afinidade zero em todos os pilares. Regressão do
          conquistado é exatamente o que a regra 1 proíbe, e ela estava sendo
          furada pela camada que alimenta o cálculo, não pelo cálculo.
          Lançar é o que deixa a tela poder dizer "não consegui ler". */
-      const falha = [xpRes, totalRes, inicioRes, recentesRes, ...pilarRes]
-        .find((r) => r.error);
+      const falha = [
+        xpRes, totalRes, inicioRes, recentesRes,
+        raizKindRes, raizPilarRes, folhaKindRes, folhaPilarRes, ...pilarRes,
+      ].find((r) => r.error);
       if (falha?.error) throw falha.error;
 
       const pillarCounts: Partial<Record<string, number>> = {};
@@ -94,6 +138,14 @@ export function useMokariData(enabled: boolean) {
         // começou, não de quando a conta foi criada.
         journeyStart: (inicioRes.data as { occurred_at?: string } | null)?.occurred_at ?? null,
         recentEvents: ((recentesRes.data ?? []) as MokariEvent[]),
+        organTotals: {
+          raizPorKind: raizKindRes.count ?? 0,
+          raizPorPilar: raizPilarRes.count ?? 0,
+          folhaPorKind: folhaKindRes.count ?? 0,
+          folhaPorPilar: folhaPilarRes.count ?? 0,
+          fruto: pillarCounts.prosperidade ?? 0,
+          flor: pillarCounts.mente ?? 0,
+        },
       };
 
       return computeMokariFromTotals(totals, referenceDay);
