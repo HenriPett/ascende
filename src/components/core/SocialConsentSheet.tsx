@@ -6,8 +6,35 @@ import {
 } from "@/components/ui/sheet";
 import { Lock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CATALOGO_VISIVEL, NUNCA_COMPARTILHAVEL } from "@/components/core/socialPhrases";
-import type { SocialMetricKey } from "@/lib/socialMetrics";
+import { Input } from "@/components/ui/input";
+import { FRASE_DE, NUNCA_COMPARTILHAVEL } from "@/components/core/socialPhrases";
+import { isShareable, type SocialMetricKey } from "@/lib/socialMetrics";
+import { WEEK_DAYS_PER_PERSON } from "@/lib/socialChallenge";
+
+/**
+ * Uma linha da folha, como o banco a devolve (`v_meus_consentimentos`).
+ *
+ * A view lista o CATÁLOGO INTEIRO — ligado e desligado — porque a tela precisa
+ * mostrar o que está FECHADO com o mesmo destaque do que está aberto. Um
+ * catálogo que só mostra o que você ligou esconde o que você recusou, e aí a
+ * recusa deixa de ser uma decisão visível.
+ */
+export interface ConsentimentoDaFolha {
+  key: SocialMetricKey;
+  /** O rótulo vem do BANCO (`shareable_metrics.label`), não de uma lista aqui:
+   *  o catálogo é fechado por migration e é ele quem manda. */
+  label: string;
+  /** O teste do zero, escrito pelo banco. É o que justifica a métrica existir,
+   *  e a folha mostra para a pessoa a mesma frase que a mesa do Fiel olhou. */
+  oQueOZeroDiz: string;
+  ligado: boolean;
+  /** A meta combinada. `null` quando o tipo está desligado — não existe meta
+   *  sem consentimento, porque as duas moram na MESMA linha do banco. */
+  meta: number | null;
+  /** Quantos dias meus este grupo já pode somar deste tipo. O preview honesto
+   *  da condição C5: não "o que eles poderiam ver", e sim o que já está lá. */
+  diasPublicados: number;
+}
 
 /**
  * A FOLHA DE CONSENTIMENTO — "O que este grupo vê de você".
@@ -38,40 +65,62 @@ import type { SocialMetricKey } from "@/lib/socialMetrics";
  * apaga o histórico publicado daquele tipo naquele grupo, não só o futuro
  * (N12). É fail-closed por deleção, não por cláusula WHERE.
  */
+/** A meta padrão de quem acabou de ligar um tipo: cinco de sete, a mesma régua
+ *  do desafio. Os dois dias de folga por pessoa já estão dentro dela — e o
+ *  padrão importa, porque a maioria não vai mexer no número. */
+const META_PADRAO = WEEK_DAYS_PER_PERSON;
+
 export default function SocialConsentSheet({
-  open, onOpenChange, grupoNome, ligados, onSalvar, modo,
+  open, onOpenChange, grupoNome, linhas, onSalvar, modo,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   grupoNome: string;
-  /** O que já está ligado neste grupo. Vazio na entrada — nada nasce aberto. */
-  ligados: readonly SocialMetricKey[];
-  /** Recebe a lista final. `true` = deu certo e a folha pode fechar. */
-  onSalvar: (proximos: SocialMetricKey[]) => Promise<boolean>;
+  /** O catálogo inteiro para ESTE grupo, ligado e desligado. */
+  linhas: readonly ConsentimentoDaFolha[];
+  /** Recebe a lista final, cada uma com a meta. `true` = deu certo. */
+  onSalvar: (proximos: { key: SocialMetricKey; meta: number }[]) => Promise<boolean>;
   /** "entrar" muda só os rótulos dos botões: a folha é a mesma, e é de
    *  propósito — quem revisita reconhece a tela em que decidiu. */
   modo: "entrar" | "revisar";
 }) {
-  const [sel, setSel] = useState<Set<SocialMetricKey>>(new Set(ligados));
+  /* O estado é chave → META, não um conjunto de chaves, e isso não é detalhe
+     de implementação: `group_data_consents.goal_value` é NOT NULL, então não
+     existe ligar um tipo sem combinar quanto. Faz sentido — sem denominador a
+     tela só teria número absoluto, e número absoluto ao lado de número
+     absoluto já é um ranking, mesmo sem coluna de posição. */
+  const [sel, setSel] = useState<Map<SocialMetricKey, number>>(new Map());
   const [salvando, setSalvando] = useState(false);
 
   // Reabrir com o estado do banco, não com o que ficou da vez anterior: esta
   // folha é a fonte da verdade sobre uma decisão de privacidade.
-  useEffect(() => { if (open) setSel(new Set(ligados)); }, [open, ligados]);
+  useEffect(() => {
+    if (!open) return;
+    setSel(new Map(linhas.filter((l) => l.ligado).map((l) => [l.key, l.meta ?? META_PADRAO])));
+  }, [open, linhas]);
 
   const alternar = (k: SocialMetricKey, on: boolean) =>
     setSel((atual) => {
-      const proximo = new Set(atual);
-      if (on) proximo.add(k); else proximo.delete(k);
+      const proximo = new Map(atual);
+      if (on) proximo.set(k, atual.get(k) ?? META_PADRAO); else proximo.delete(k);
       return proximo;
     });
 
-  const salvar = async (lista: SocialMetricKey[]) => {
+  const mudarMeta = (k: SocialMetricKey, bruto: string) =>
+    setSel((atual) => {
+      if (!atual.has(k)) return atual;
+      const n = Math.max(1, Math.min(7, Math.round(Number(bruto.replace(/\D/g, "")) || 0)));
+      return new Map(atual).set(k, n);
+    });
+
+  const salvar = async (lista: { key: SocialMetricKey; meta: number }[]) => {
     setSalvando(true);
     const ok = await onSalvar(lista);
     setSalvando(false);
     if (ok) onOpenChange(false);
   };
+
+  const visiveis = linhas.filter((l) => isShareable(l.key));
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -108,31 +157,58 @@ export default function SocialConsentSheet({
         </SheetHeader>
 
         <div className="py-4 space-y-1">
-          {CATALOGO_VISIVEL.map((m) => {
-            const on = sel.has(m.key);
+          {visiveis.map((l) => {
+            const m = FRASE_DE[l.key];
+            const on = sel.has(l.key);
             return (
               /* `min-h-14` e o Switch de 44px: é a tela onde se decide o que
                  sai de você para outras pessoas. Alvo pequeno aqui não é
                  desconforto, é risco de ligar o que não se queria ligar. */
-              <label
-                key={m.key}
-                className="flex items-start gap-3 rounded-lg p-3 min-h-14 cursor-pointer hover:bg-muted/50 transition-colors"
-              >
-                <span className="text-lg leading-none pt-0.5 w-6 text-center shrink-0" aria-hidden>{m.emoji}</span>
-                <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-medium">{m.label}</span>
-                  {/* A frase literal, entre aspas, com a tinta do texto comum:
-                      ela não é legenda do controle — ela É o que se decide. */}
-                  <span className="block text-sm text-muted-foreground">"{m.frase}"</span>
-                  <span className="block text-xs text-muted-foreground/80">{m.semOQue}</span>
-                </span>
-                <Switch
-                  checked={on}
-                  onCheckedChange={(v) => alternar(m.key, v)}
-                  className="mt-0.5 shrink-0 scale-125 origin-right"
-                  aria-label={`Compartilhar ${m.label} com ${grupoNome}`}
-                />
-              </label>
+              <div key={l.key} className="rounded-lg hover:bg-muted/50 transition-colors">
+                <label className="flex items-start gap-3 p-3 min-h-14 cursor-pointer">
+                  <span className="text-lg leading-none pt-0.5 w-6 text-center shrink-0" aria-hidden>{m.emoji}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium">{l.label}</span>
+                    {/* A frase literal, entre aspas, com a tinta do texto comum:
+                        ela não é legenda do controle — ela É o que se decide. */}
+                    <span className="block text-sm text-muted-foreground">"{m.frase}"</span>
+                    <span className="block text-xs text-muted-foreground/80">{m.semOQue}</span>
+                    {/* O preview honesto: não "o que eles poderiam ver", e sim
+                        o que este grupo JÁ pode somar de você. */}
+                    {l.diasPublicados > 0 && (
+                      <span className="block text-xs text-muted-foreground/80">
+                        Este grupo já pode somar {l.diasPublicados}{" "}
+                        {l.diasPublicados === 1 ? "dia seu" : "dias seus"} deste tipo.
+                      </span>
+                    )}
+                  </span>
+                  <Switch
+                    checked={on}
+                    onCheckedChange={(v) => alternar(l.key, v)}
+                    className="mt-0.5 shrink-0 scale-125 origin-right"
+                    aria-label={`Compartilhar ${l.label} com ${grupoNome}`}
+                  />
+                </label>
+
+                {/* A META, e ela só existe quando o tipo está ligado — porque
+                    no banco as duas moram na mesma linha. É o denominador que
+                    permite "3 de 3" em vez de "3", e é o que faz quem combinou
+                    2 e cumpriu aparecer completo ao lado de quem combinou 6. */}
+                {on && (
+                  <div className="flex items-center gap-2 px-3 pb-3 pl-12">
+                    <span className="text-xs text-muted-foreground">Eu combino</span>
+                    <Input
+                      inputMode="numeric" className="h-11 w-16 text-center"
+                      value={String(sel.get(l.key) ?? META_PADRAO)}
+                      onChange={(e) => mudarMeta(l.key, e.target.value)}
+                      aria-label={`Quantas vezes por semana você combina ${l.label}`}
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {(sel.get(l.key) ?? META_PADRAO) === 1 ? "vez" : "vezes"} por semana
+                    </span>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
@@ -152,11 +228,16 @@ export default function SocialConsentSheet({
 
         <p className="text-xs text-muted-foreground pt-3">
           Desligar depois não apaga nada seu: o seu histórico continua seu, e o grupo
-          simplesmente para de ver — inclusive o que já tinha visto daquele tipo.
+          simplesmente para de ver — inclusive o que já tinha visto daquele tipo. Ligar
+          de novo não traz o passado de volta: o grupo vê a partir do dia em que você
+          ligou, nunca antes.
         </p>
 
         <div className="pt-4 space-y-2">
-          <Button className="w-full min-h-11" disabled={salvando} onClick={() => salvar([...sel])}>
+          <Button
+            className="w-full min-h-11" disabled={salvando}
+            onClick={() => salvar([...sel].map(([key, meta]) => ({ key, meta })))}
+          >
             {salvando
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : modo === "entrar" ? "Entrar no grupo" : "Salvar"}

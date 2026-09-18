@@ -80,6 +80,11 @@ const FRASES: Record<SocialMetricKey, FraseDaMetrica> = {
   },
 };
 
+/** A frase de uma chave, para quem já tem a linha do banco em mãos. A folha de
+ *  consentimento lê o RÓTULO e o teste do zero do banco (o catálogo é fechado
+ *  por migration); daqui ela leva só o que é copy de interface. */
+export const FRASE_DE: Record<SocialMetricKey, FraseDaMetrica> = FRASES;
+
 export interface LinhaDoCatalogo extends FraseDaMetrica {
   key: SocialMetricKey;
   label: string;

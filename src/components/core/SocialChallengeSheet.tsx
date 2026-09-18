@@ -76,11 +76,13 @@ export default function SocialChallengeSheet({
     weekday: "long", day: "2-digit", month: "long",
   });
 
-  /* A meta do grupo é `pessoas × 5`, e os dois dias de folga por pessoa já
-     estão DENTRO dela. Mostrar a conta aqui, antes de criar, é o que impede o
+  /* A ESTIMATIVA da meta, antes de criar. A meta de verdade é a SOMA do que
+     cada um combinar na folha de consentimento (`group_data_consents
+     .goal_value`) — aqui o número sai de `pessoas × 5`, a régua da casa, para
+     a pessoa ter a ordem de grandeza antes de decidir. Os dois dias de folga
+     por pessoa já estão DENTRO dela, e mostrar a conta é o que impede o
      desafio de ser lido como "sete dias ou você falhou". */
-  const meta = groupWeekGoal(pessoasNoGrupo) * (dias / 7);
-  const metaArredondada = Math.round(meta);
+  const metaArredondada = Math.round(groupWeekGoal(pessoasNoGrupo) * (dias / 7));
 
   const ehDiaInteiro = metrica === "dia_inteiro";
   const precisa = fullDayThreshold(FULL_DAY_SIGNALS.length);
@@ -202,14 +204,15 @@ export default function SocialChallengeSheet({
               descobre depois não é um combinado. */}
           <div className="rounded-lg border bg-muted/40 p-3 space-y-1.5">
             <p className="text-sm font-medium">
-              A meta do grupo: {metaArredondada}{" "}
+              A meta do grupo: por volta de {metaArredondada}{" "}
               {ehDiaInteiro ? "dias inteiros" : SHAREABLE_METRICS[metrica].label.toLowerCase()}
             </p>
             <p className="text-xs text-muted-foreground">
               {pessoasNoGrupo} {pessoasNoGrupo === 1 ? "pessoa" : "pessoas"} × {WEEK_DAYS_PER_PERSON} por
               semana. São cinco de sete de propósito: os dois dias de folga por pessoa já
               estão dentro da meta — o grupo pode fechar 100% com todo mundo descansando
-              dois dias.
+              dois dias. A meta final é a soma do que cada um combinar: quem combinar
+              menos não puxa ninguém para baixo, só combina menos.
             </p>
             {ehDiaInteiro && (
               <p className="text-xs text-muted-foreground border-t pt-1.5">
