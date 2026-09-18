@@ -358,7 +358,7 @@ export function nowInSpForPrompt(): string {
  *  toca — e é a IA que erra em segredo. */
 export const INSIGHT_PILARES: Record<string, string[]> = {
   sono_gasto_seguinte: ["vitalidade", "prosperidade"],
-  refeicao_gasto_comida: ["alimentacao", "prosperidade"],
+  refeicao_gasto_comida: ["vitalidade", "prosperidade"],
   treino_sono: ["vitalidade"],
 };
 
@@ -649,16 +649,56 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   // modelo não sabia interpretar "ontem" no relato da pessoa.
   lines.push(`${nowInSpForPrompt()} Use esta data como referência para qualquer expressão de tempo, sua ou da pessoa.`);
   const p = profile ?? {};
+  /* Rótulo humano de cada pilar/escopo. Existe porque as duas linhas abaixo
+     despejavam o ID CRU no prompt: "as áreas: alimentacao, diario" e "Pilares
+     ativos: alimentacao, mente". Sem acento e em snake, esses ids são
+     exatamente o "vocabulário interno do sistema" que as SAFETY_RULES proíbem
+     o modelo de usar com a pessoa — e nós o entregávamos pronto na boca dele.
+     Mesmo padrão do TRACKER_LABEL, logo abaixo.
+
+     `alimentacao` cai no rótulo novo (perfil não migrado ainda traz o id na
+     lista), e o Set elimina a repetição que isso criaria. "Mente" sem
+     sobrenome de propósito: quem declarou não ter prática religiosa recebe,
+     algumas linhas adiante, a instrução de que o pilar dela é "Mente & Foco". */
+  const PILLAR_LABEL: Record<string, string> = {
+    prosperidade: "Prosperidade", vitalidade: "Vitalidade",
+    alimentacao: "Vitalidade", mente: "Mente", diario: "Diário",
+  };
+  const rotuloPilar = (id: string) => PILLAR_LABEL[id] ?? id;
+
   // Escopos de privacidade: quais áreas a pessoa autorizou o Conselheiro a analisar.
   const rawScopes = (p.ai_scopes ?? {}) as Record<string, unknown>;
+  /* FUSÃO — leitura DERIVADA, não migração. E é ela, não a migration, que
+     torna a ordem do deploy irrelevante.
+
+     A chave `alimentacao` continua existindo em perfil não migrado, em perfil
+     que a tela de Ajustes reescreveu e em qualquer rollback. Enquanto ela
+     existir, ela MANDA JUNTO: autorizado só quando NENHUMA das duas disse não.
+     É o mesmo `every` de INSIGHT_PILARES (`pilares.every(...)`, acima),
+     aplicado à fusão — e é E (AND), não OU, porque escopo é contrato: quem
+     negou `alimentacao` tirou do Conselheiro peso, composição corporal,
+     calorias, proteína e hidratação. Sob OU, uma refatoração NOSSA devolveria
+     tudo isso sem ela tocar em nada, sem consentimento e sem aviso. Dado
+     analisado não desanalisa; utilidade perdida volta com um toque.
+
+     ESPELHO OBRIGATÓRIO na tela de Ajustes: ao gravar o interruptor fundido,
+     o front escreve o MESMO valor nas duas chaves. Sem isso, o primeiro toque
+     em qualquer interruptor de privacidade apaga a chave `alimentacao` do
+     banco (a tela grava o objeto inteiro, montado a partir da lista SCOPES) —
+     e chave ausente = AUTORIZADO reabre, para qualquer função ainda velha,
+     exatamente o que a pessoa acabou de fechar.
+
+     Sai daqui na release de CONTRAÇÃO, junto com a chave no banco e com o
+     espelho do Ajustes. Os três saem juntos ou nenhum sai. */
   const scopes = {
     prosperidade: rawScopes.prosperidade !== false,
-    vitalidade: rawScopes.vitalidade !== false,
-    alimentacao: rawScopes.alimentacao !== false,
+    vitalidade: rawScopes.vitalidade !== false && rawScopes.alimentacao !== false,
     mente: rawScopes.mente !== false,
     diario: rawScopes.diario !== false,
   };
-  const disabled = Object.entries(scopes).filter(([, v]) => !v).map(([k]) => k);
+  const disabled = [...new Set(
+    Object.entries(scopes).filter(([, v]) => !v).map(([k]) => rotuloPilar(k)),
+  )];
   if (disabled.length) {
     lines.push(`PRIVACIDADE: a pessoa desativou a análise das áreas: ${disabled.join(", ")}. Esses dados foram omitidos deste retrato de propósito. Não especule sobre eles nem peça para reativar.`);
   }
@@ -696,7 +736,8 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     );
   }
   if (p.goal) lines.push(`Objetivo declarado: ${p.goal}.`);
-  lines.push(`Pilares ativos: ${(p.pillars ?? []).join(", ") || "nenhum ainda"}.`);
+  const pilaresAtivos = [...new Set(((p.pillars ?? []) as unknown[]).map((x) => rotuloPilar(String(x))))];
+  lines.push(`Pilares ativos: ${pilaresAtivos.join(", ") || "nenhum ainda"}.`);
 
   // Dados pessoais (base de qualquer plano personalizado)
   const personal: string[] = [];
@@ -914,7 +955,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   }
 
   // Peso e composição corporal
-  if (scopes.alimentacao && kinds["weight"]?.length) {
+  if (scopes.vitalidade && kinds["weight"]?.length) {
     const ws = kinds["weight"]
       .map((e) => ({ d: e.occurred_at.slice(0, 10), kg: Number((e.payload as any)?.kg) }))
       .filter((w) => w.kg > 0)
@@ -931,7 +972,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       );
     }
   }
-  if (scopes.alimentacao && kinds["body"]?.length) {
+  if (scopes.vitalidade && kinds["body"]?.length) {
     const b = (kinds["body"][0].payload as any) ?? {};
     lines.push(
       `COMPOSIÇÃO CORPORAL (estimativa visual por foto, margem larga): ~${b.body_fat_pct}% de gordura` +
@@ -949,7 +990,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     lines.push(`DIÁRIO: ${kinds["journal"].length} entradas em 30 dias.` +
       (trechos ? ` Trechos recentes: ${trechos}.` : ""));
   }
-  if (scopes.alimentacao && kinds["meal"]?.length) {
+  if (scopes.vitalidade && kinds["meal"]?.length) {
     // Cada refeição vai CARIMBADA com dia, hora (SP) e tipo. Antes a lista era
     // só a descrição — o modelo recebia "pão com manteiga; pastéis; miojo" sem
     // uma única data e não tinha como saber que o primeiro item era o almoço de
@@ -1009,7 +1050,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
       lines.push(`META CALÓRICA DIÁRIA: ${kcalGoal} kcal. Hoje: ${Math.round(kcalToday)} kcal consumidas` +
         (diff > 0 ? `, faltam ${Math.round(diff)} kcal.` : `, meta do dia alcançada${diff < 0 ? ` (${Math.round(-diff)} kcal acima)` : ""}.`));
     } else if (kcalToday > 0) {
-      lines.push(`CALORIAS HOJE: ${Math.round(kcalToday)} kcal registradas (sem meta diária definida — a pessoa pode definir na aba Alimentação ou você pode salvar via atualizar_perfil se ela declarar uma).`);
+      lines.push(`CALORIAS HOJE: ${Math.round(kcalToday)} kcal registradas (sem meta diária definida — a pessoa pode definir na aba Vitalidade ou você pode salvar via atualizar_perfil se ela declarar uma).`);
     }
     const protGoal = Number(p.protein_goal_g) || 0;
     if (protGoal > 0) {
@@ -1022,7 +1063,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
 
   // Metas dos demais pilares (gasto do dia, treinos na semana, sono).
   // Ficavam aninhadas no bloco de ALIMENTAÇÃO: quem não registrava refeição
-  // há 30 dias — ou desligava o escopo de alimentação — perdia o teto de
+  // há 30 dias — ou desligava o escopo do corpo — perdia o teto de
   // gasto, a meta de treinos e a de sono em TODAS as superfícies de IA, e o
   // Conselheiro passava a tratá-las como "meta ainda sem valor". Agora cada
   // uma vive sob o escopo de privacidade do SEU pilar.
@@ -1058,7 +1099,7 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   }
 
   // Hidratação (água) — total de hoje e média diária dos últimos 7 dias
-  if (scopes.alimentacao && kinds["water"]?.length) {
+  if (scopes.vitalidade && kinds["water"]?.length) {
     const todayStr = todaySpIso;
     const since7 = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
     const ml = (e: any) => Number((e.payload as any)?.ml) || 0;
@@ -1123,13 +1164,13 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     ));
   }
 
-    if (!kinds["weight"]?.length) missing.push("peso atual (registrar na aba Alimentação)");
+    if (!kinds["weight"]?.length) missing.push("peso atual (registrar na aba Vitalidade)");
 
   if (missing.length) {
     lines.push(
       `DADOS AINDA NÃO INFORMADOS: ${missing.join("; ")}. ` +
       `Para planos definitivos (alimentar, treino, financeiro), siga o protocolo de planos do seu prompt: peça o que falta antes de gerar. ` +
-      `Onde preencher: idade, sexo, altura, atividade e restrições em Ajustes (seção "Sobre você"); peso na aba Alimentação; condições e medicamentos na Vitalidade. ` +
+      `Onde preencher: idade, sexo, altura, atividade e restrições em Ajustes (seção "Sobre você"); peso, condições e medicamentos na aba Vitalidade. ` +
       `REGRA DE TOM (inegociável): NUNCA atribua causa à ausência de um dado. Você NÃO sabe se a pessoa pulou, esqueceu, recusou ou se o app nem perguntou. ` +
       `Nunca diga "você pulou", "você deixou em branco" ou "como você não preencheu": convide de forma neutra ("se quiser me contar X, eu ajusto") ou simplesmente trabalhe com o que existe. ` +
       `Também nunca invente o nome de uma tela ou etapa: cite apenas os lugares listados acima.`
@@ -1197,7 +1238,7 @@ export const SAFETY_RULES = `
 ━━━ BATALHAS (lutas pessoais: pornografia, redes sociais, cigarro, apostas etc.) ━━━
 • Recaída se acolhe, nunca se julga. O dado importante da recaída é o gatilho — ajude a pessoa a enxergar o padrão (ex.: recaídas em noites de sono ruim, em dias de humor baixo, em madrugadas). Reforce que os dias limpos acumulados não se perdem.
 • Ao notar padrão severo em batalhas de álcool, drogas ou apostas (recaídas quase diárias, sinais de abstinência física, dívidas ou perdas relevantes), diga com clareza e carinho que isso merece acompanhamento profissional e aponte caminhos concretos no Brasil: CAPS (unidades públicas de saúde mental), Alcoólicos Anônimos, Narcóticos Anônimos, Jogadores Anônimos. O Ascende é apoio, não tratamento.
-• NUNCA trate comida como inimigo nem incentive "batalha contra comer". Se a pessoa enquadrar alimentação como guerra/restrição, redirecione com gentileza para hábitos positivos no pilar Alimentação (ex.: "fazer uma refeição de verdade") — guerra contra comida alimenta compulsão. Sinais de transtorno alimentar merecem indicação de profissional.
+• NUNCA trate comida como inimigo nem incentive "batalha contra comer". Se a pessoa enquadrar alimentação como guerra/restrição, redirecione com gentileza para hábitos positivos no pilar Vitalidade (ex.: "fazer uma refeição de verdade") — guerra contra comida alimenta compulsão. Sinais de transtorno alimentar merecem indicação de profissional.
 ━━━ COMO VOCÊ ESCREVE ━━━
 • Português do Brasil, direto e sem rodeio. Frase que a pessoa precisa reler duas vezes é frase para reescrever. Corte palavra que não faz trabalho.
 • NÚMEROS EM FORMATO BRASILEIRO, sempre: vírgula decimal e espaço antes da unidade — "1,5 L", "7,5 h", "6,5 kg", "R$ 47,90". Os dados que você recebe podem vir com ponto decimal e unidade colada ("1.5L", "7.5h"): traduza antes de escrever. Datas em dia/mês ("12/03", "12 de março"), nunca no formato americano.
@@ -1210,6 +1251,104 @@ export const SAFETY_RULES = `
    do usuário antes de gravar — a IA nunca grava sozinha. */
 
 export const MUSCLE_GROUPS = ["Peito", "Costas", "Pernas", "Ombros", "Braços", "Core", "Cardio"];
+
+/* ─── O PILAR DE UM EVENTO É TABELA, NÃO JULGAMENTO ───────────────────────
+   Esta regra já existia — escrita em prosa, dentro da descrição do campo
+   `pillar` do CAPTURE_TOOL ("transaction→prosperidade; sleep/nap/workout→
+   vitalidade; meal/water/weight→alimentacao; mood/gratitude/practice→mente").
+   Morava no lugar errado por dois motivos:
+
+   • Era o ÚNICO campo da proposta que a pessoa não consegue auditar. O resto
+     do cartão de confirmação é frase em português que ela lê e corrige
+     ("Almoço: arroz e frango (~650 kcal)"); o pilar é um pontinho colorido.
+     Campo que ninguém confere não pode depender de escritor probabilístico.
+     Mesma doutrina de src/lib/insights.ts: o modelo explica, o código calcula.
+   • O enum morava dentro do PREFIXO CACHEADO (`tools` vem antes de `system`,
+     ver o comentário longo de anthropicCall). Toda edição nele invalidava a
+     cache de extração da base inteira. Regra em código muda de graça.
+
+   FUSÃO DE 17/09/2026 — `alimentacao` foi ABSORVIDO por `vitalidade`: o corpo
+   deixou de ser partido em dois pilares. PILLAR_ALIASES não é andaime de
+   migração e NÃO sai na release de contração: um Record de uma entrada cobre,
+   para sempre, linha antiga, cliente desatualizado e rollback. */
+
+/** Os pilares que existem depois da fusão. Três. */
+export const VALID_PILLARS: readonly string[] = ["prosperidade", "vitalidade", "mente"];
+
+const PILLAR_BY_KIND: Record<string, string> = {
+  transaction: "prosperidade",
+  sleep: "vitalidade", nap: "vitalidade", workout: "vitalidade",
+  meal: "vitalidade", water: "vitalidade", weight: "vitalidade", body: "vitalidade",
+  mood: "mente", gratitude: "mente", practice: "mente", journal: "mente",
+  // `body` e `journal` não estão no enum de `kind` do CAPTURE_TOOL (a IA não
+  // os propõe), mas existem em life_events — vêm de analyze-body e do diário.
+  // O mapa cobre o kind, não a ferramenta: quem escreve por outro caminho
+  // merece a mesma resposta.
+  // DECISÃO EXPLÍCITA: `note` nunca esteve no mapa da descrição, então o
+  // modelo vinha CHUTANDO o pilar de toda nota livre, sem instrução nenhuma —
+  // a prova de que o campo já era frágil antes da fusão. Nota é pensamento
+  // solto, e pensamento solto mora onde diário e humor moram.
+  note: "mente",
+};
+
+/** Valores legados de `pillar` e para onde eles apontam hoje. FICA PARA
+ *  SEMPRE (ver o bloco acima). */
+const PILLAR_ALIASES: Record<string, string> = { alimentacao: "vitalidade" };
+
+/**
+ * O pilar canônico de um evento.
+ *
+ * O `kind` manda: ele é o que a pessoa de fato relatou e o que ela vê escrito
+ * no cartão. `raw` só é consultado quando o kind é desconhecido (evento vindo
+ * de uma versão futura, de um importador ou de uma linha antiga) — e aí ainda
+ * passa pelo apelido antes de valer. Último recurso: "mente", que é o pilar
+ * onde uma anotação sem classificação melhor faz menos estrago.
+ */
+export function canonicalPillar(kind: string, raw?: string | null): string {
+  const byKind = PILLAR_BY_KIND[String(kind)];
+  if (byKind) return byKind;
+  const r = String(raw ?? "");
+  return PILLAR_ALIASES[r] ?? (VALID_PILLARS.includes(r) ? r : "mente");
+}
+
+/**
+ * O irmão de `canonicalPillar` para o `pillar` que NÃO vem de um evento e
+ * portanto não tem `kind` de onde derivar: o pilar de um PLANO e o de um
+ * COMPROMISSO, que o modelo escolhe porque ali a escolha é mesmo dele.
+ *
+ * Tolerante na leitura (aceita `alimentacao`, que ainda chega de instância
+ * velha e de prompt em cache), canônico na escrita. `null` quando o valor não
+ * é pilar nenhum — plano sem pilar é caso previsto (`plans.pillar` é nullable);
+ * plano com pilar inventado não é.
+ */
+/**
+ * PONTO DE ESTRANGULAMENTO 1 — a SAÍDA do servidor.
+ *
+ * Toda proposta que sai de qualquer função (capture por texto, capture por
+ * imagem, WhatsApp, Conselheiro) já sai com o pilar canônico, porque o modelo
+ * não devolve mais o campo. Vale também para o que chega de um prompt ainda
+ * em cache com o campo antigo: o valor do modelo é IGNORADO quando o kind é
+ * conhecido, e só serve de última pista quando não é.
+ *
+ * O segundo cinto é `lifeEventRow`, no cliente (src/lib/captureEvents.ts):
+ * mesmo recebendo `alimentacao` de uma instância velha ainda no ar, a linha
+ * entra no banco como `vitalidade`. Os dois juntos é que fazem a ordem do
+ * deploy não importar.
+ */
+// deno-lint-ignore no-explicit-any
+export function withCanonicalPillar(events: any[]): any[] {
+  return (events ?? []).map((e) =>
+    e && typeof e === "object"
+      ? { ...e, pillar: canonicalPillar(String(e.kind ?? ""), e.pillar) }
+      : e
+  );
+}
+
+export function canonicalPillarId(raw: unknown): string | null {
+  const r = String(raw ?? "");
+  const id = PILLAR_ALIASES[r] ?? r;
+  return VALID_PILLARS.includes(id) ? id : null;
+}
 
 /* Tetos da extração a partir de ARQUIVO (o Conselheiro aceita anexos).
    Um CSV de exportação de app pode ter centenas de linhas: 555 noites de sono
@@ -1247,13 +1386,6 @@ export const CAPTURE_TOOL = {
                 "e corrige. NUNCA invente a data e NUNCA devolva data no futuro — todo relato aqui é de algo " +
                 "que já aconteceu, e data futura vira registro invisível.",
             },
-            pillar: {
-              type: "string",
-              enum: ["prosperidade", "vitalidade", "alimentacao", "mente"],
-              description:
-                "Pilar: transaction→prosperidade; sleep/nap/workout→vitalidade; " +
-                "meal/water/weight→alimentacao; mood/gratitude/practice→mente.",
-            },
             summary: { type: "string", description: "Resumo curto em português para o usuário confirmar. Ex.: 'Gasto de R$ 47 em Mercado' ou 'Treino de costas'." },
             amount: { type: "number", description: "Valor em reais (apenas para transaction)." },
             tx_kind: { type: "string", enum: ["income", "expense"], description: "Entrada ou saída (apenas para transaction)." },
@@ -1290,7 +1422,11 @@ export const CAPTURE_TOOL = {
             mood_label: { type: "string", description: "Palavra do próprio usuário para o humor. Ex.: ansioso, animado, cansado." },
             mood_score: { type: "number", description: "Humor de 1 (péssimo) a 5 (ótimo), inferido do relato." },
           },
-          required: ["kind", "pillar", "summary"],
+          // `pillar` saiu daqui: ver canonicalPillar. Não é economia de
+          // token (são ~75 tokens de prefixo cacheado, ruído) — é
+          // confiabilidade: campo que a pessoa não consegue auditar não pode
+          // depender de escritor probabilístico quando o código o deriva.
+          required: ["kind", "summary"],
         },
       },
     },
@@ -1918,11 +2054,11 @@ export async function extractEventsAndMemories(
     // data vem do próprio CSV, não de alguém falando, e 555 noites exportadas
     // são dado histórico que ninguém está nomeando por "ontem".
     const sp = spParts();
-    const events = bulk
+    const events = withCanonicalPillar(bulk
       ? rawEvents.slice(0, EXTRACTION_MAX_EVENTS)
       : resolveSleepDays(
         rawEvents.slice(0, EXTRACTION_MAX_EVENTS), sp.dateIso, Number(sp.timeHm.slice(0, 2)),
-      );
+      ));
     const rawMems = Array.isArray(tu?.input?.memories) ? tu.input.memories : [];
     const learned = await persistMemories(supabase, userId, rawMems, known, memoryCap);
     return { ok: true, events, learned, capped: rawEvents.length >= EXTRACTION_MAX_EVENTS };

@@ -6,11 +6,10 @@ import { useProfile } from "@/hooks/useProfile";
 import { useXp } from "@/hooks/useXp";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { PILLARS, activePillarSet } from "@/lib/pillars";
+import { PILLARS, activePillarSet, pillarMatchValues } from "@/lib/pillars";
 import { activeTrackerSet } from "@/lib/trackers";
 import { levelTitle, nextTitle, xpReasonLabel } from "@/lib/xp";
 import { monthStartISO, todayISO } from "@/lib/format";
-import { daysAgoISOInSP } from "@/lib/dates";
 import { distinctLocalDays } from "@/lib/localDays";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,7 +68,11 @@ export default function Score() {
     queryFn: async () => {
       const since14 = new Date(Date.now() - 14 * 864e5).toISOString();
       const since7 = new Date(Date.now() - 7 * 864e5).toISOString();
-      const [events, txs, habits, logs, weekXp] = await Promise.all([
+      /* Hábitos saíram daqui: eles são transversais (o próprio seletor oferece
+         os três pilares) e por isso deixaram de compor o indicador de
+         Vitalidade — que agora mede os quatro sinais do corpo. Manter a
+         consulta seria pagar duas idas ao banco por um número que ninguém lê. */
+      const [events, txs, weekXp] = await Promise.all([
         supabase.from("life_events").select("pillar,kind,occurred_at,payload").eq("user_id", user!.id).gte("occurred_at", since14),
         /* O MÊS ATÉ HOJE, não o mês inteiro mais o futuro. Mesmo defeito que
            inflava o "Gasto de hoje" na tela Hoje: sem teto, as parcelas e os
@@ -77,21 +80,17 @@ export default function Score() {
            media um dinheiro que ainda não foi gasto. */
         supabase.from("transactions").select("kind,amount").eq("user_id", user!.id)
           .gte("occurred_at", monthStartISO()).lte("occurred_at", todayISO()),
-        supabase.from("habits").select("id").eq("user_id", user!.id).eq("active", true),
-        supabase.from("habit_logs").select("log_date").eq("user_id", user!.id).gte("log_date", daysAgoISOInSP(13)),
         supabase.from("xp_log").select("points,reason,created_at").eq("user_id", user!.id).gte("created_at", since7).order("created_at", { ascending: false }).limit(60),
       ]);
       // Antes o `error` de cada chamada era descartado no destructuring, e
       // uma falha virava lista vazia — indistinguível de "você não registrou
       // nada". Um indicador que erra para baixo em silêncio é pior que
       // indicador nenhum: propague e deixe a tela dizer que falhou.
-      const failed = [events, txs, habits, logs, weekXp].find((r) => r.error);
+      const failed = [events, txs, weekXp].find((r) => r.error);
       if (failed?.error) throw failed.error;
       return {
         events: events.data ?? [],
         txs: txs.data ?? [],
-        habitsCount: (habits.data ?? []).length,
-        logs: logs.data ?? [],
         weekXp: weekXp.data ?? [],
       };
     },
@@ -124,13 +123,12 @@ export default function Score() {
   // ─── Cálculo do score por pilar (0–100, transparente) ───
   const scores: Record<string, { value: number | null; why: string }> = {
     prosperidade: { value: null, why: "Registre entradas e gastos e este indicador aparece." },
-    vitalidade: { value: null, why: "Crie hábitos e registre seu sono e este indicador aparece." },
-    alimentacao: { value: null, why: "Registre refeições e este indicador aparece." },
+    vitalidade: { value: null, why: "Registre sono, treino, refeições ou água e este indicador aparece." },
     mente: { value: null, why: "Registre humor e prática e este indicador aparece." },
   };
 
   if (data) {
-    const { events, txs, habitsCount, logs } = data;
+    const { events, txs } = data;
 
     // Prosperidade: saldo do mês em relação às entradas
     const income = txs.filter((t) => t.kind === "income").reduce((s, t) => s + Number(t.amount), 0);
@@ -144,11 +142,17 @@ export default function Score() {
       }
     }
 
-    // Vitalidade: conclusão de hábitos (14d) + sono médio vs. 7–8h.
-    // O componente de sono só entra se a pessoa ACOMPANHA sono (tracker).
+    /* ── Vitalidade: sono + treino + refeição + hidratação ────────────────
+       O indicador de Alimentação ignorava TRÊS dos seus quatro trackers — só
+       contava `mealDays`; água, peso e proteína não contribuíam com nada. E o
+       de Vitalidade era metade hábito, sendo que hábito é transversal (o
+       próprio seletor oferece os três pilares) e agora nem mora mais na tela.
+       Fundidos, os quatro sinais do corpo ficam num indicador que finalmente
+       mede o que o nome promete.
+       Cada componente só entra se a pessoa ACOMPANHA aquilo: quem desligou
+       água não é medida por água, e o "porquê" diz isso em vez de esconder. */
     const parts: number[] = [];
     const whyParts: string[] = [];
-    if (habitsCount > 0) { parts.push(clamp((logs.length / (habitsCount * 14)) * 100)); whyParts.push("conclusão de hábitos"); }
     if (trackers.has("sleep")) {
       const sleeps = events.filter((e) => e.kind === "sleep").map((e) => Number((e.payload as { hours?: number })?.hours)).filter((n) => n > 0);
       if (sleeps.length) {
@@ -157,15 +161,14 @@ export default function Score() {
         whyParts.push("sono médio (ideal ~7,5h)");
       }
     }
-    if (parts.length) {
-      scores.vitalidade = {
-        value: clamp(parts.reduce((a, b) => a + b, 0) / parts.length),
-        why: `Baseado em: ${whyParts.join(" e ")}.` + (trackers.has("sleep") ? "" : " Sono fora da conta: você escolheu não acompanhar."),
-      };
+    if (trackers.has("workouts")) {
+      /* A régua é a META DA PESSOA quando ela existe (duas semanas dela), e 3
+         por semana quando não existe — não um ideal nosso aplicado a quem
+         nunca disse quanto queria treinar. */
+      const alvo = (Number(profile?.weekly_workouts_goal) || 3) * 2;
+      const treinos = events.filter((e) => e.kind === "workout").length;
+      if (treinos > 0) { parts.push(clamp((treinos / alvo) * 100)); whyParts.push("treinos em relação à sua meta semanal"); }
     }
-
-    // Alimentação: dias com refeição registrada nos últimos 14 (só se a
-    // pessoa acompanha refeições — tracker).
     if (trackers.has("meals")) {
       // Dias distintos no fuso do app (ver o comentário de `activeDays`): com
       // `slice(0, 10)` o jantar de terça 22h e o almoço de quarta 12h viravam
@@ -173,11 +176,19 @@ export default function Score() {
       const mealDays = distinctLocalDays(
         events.filter((e) => e.kind === "meal").map((e) => e.occurred_at),
       );
-      if (mealDays > 0) {
-        scores.alimentacao = { value: clamp((mealDays / 14) * 100), why: "Baseado em quantos dos últimos 14 dias tiveram refeições registradas." };
-      }
-    } else {
-      scores.alimentacao = { value: null, why: "Você escolheu não acompanhar refeições — sem indicador, de propósito." };
+      if (mealDays > 0) { parts.push(clamp((mealDays / 14) * 100)); whyParts.push("dias com refeição registrada"); }
+    }
+    if (trackers.has("water")) {
+      const waterDays = distinctLocalDays(
+        events.filter((e) => e.kind === "water").map((e) => e.occurred_at),
+      );
+      if (waterDays > 0) { parts.push(clamp((waterDays / 14) * 100)); whyParts.push("dias com hidratação registrada"); }
+    }
+    if (parts.length) {
+      scores.vitalidade = {
+        value: clamp(parts.reduce((a, b) => a + b, 0) / parts.length),
+        why: `Baseado em: ${whyParts.join(", ")}.`,
+      };
     }
 
     // Mente: média de humor + frequência de prática/diário — cada componente
@@ -216,7 +227,13 @@ export default function Score() {
   if (data) {
     const now = Date.now();
     for (const p of PILLARS) {
-      const evs = data.events.filter((e) => e.pillar === p.id);
+      // Leitor TOLERANTE, pela mesma razão de todo leitor de `pillar` depois
+      // da fusão: enquanto houver linha histórica dizendo `alimentacao`, a
+      // igualdade simples conta menos do que a pessoa registrou, e a tendência
+      // do pilar do corpo fica errada em silêncio — contagem zerada por
+      // refatoração é o app apagando o que a pessoa construiu.
+      // `pillarMatchValues` é o único lugar que conhece o apelido.
+      const evs = data.events.filter((e) => pillarMatchValues(p.id).includes(e.pillar));
       if (!evs.length) { trendByPillar[p.id] = null; continue; }
       const recent = evs.filter((e) => now - new Date(e.occurred_at).getTime() <= 7 * 864e5).length;
       const previous = evs.length - recent;

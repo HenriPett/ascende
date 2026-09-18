@@ -27,9 +27,13 @@ export default {
         success: { DEFAULT: "hsl(var(--success))", foreground: "hsl(var(--success-foreground))" },
         warning: { DEFAULT: "hsl(var(--warning))", foreground: "hsl(var(--warning-foreground))" },
         gold: { DEFAULT: "hsl(var(--gold))", foreground: "hsl(var(--gold-foreground))" },
-        // Cores dos pilares
+        // Cores dos pilares — três, desde a fusão de 17/09/2026.
         prosperidade: "hsl(var(--prosperidade))",
         vitalidade: "hsl(var(--vitalidade))",
+        // @deprecated apelido de `vitalidade`, igual ao token CSS de mesmo
+        // nome — REMOVER ATÉ 30/11/2026, no mesmo commit que tirar
+        // `--alimentacao` do index.css. Os dois saem juntos ou o apelido
+        // sobrevive num lugar e ninguém percebe.
         alimentacao: "hsl(var(--alimentacao))",
         mente: "hsl(var(--mente))",
         sidebar: {

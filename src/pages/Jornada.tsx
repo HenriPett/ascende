@@ -161,6 +161,15 @@ export default function Jornada() {
   const habitCount = habits.data ?? 0;
   const conselheiroComPergunta =
     `${appPath("conselheiro")}?q=${encodeURIComponent(SIGNATURE_QUESTION)}`;
+  /* SEM NENHUM COMPROMISSO, este é o único lugar do app que oferece criar um.
+     A lista mora na Hoje e se esconde sozinha quando está vazia — então quem
+     arquivou o último, ou nunca teve, ficava sem porta nenhuma: o Conselheiro
+     PROPÕE compromisso, ela não tem como PEDIR um.
+     A porta não vira um convite novo: é este convite, que já existia, mudando
+     de destino quando o que falta é compromisso e não plano. Com os dois
+     zerados o Conselheiro continua na frente — ele propõe plano E compromissos
+     na mesma conversa, e é a prova nº 1 do posicionamento. */
+  const criarCompromisso = `${appPath("")}?novo=compromisso`;
   const planInvite = planCount === 0
     ? {
       line: habitCount > 0
@@ -169,7 +178,13 @@ export default function Jornada() {
       label: "Peça o que cabe no seu bolso",
       to: conselheiroComPergunta,
     }
-    : undefined;
+    : habitCount === 0
+      ? {
+        line: `${planCount} ${planCount === 1 ? "plano ativo" : "planos ativos"} · nenhum compromisso diário`,
+        label: "Criar um compromisso diário",
+        to: criarCompromisso,
+      }
+      : undefined;
   const planState = planCount > 0
     ? `${planCount} ${planCount === 1 ? "plano ativo" : "planos ativos"}${plans.data?.latest ? ` · ${plans.data.latest}` : ""}`
     : undefined;

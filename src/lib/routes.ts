@@ -26,7 +26,6 @@ const Jornada = lazy(() => import("@/pages/Jornada"));
 const Pilares = lazy(() => import("@/pages/Pilares"));
 const Prosperidade = lazy(() => import("@/pages/Prosperidade"));
 const Vitalidade = lazy(() => import("@/pages/Vitalidade"));
-const Alimentacao = lazy(() => import("@/pages/Alimentacao"));
 const Mente = lazy(() => import("@/pages/Mente"));
 const Score = lazy(() => import("@/pages/Score"));
 const Batalhas = lazy(() => import("@/pages/Batalhas"));
@@ -64,7 +63,18 @@ export const APP_ROUTES: readonly AppRoute[] = [
   { path: "pilares", Component: Pilares, page: "Pilares", since: "legacy" },
   { path: "prosperidade", Component: Prosperidade, page: "Prosperidade", since: "legacy" },
   { path: "vitalidade", Component: Vitalidade, page: "Vitalidade", since: "legacy" },
-  { path: "alimentacao", Component: Alimentacao, page: "Alimentacao", since: "legacy" },
+  /* FUSÃO DE 17/09/2026 — `alimentacao` foi absorvido por `vitalidade`, e a
+     rota continua RENDERIZANDO, nunca redirecionando. Só o `Component` mudou:
+     `path` e `page` estão INTOCADOS, porque routes.test.ts compara `page`
+     contra um mapa literal ("alimentacao" → "Alimentacao") e exige que os dois
+     rótulos continuem distintos entre si.
+     O teste impõe doze condições sobre estas duas linhas, mas NUNCA afirma
+     qual componente um caminho renderiza — só que não é um <Navigate>, que é
+     um `lazy()` e que o rótulo bate. Dois caminhos apontando para o mesmo
+     lazy passam nas doze. Apagar a linha reprova em cinco delas.
+     Quem chega por /app/alimentacao (link de WhatsApp antigo, atalho do PWA,
+     favorito) cai na tela nova sem tropeço nenhum. */
+  { path: "alimentacao", Component: Vitalidade, page: "Alimentacao", since: "legacy" },
   { path: "mente", Component: Mente, page: "Mente", since: "legacy" },
   { path: "batalhas", Component: Batalhas, page: "Batalhas", since: "legacy" },
   { path: "assinatura", Component: Assinatura, page: "Assinatura", since: "legacy" },
@@ -159,10 +169,10 @@ export const EXTERNALLY_LINKED: Readonly<Record<string, readonly string[]>> = {
   // a rota solta?". São as intocáveis: o WhatsApp manda gente para elas por
   // nome, em mensagens já entregues que não podemos editar.
   prosperidade: [
-    "supabase/functions/whatsapp-webhook/index.ts:582 — desvio de fatura completa para a importação",
+    "supabase/functions/whatsapp-webhook/index.ts:635 — desvio de fatura completa para a importação",
   ],
   vitalidade: [
-    "supabase/functions/whatsapp-webhook/index.ts:602 — desvio de composição corporal",
+    "supabase/functions/whatsapp-webhook/index.ts:655 — desvio de composição corporal",
   ],
 };
 

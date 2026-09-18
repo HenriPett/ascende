@@ -14,7 +14,7 @@ import {
   serviceClient, requireUser, assertRateLimit, corsFor, isTrivialMessage,
   extractEventsAndMemories, SAFETY_RULES, attachMemorySources, nowInSpForPrompt,
   MODEL_FAST, CAPTURE_TOOL, CAPTURE_SYSTEM,
-  STATEMENT_TOOL, STATEMENT_SYSTEM, normalizeStatementItems,
+  STATEMENT_TOOL, STATEMENT_SYSTEM, normalizeStatementItems, withCanonicalPillar,
 } from "../_shared/lib.ts";
 import { anthropicCall, reserveUsage, releaseUsage } from "../_shared/usage.ts";
 import { getEntitlements, spDayStartUtc, nextSpDayStartUtc, limitResponse, spParts, TZ } from "../_shared/entitlements.ts";
@@ -306,7 +306,9 @@ Deno.serve(async (req) => {
           });
         }
       }
-      const events = Array.isArray(inp.events) ? inp.events : [];
+      // Caminho de IMAGEM: não passa por extractEventsAndMemories, então o
+      // pilar canônico é aplicado aqui (o outro ponto de estrangulamento).
+      const events = withCanonicalPillar(Array.isArray(inp.events) ? inp.events : []);
       await pushCaptureHistory(supabase, user.id, text, events);
       // Foto de prato vira meal e print de treino vira workout: o comentário
       // de aderência vale aqui exatamente como no caminho de texto.

@@ -11,6 +11,7 @@
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   textForExtraction, isPendingExpired, CAPTURE_OUTCOME_PREFIX, SHORT_REPLY_CHARS,
+  saveEventsServer,
 } from "./whatsapp.ts";
 
 /** Histórico como o webhook o lê: DECRESCENTE, mais recente primeiro. */
@@ -117,4 +118,71 @@ Deno.test("a linha de expirado é a MESMA fronteira que textForExtraction conhec
   const expirado = `${CAPTURE_OUTCOME_PREFIX}12/09 08:30] A proposta expirou sem confirmação: NADA foi registrado.`;
   const hist = h(["assistant", expirado], ["user", "Comi 3 pães franceses"]);
   assertEquals(textForExtraction("E hoje?", hist), "E hoje?");
+});
+
+
+/* ══ O EVENTO SEM `pillar` NÃO PODE SER DESCARTADO ═════════════════════════
+
+   Regressão real, encontrada na varredura de 17/09/2026 e pega tarde: quando
+   o campo `pillar` saiu do CAPTURE_TOOL, o caminho de IMAGEM do WhatsApp
+   passou a entregar eventos sem ele — e a guarda de saveEventsServer exigia
+   `typeof ev.pillar === "string"`. Cada evento era descartado em silêncio,
+   DEPOIS de a pessoa ler "Li a foto 📸" e tocar em confirmar.
+
+   É a pior forma de perder captura: o app diz que entendeu, ela confirma, e
+   não fica nada — sem erro, sem log, sem nada para ela desconfiar.           */
+
+Deno.test("WhatsApp · foto de prato sem `pillar` é gravada, e com o pilar derivado", async () => {
+  const gravados: Record<string, unknown>[] = [];
+  const db = {
+    from: () => ({
+      insert: (row: Record<string, unknown>) => {
+        gravados.push(row);
+        return Promise.resolve({ error: null });
+      },
+    }),
+    // deno-lint-ignore no-explicit-any
+  } as any;
+
+  // Exatamente o que o modelo devolve hoje: sem `pillar`, porque ele saiu do
+  // schema. As propostas vêm do caminho de imagem, que não passa pela
+  // extração de texto.
+  const { saved } = await saveEventsServer(db, "u1", [
+    { kind: "meal", summary: "Almoço: arroz e frango", calories: 650 },
+    { kind: "workout", summary: "Treino de costas" },
+    { kind: "water", summary: "Água: 500 ml", ml: 500 },
+    // deno-lint-ignore no-explicit-any
+  ] as any);
+
+  assertEquals(saved, 3, "evento sem `pillar` foi descartado em silêncio");
+  assertEquals(gravados.map((r) => r.pillar), ["vitalidade", "vitalidade", "vitalidade"]);
+});
+
+Deno.test("WhatsApp · o pilar que vem na proposta NÃO vence o kind", async () => {
+  /* Proposta guardada ANTES do deploy e confirmada DEPOIS: ela carrega o valor
+     legado. O gravador deriva de novo, então a linha entra canônica. */
+  const gravados: Record<string, unknown>[] = [];
+  const db = {
+    from: () => ({
+      insert: (row: Record<string, unknown>) => {
+        gravados.push(row);
+        return Promise.resolve({ error: null });
+      },
+    }),
+    // deno-lint-ignore no-explicit-any
+  } as any;
+
+  // deno-lint-ignore no-explicit-any
+  await saveEventsServer(db, "u1", [{ kind: "meal", pillar: "alimentacao", summary: "Jantar" }] as any);
+  assertEquals(gravados[0].pillar, "vitalidade");
+});
+
+Deno.test("WhatsApp · evento sem `kind` continua sendo descartado", () => {
+  /* A guarda afrouxou em `pillar`, não em `kind`. `kind` é o que a pessoa
+     relatou e o que o pilar é derivado DE — sem ele não há o que gravar. */
+  const fonte = Deno.readTextFileSync(new URL("./whatsapp.ts", import.meta.url));
+  assert(
+    /if \(!ev \|\| typeof ev\.kind !== "string"\) continue;/.test(fonte),
+    "a guarda de `kind` saiu junto com a de `pillar`",
+  );
 });

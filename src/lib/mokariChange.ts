@@ -24,8 +24,7 @@
 // bloqueado e JSON corrompido são todos possíveis, e nenhum deles vale um
 // Mokari que não desenha. Toda função aqui engole a falha e devolve "sem
 // novidade" — o silêncio é o pior caso aceitável.
-import type { Mokari } from "@/lib/mokari";
-import { PILLARS, type PillarId } from "@/lib/pillars";
+import { MOKARI_ORGANS, type Mokari, type MokariOrgan } from "@/lib/mokari";
 import { leafCount, fruitCount, flowerCount, rootCount } from "@/lib/mokariDensity";
 
 const KEY = (userId: string) => `ascende-mokari-visto-${userId}`;
@@ -58,25 +57,65 @@ export interface MokariSnapshot {
   marks: Record<string, number>;
 }
 
-/** Quantas marcas cada pilar desenha hoje — SÓ a marca que é dele.
+/** Quantas marcas cada ÓRGÃO desenha hoje — só a marca que é dele.
  *
- *  Cada pilar tem uma peça e uma só: Alimentação são as folhas, Prosperidade
- *  os frutos, Mente as flores, Vitalidade as raízes. Somar as quatro contas
- *  para todo pilar faria o aviso disparar por uma mudança que não está
- *  desenhada em lugar nenhum — "Mente cresceu" sem nada ter mudado na tela é
- *  pior que silêncio, porque ensina a pessoa a não acreditar no aviso. */
-const MARK_OF: Record<PillarId, (n: number) => number> = {
-  alimentacao: leafCount,
-  prosperidade: fruitCount,
-  mente: flowerCount,
-  vitalidade: rootCount,
+ *  Era chaveado por PILAR, com o contrato "cada pilar tem uma peça e uma só".
+ *  Desde que Vitalidade absorveu Alimentação (17/09/2026) esse contrato é
+ *  falso: um pilar desenha DUAS peças. Manter a chave no pilar daria a
+ *  Vitalidade uma marca só — e aí o aviso voltaria a poder disparar por uma
+ *  mudança que não está desenhada em lugar nenhum, que é exatamente o medo
+ *  escrito neste comentário desde o primeiro dia. "Vitalidade cresceu" sem
+ *  nada ter mudado na tela é pior que silêncio: ensina a pessoa a não
+ *  acreditar no aviso.
+ *
+ *  Quatro chaves fixas, e o invariante que sobrevive à fusão: cada órgão tem
+ *  UMA fonte, e nenhuma fonte alimenta dois órgãos. */
+const MARK_OF: Record<MokariOrgan, (n: number) => number> = {
+  raiz: rootCount,
+  folha: leafCount,
+  fruto: fruitCount,
+  flor: flowerCount,
+};
+
+/** A frase de cada órgão. Fala do que a pessoa VÊ crescer no desenho — e não
+ *  de "pilar", que é vocabulário nosso e não dela. */
+const GROWTH_PHRASE: Record<MokariOrgan, string> = {
+  raiz: "Suas raízes cresceram",
+  folha: "Suas folhas cresceram",
+  fruto: "Seus frutos cresceram",
+  flor: "Suas flores cresceram",
 };
 
 export function marksOf(m: Mokari): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const p of PILLARS) {
-    const n = m.detail.pillar_events?.[p.id as PillarId] ?? 0;
-    out[p.id] = (MARK_OF[p.id as PillarId] ?? leafCount)(n);
+  for (const o of MOKARI_ORGANS) {
+    out[o] = MARK_OF[o](m.detail.organ_events?.[o] ?? 0);
+  }
+  return out;
+}
+
+/* ── O retrato guardado ANTES da fusão ───────────────────────────────────
+   O armazenamento local guarda `marks` chaveado pelo que o código da época
+   conhecia: os quatro ids de PILAR. Um snapshot desses, lido pelo código novo,
+   não casa com nenhuma das quatro chaves de órgão — e `changesSince` compara
+   contra 0 e anuncia as QUATRO peças como novidade de hoje para quem não fez
+   nada. Aviso falso é a única coisa que este arquivo não pode produzir.
+
+   A tradução é exata, porque a fusão não moveu nenhuma marca de lugar:
+   vitalidade desenhava a raiz, alimentacao a folha, prosperidade o fruto,
+   mente a flor. Isto pode sair quando não houver mais navegador com snapshot
+   anterior a 17/09/2026 — na prática, nunca: custa quatro linhas e o pior caso
+   de deixá-lo é zero. */
+const ORGAN_OF_LEGACY_PILLAR: Record<string, MokariOrgan> = {
+  vitalidade: "raiz", alimentacao: "folha", prosperidade: "fruto", mente: "flor",
+};
+
+function migrateMarks(marks: Record<string, number>): Record<string, number> {
+  if (MOKARI_ORGANS.some((o) => o in marks)) return marks;   // já é de órgão
+  const out: Record<string, number> = {};
+  for (const [id, n] of Object.entries(marks)) {
+    const organ = ORGAN_OF_LEGACY_PILLAR[id];
+    if (organ) out[organ] = Number(n) || 0;
   }
   return out;
 }
@@ -90,7 +129,8 @@ export function readSnapshot(userId: string, store = browserStore()): MokariSnap
     const raw = store?.getItem(KEY(userId));
     if (!raw) return null;
     const v = JSON.parse(raw) as MokariSnapshot;
-    return v && typeof v.stage === "number" && v.marks ? v : null;
+    if (!v || typeof v.stage !== "number" || !v.marks) return null;
+    return { ...v, marks: migrateMarks(v.marks) };
   } catch { return null; }
 }
 
@@ -120,9 +160,9 @@ export function changesSince(
   const frases: string[] = [];
   if (atual.stage > anterior.stage) frases.push(`Seu Mokari virou ${stageLabel(atual.stage)}`);
   if (atual.environment > anterior.environment) frases.push(`O céu abriu: ${environmentLabel(atual.environment)}`);
-  for (const p of PILLARS) {
-    const ganho = (atual.marks[p.id] ?? 0) - (anterior.marks[p.id] ?? 0);
-    if (ganho > 0) frases.push(`${p.name} cresceu`);
+  for (const o of MOKARI_ORGANS) {
+    const ganho = (atual.marks[o] ?? 0) - (anterior.marks[o] ?? 0);
+    if (ganho > 0) frases.push(GROWTH_PHRASE[o]);
   }
   return frases;
 }

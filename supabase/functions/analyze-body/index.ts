@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     const flags = await getFlags(supabase);
     if (!flags.body_photo_enabled) {
       return json({
-        error: "A estimativa de composição corporal por foto está temporariamente suspensa enquanto revisamos a metodologia. Continue registrando seu peso na aba Alimentação.",
+        error: "A estimativa de composição corporal por foto está temporariamente suspensa enquanto revisamos a metodologia. Continue registrando seu peso na aba Vitalidade.",
         code: "FEATURE_SUSPENDED",
       }, 403);
     }

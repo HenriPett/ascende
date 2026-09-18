@@ -309,13 +309,15 @@ export const STATE_STYLE: Record<MokariState, StateStyle> = {
 
 /* ═══ A gema: afinidade 0 ═══════════════════════════════════════════════
    O 0 não é ausência de peça, é uma peça própria — a 27ª. Sem ela, quem só
-   registra Prosperidade vê frutos e não faz ideia de que os outros três
-   pilares existem no Mokari; e no dia em que registrar sono, a raiz aparecendo
-   vira mágica inexplicável em vez de continuidade.
+   registra Prosperidade vê frutos e não faz ideia de que os outros pilares
+   existem no Mokari; e no dia em que registrar sono, a raiz aparecendo vira
+   mágica inexplicável em vez de continuidade.
 
    Gema é o ponto de onde o crescimento sai. Ela não está vazia — está antes. */
 
-/** Onde a gema de cada pilar nasce: a PRIMEIRA âncora daquele pilar. */
+/** Onde a gema de cada pilar nasce: a PRIMEIRA âncora daquele pilar.
+ *  Vitalidade nasce na raiz — desde a fusão ela desenha raiz E folha, e a raiz
+ *  é a peça que está lá desde o estágio 1. */
 export function budSlot(pillar: PillarId, stage: MokariStage): Point {
   const a = STAGE_ANCHORS[stage];
   if (pillar === "vitalidade") return p(a.rootOrigin.x - 10, a.rootOrigin.y + 6);
@@ -327,8 +329,8 @@ export function budSlot(pillar: PillarId, stage: MokariStage): Point {
 /**
  * A gema só aparece se ALGUM OUTRO pilar já tiver marca.
  *
- * Com tudo em zero, o broto sozinho já diz "começando"; quatro gemas cinzentas
- * num broto leem como quatro caixinhas vazias para preencher — exatamente a
+ * Com tudo em zero, o broto sozinho já diz "começando"; um punhado de gemas
+ * cinzentas num broto lê como caixinhas vazias para preencher — exatamente a
  * lista de tarefas que a regra 2 proíbe. É a diferença entre "ainda não" e
  * "você falhou aqui", e é ela que separa um espelho de um boleto.
  */

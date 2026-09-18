@@ -1,0 +1,568 @@
+<title>Vitalidade e Social</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap">
+<style>
+  :root{
+    color-scheme: light;
+    /* Tokens do próprio Ascende (src/index.css) — a página usa a paleta do produto */
+    --bg:        hsl(46 55% 98%);
+    --ink:       hsl(235 12% 17%);
+    --ink-soft:  hsl(235 8% 42%);
+    --ink-faint: hsl(235 8% 56%);
+    --card:      hsl(0 0% 100%);
+    --line:      hsl(45 22% 88%);
+    --line-soft: hsl(45 22% 93%);
+    --wash:      hsl(46 40% 96%);
+
+    --ouro:      hsl(42 90% 38%);
+    --ouro-bg:   hsl(42 90% 42% / .10);
+    --salvia:    hsl(150 38% 34%);
+    --salvia-bg: hsl(150 38% 40% / .10);
+    --lilas:     hsl(258 55% 52%);
+    --lilas-bg:  hsl(258 65% 62% / .10);
+    --coral:     hsl(8 62% 48%);
+    --coral-bg:  hsl(8 78% 56% / .10);
+
+    --veto:      hsl(4 72% 45%);
+    --veto-bg:   hsl(4 72% 49% / .09);
+    --ok:        hsl(152 45% 32%);
+    --ok-bg:     hsl(152 45% 38% / .10);
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --bg:        hsl(240 8% 5.5%);
+      --ink:       hsl(45 30% 95%);
+      --ink-soft:  hsl(240 6% 68%);
+      --ink-faint: hsl(240 6% 55%);
+      --card:      hsl(240 7% 9.5%);
+      --line:      hsl(240 6% 17%);
+      --line-soft: hsl(240 6% 13%);
+      --wash:      hsl(240 6% 11%);
+
+      --ouro:      hsl(44 95% 62%);
+      --ouro-bg:   hsl(44 95% 58% / .13);
+      --salvia:    hsl(150 45% 60%);
+      --salvia-bg: hsl(150 45% 56% / .13);
+      --lilas:     hsl(258 85% 76%);
+      --lilas-bg:  hsl(258 85% 74% / .13);
+      --coral:     hsl(8 88% 70%);
+      --coral-bg:  hsl(8 88% 66% / .13);
+
+      --veto:      hsl(4 72% 64%);
+      --veto-bg:   hsl(4 72% 58% / .13);
+      --ok:        hsl(152 48% 56%);
+      --ok-bg:     hsl(152 48% 52% / .13);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --bg:        hsl(240 8% 5.5%);
+    --ink:       hsl(45 30% 95%);
+    --ink-soft:  hsl(240 6% 68%);
+    --ink-faint: hsl(240 6% 55%);
+    --card:      hsl(240 7% 9.5%);
+    --line:      hsl(240 6% 17%);
+    --line-soft: hsl(240 6% 13%);
+    --wash:      hsl(240 6% 11%);
+    --ouro:      hsl(44 95% 62%);
+    --ouro-bg:   hsl(44 95% 58% / .13);
+    --salvia:    hsl(150 45% 60%);
+    --salvia-bg: hsl(150 45% 56% / .13);
+    --lilas:     hsl(258 85% 76%);
+    --lilas-bg:  hsl(258 85% 74% / .13);
+    --coral:     hsl(8 88% 70%);
+    --coral-bg:  hsl(8 88% 66% / .13);
+    --veto:      hsl(4 72% 64%);
+    --veto-bg:   hsl(4 72% 58% / .13);
+    --ok:        hsl(152 48% 56%);
+    --ok-bg:     hsl(152 48% 52% / .13);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:Outfit, system-ui, -apple-system, sans-serif;
+    font-size:16px; line-height:1.65; font-weight:400;
+    padding-inline:20px; padding-block:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:720px; margin-inline:auto; padding-block:56px 96px;}
+
+  h1,h2,h3{font-family:Sora, Outfit, system-ui, sans-serif; text-wrap:balance; margin:0;}
+  h1{font-size:clamp(2rem,5.5vw,2.9rem); font-weight:700; line-height:1.1; letter-spacing:-.02em;}
+  h2{font-size:1.45rem; font-weight:600; line-height:1.25; letter-spacing:-.01em;}
+  h3{font-size:1.06rem; font-weight:600; line-height:1.35;}
+  p{margin:0; text-wrap:pretty;}
+  strong{font-weight:600;}
+  a{color:inherit;}
+
+  .eyebrow{
+    font-family:Sora, sans-serif; font-size:.7rem; font-weight:600;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint);
+  }
+
+  /* ── citação de código: o vernáculo deste repositório ───────────── */
+  code{
+    font-family:var(--mono); font-size:.845em;
+    background:var(--wash); border:1px solid var(--line-soft);
+    border-radius:4px; padding:.08em .34em; white-space:nowrap;
+    color:var(--ink-soft);
+  }
+
+  header.top{display:flex; flex-direction:column; gap:18px; margin-bottom:52px;}
+  .lede{font-size:1.12rem; line-height:1.6; color:var(--ink-soft); max-width:60ch;}
+  .meta{
+    display:flex; flex-wrap:wrap; gap:6px 18px; font-size:.8rem;
+    color:var(--ink-faint); padding-top:16px; border-top:1px solid var(--line);
+  }
+
+  section{margin-top:64px; display:flex; flex-direction:column; gap:22px;}
+  section > p, section > .stack > p{max-width:65ch;}
+  .stack{display:flex; flex-direction:column; gap:16px;}
+
+  /* ── as quatro decisões: tiles, porque são o estado, não a leitura ─ */
+  .decisions{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+  .dec{background:var(--card); padding:18px 20px; display:flex; flex-direction:column; gap:7px;}
+  .dec .k{font-family:Sora,sans-serif; font-size:.68rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-faint);}
+  .dec .v{font-family:Sora,sans-serif; font-size:1.02rem; font-weight:600; line-height:1.3;}
+  .dec .n{font-size:.83rem; color:var(--ink-soft); line-height:1.5;}
+
+  /* ── achado: o formato que carrega procedência ─────────────────── */
+  .find{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:20px 22px; display:flex; flex-direction:column; gap:10px;
+    border-left:3px solid var(--accent-c, var(--ink-faint));
+  }
+  .find.grave{--accent-c:var(--veto);}
+  .find.bom{--accent-c:var(--ok);}
+  .find.nota{--accent-c:var(--ouro);}
+  .find .tag{
+    font-family:Sora,sans-serif; font-size:.66rem; font-weight:600;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--accent-c, var(--ink-faint));
+  }
+  .find p{font-size:.95rem; line-height:1.6;}
+  .src{font-size:.8rem; color:var(--ink-faint); font-family:var(--mono);}
+
+  pre{
+    margin:0; background:var(--wash); border:1px solid var(--line-soft);
+    border-radius:8px; padding:14px 16px; overflow-x:auto;
+    font-family:var(--mono); font-size:.8rem; line-height:1.6; color:var(--ink-soft);
+  }
+  pre code{background:none; border:none; padding:0; white-space:pre; font-size:1em;}
+
+  blockquote{
+    margin:0; padding:2px 0 2px 20px; border-left:2px solid var(--ouro);
+    font-size:1.05rem; line-height:1.55; color:var(--ink);
+  }
+  blockquote.recusa{
+    border-left-color:var(--salvia); background:var(--salvia-bg);
+    padding:18px 20px; border-radius:0 8px 8px 0; font-size:.98rem;
+  }
+
+  table{width:100%; border-collapse:collapse; font-size:.9rem;}
+  .scroll{overflow-x:auto;}
+  th,td{text-align:left; padding:9px 12px 9px 0; border-bottom:1px solid var(--line-soft); vertical-align:top;}
+  th{font-family:Sora,sans-serif; font-size:.68rem; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); padding-bottom:7px;}
+  td:last-child,th:last-child{padding-right:0;}
+  .yes{color:var(--ok); font-weight:600;}
+  .no{color:var(--veto); font-weight:600;}
+
+  ol.cuts, ul.plain{margin:0; padding-left:1.25em; display:flex; flex-direction:column; gap:9px; font-size:.95rem; line-height:1.55;}
+  ol.cuts li::marker, ul.plain li::marker{color:var(--ink-faint);}
+
+  /* ── a roda de matizes: o argumento da cor É sobre distância ────── */
+  .hues{display:flex; flex-direction:column; gap:14px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px 22px;}
+  .hue-row{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+  .hue-row .lbl{font-family:Sora,sans-serif; font-size:.7rem; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); min-width:74px;}
+  .swatches{display:flex; gap:0; border-radius:6px; overflow:hidden; flex:1 1 220px; min-width:200px; height:34px;}
+  .sw{flex:1; display:grid; place-items:center; font-family:var(--mono); font-size:.68rem; color:hsl(240 20% 10% / .82); font-weight:600;}
+  .gap-note{font-size:.84rem; color:var(--ink-soft);}
+  .gap-note b{font-weight:600; color:var(--ink);}
+
+  .phase{display:flex; flex-direction:column; gap:9px; padding:16px 0; border-top:1px solid var(--line-soft);}
+  .phase:first-of-type{border-top:none; padding-top:0;}
+  .phase .h{display:flex; align-items:baseline; gap:11px; flex-wrap:wrap;}
+  .phase .r{font-family:var(--mono); font-size:.76rem; font-weight:700; color:var(--ouro); letter-spacing:.06em;}
+  .phase .t{font-family:Sora,sans-serif; font-weight:600; font-size:.98rem;}
+  .phase p{font-size:.92rem; color:var(--ink-soft); line-height:1.6;}
+
+  .ask{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:24px; display:flex; flex-direction:column; gap:18px;}
+  .ask-item{display:flex; gap:14px; align-items:flex-start;}
+  .ask-item .num{font-family:var(--mono); font-size:.76rem; font-weight:700; color:var(--ouro); padding-top:.24em; flex-shrink:0;}
+  .ask-item .body{display:flex; flex-direction:column; gap:4px;}
+  .ask-item .q{font-family:Sora,sans-serif; font-weight:600; font-size:.97rem; line-height:1.4;}
+  .ask-item .why{font-size:.88rem; color:var(--ink-soft); line-height:1.55;}
+
+  .squad{display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:14px;}
+  .sq{display:flex; flex-direction:column; gap:3px; padding-left:11px; border-left:2px solid var(--line);}
+  .sq .n{font-family:Sora,sans-serif; font-weight:600; font-size:.93rem;}
+  .sq .r{font-size:.8rem; color:var(--ink-faint); line-height:1.45;}
+
+  footer{margin-top:72px; padding-top:22px; border-top:1px solid var(--line); font-size:.83rem; color:var(--ink-faint); line-height:1.6;}
+
+  @media (max-width:520px){
+    .wrap{padding-block:40px 72px;}
+    .hue-row .lbl{min-width:0;}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <span class="eyebrow">Plano fechado · antes do código</span>
+  <h1>Vitalidade absorve Alimentação.<br>E o Social não é o GymRats.</h1>
+  <p class="lede">Seis especialistas leram o produto inteiro contra <code>PRINCIPIOS.md</code> e <code>POSICIONAMENTO.md</code> para responder a dois pedidos. A preocupação declarada era uma só — que o app fique complexo e difícil de usar. É essa a pergunta que este plano responde.</p>
+  <div class="meta">
+    <span>17 de setembro de 2026</span>
+    <span>35 arquivos de produção · 7 de teste</span>
+    <span>Duas levas</span>
+  </div>
+</header>
+
+<section>
+  <h2>As quatro decisões tomadas</h2>
+  <div class="decisions">
+    <div class="dec">
+      <span class="k">O Social</span>
+      <span class="v">Camada, não pilar</span>
+      <span class="n">Não tem dado próprio, não entra no Score, não gera XP. O app fica com 3 pilares — é a fusão pagando pelo recurso novo.</span>
+    </div>
+    <div class="dec">
+      <span class="k">Compartilhamento</span>
+      <span class="v">Nasce fechado</span>
+      <span class="n">Por tipo de dado e por grupo. Financeiro nunca é compartilhável — nem por opção.</span>
+    </div>
+    <div class="dec">
+      <span class="k">O nome</span>
+      <span class="v">Vitalidade</span>
+      <span class="n">Não "Saúde". Os dois motivos estão abaixo, e um deles economiza metade da migração.</span>
+    </div>
+    <div class="dec">
+      <span class="k">A entrega</span>
+      <span class="v">Duas levas</span>
+      <span class="n">Vitalidade primeiro, sozinha. Social depois, com o aprendizado da primeira.</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Por que não "Saúde"</h2>
+  <p>Dois especialistas chegaram nisso por caminhos independentes, e a conclusão barateou o resto do plano.</p>
+
+  <div class="find grave">
+    <span class="tag">O motivo grave</span>
+    <p>O item 7 da lista NUNCA é <strong>“Conselheiro fingindo ser profissional de saúde ou corretor”</strong> — e o documento declara que cada item dessa lista tem versão pública em <code>/recusas</code>. Batizar de “Saúde” o pilar em que esse Conselheiro opera empurra o produto exatamente para o enquadramento que os dois documentos passam o tempo todo recusando.</p>
+    <span class="src">POSICIONAMENTO.md:79</span>
+  </div>
+
+  <div class="find grave">
+    <span class="tag">O motivo concreto</span>
+    <p>A palavra “SAÚDE” <strong>já aparece duas vezes no retrato do Conselheiro, com dois significados</strong>, hoje, antes da mudança: o bloco clínico de condições informadas, e a categoria de despesa dentro do bloco de finanças.</p>
+    <p>Um terceiro significado não é preciosismo. Se a pessoa desligar o escopo do pilar, o modelo passa a segurar uma proibição sobre “saude” e um dado rotulado “Saúde”. Ou ele cala sobre os R$&nbsp;240 de farmácia que ela <strong>vê na tela Prosperidade</strong> — reintroduzindo o furo de 13/09 já corrigido — ou trata farmácia como licença para falar de saúde, que é vazamento pelo lado que continuou aberto.</p>
+    <span class="src">_shared/lib.ts:728 · :757 · :790</span>
+  </div>
+
+  <div class="find bom">
+    <span class="tag">O dividendo</span>
+    <p>Com o id <code>vitalidade</code>, a fusão deixa de ser “criar <code>saude</code> em 35 arquivos” e vira <strong>absorção: <code>alimentacao</code> → <code>vitalidade</code></strong>. Uma direção só.</p>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Artefato</th><th>Se fosse <code>saude</code></th><th>Sendo <code>vitalidade</code></th></tr></thead>
+      <tbody>
+        <tr><td><code>ai_scopes</code> — chave nova ausente = autorizado</td><td class="no">o risco central</td><td class="yes">não existe</td></tr>
+        <tr><td>Backfill de <code>life_events.pillar</code></td><td>2 valores legados</td><td>1</td></tr>
+        <tr><td><code>habits.pillar default</code> + 2 triggers</td><td>3 objetos SQL</td><td class="yes">zero</td></tr>
+        <tr><td><code>--vitalidade</code>, <code>/app/vitalidade</code>, webhook</td><td>renomear + redirect</td><td class="yes">zero</td></tr>
+        <tr><td>Prompts de <code>briefing</code> e <code>lib.ts</code></td><td>reescrever 3</td><td class="yes">zero</td></tr>
+        <tr><td><code>POSICIONAMENTO.md §H.2</code> (é contrato)</td><td>emenda de fundador</td><td class="yes">zero</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>E a rota congelada que o WhatsApp usa por nome, em template aprovado pela Meta, passa a estar <strong>certa</strong> — não apenas tolerada.</p>
+</section>
+
+<section>
+  <h2>As duas regras que não podem ser invertidas</h2>
+  <p>Dois campos são genuinamente <em>lossy</em> na fusão, e eles pedem semânticas <strong>opostas</strong>. Esta é a decisão mais importante do plano inteiro.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Campo</th><th>Regra</th><th>Por quê</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>ai_scopes</code></td>
+          <td><strong>E</strong></td>
+          <td>Registro de <strong>consentimento</strong>. O código lê <code>raw[id] !== false</code> — chave ausente significa <em>autorizado</em>. Sob OU, uma refatoração nossa devolve ao Conselheiro peso, calorias, proteína e hidratação sem a pessoa tocar em nada. Dado analisado não desanalisa.</td>
+        </tr>
+        <tr>
+          <td><code>profiles.pillars</code></td>
+          <td><strong>OU</strong></td>
+          <td>Registro de <strong>superfície</strong>. Aqui esconder é o dano: quem tinha Alimentação ativa não pode perder a tela. A granularidade desce para <code>tracking_prefs</code>, que é imune à fusão.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>A precedência do <strong>E</strong> já está escrita e testada no mesmo arquivo: <code>lib.ts:470</code> usa <code>every</code>, não <code>some</code>; e <code>lib.ts:283</code> declara <em>“na dúvida, o retrato fica mais pobre, nunca mentiroso”</em>.</p>
+
+  <div class="find bom">
+    <span class="tag">O ganho que ninguém tinha citado</span>
+    <p>Hoje existe um estado de retrato incoerente que a fusão <strong>torna impossível</strong>: <code>vitalidade=true, alimentacao=false</code>. O Conselheiro recebe treinos e sono e nenhum peso, nenhuma caloria — e então o protocolo de planos exige “peso atual” e manda pedir o que falta. Ele pede um dado que a pessoa deliberadamente escondeu, num retrato que já lhe disse “não peça para reativar”. <strong>Meio corpo visível era um bug de contexto. O E elimina esse estado do universo.</strong></p>
+  </div>
+</section>
+
+<section>
+  <h2>O vazamento que quase passou</h2>
+  <div class="find grave">
+    <span class="tag">Silencioso · vai na direção errada</span>
+    <p>A tela de Ajustes grava o objeto <code>ai_scopes</code> <strong>inteiro</strong>, reconstruído a partir da constante <code>SCOPES</code>:</p>
+    <pre><code>for (const sc of SCOPES) next[sc.id] = raw[sc.id] !== false;
+await supabase.from("profiles").update({ ai_scopes: next })</code></pre>
+    <p>Se o front novo tirar <code>alimentacao</code> da lista, o primeiro toque em <strong>qualquer</strong> interruptor de privacidade apaga a chave do banco. Para qualquer função ainda velha — ou para um rollback — chave ausente significa <strong>autorizado</strong>. A pessoa mexe na tela de privacidade e a consequência é reabrir o que ela havia fechado.</p>
+    <span class="src">src/pages/Ajustes.tsx:172-181</span>
+  </div>
+  <p><strong>Regra da janela, inegociável:</strong> enquanto existir função velha em produção, o toggle fundido espelha o valor nas duas chaves.</p>
+  <p>E a defesa real não é a migration: é a <strong>leitura derivada</strong>. Com <code>vitalidade !== false &amp;&amp; alimentacao !== false</code> montado num lugar só, as quatro combinações de perfil × função fecham corretamente — e a migration pode rodar antes, depois, no meio ou nunca. Migration como otimização, e não como correção, é a única forma de migração que não precisa ser perfeita.</p>
+</section>
+
+<section>
+  <h2>A sequência de deploy</h2>
+  <div class="stack">
+    <div class="phase">
+      <div class="h"><span class="r">R1</span><span class="t">Expand</span></div>
+      <p>Nenhum byte de prompt ou de tool muda — <strong>cache intacta</strong>. Leitores passam a aceitar os dois valores; entram a leitura derivada, o espelho em Ajustes, a migration de <code>ai_scopes</code> e o <code>canonicalPillar</code> ainda sem ser chamado na escrita.</p>
+    </div>
+    <div class="phase">
+      <div class="h"><span class="r">R2</span><span class="t">Migrate — num único deploy</span></div>
+      <p>Isso é regra, não estilo: cada edição do prefixo faz <em>cada usuário ativo</em> pagar escrita onde pagaria leitura — cerca de R$&nbsp;0,10 por usuário, uma vez; ~R$&nbsp;105 para mil ativos. Três deploys que tocam o prefixo custam três vezes isso.</p>
+    </div>
+    <div class="phase">
+      <div class="h"><span class="r">R3</span><span class="t">Contract — uma release depois</span></div>
+      <p>A chave <code>alimentacao</code> some; a derivação e o espelho saem <strong>juntos</strong>; os leitores param de aceitar o valor legado. O <code>canonicalPillar</code> fica.</p>
+    </div>
+  </div>
+
+  <div class="find nota">
+    <span class="tag">O campo <code>pillar</code> sai do CAPTURE_TOOL</span>
+    <p>É o único campo da proposta que a pessoa <strong>não consegue auditar</strong> — todo o resto do cartão de confirmação é frase em português que ela lê e corrige; o pilar é um pontinho colorido. Campo que ninguém confere não pode depender de escritor probabilístico. E ele é 100% derivável de <code>kind</code>: a própria descrição já é uma tabela. <em>O modelo explica, o código calcula.</em></p>
+    <p>Bônus que a leitura expôs: <code>note</code> não está no mapeamento — o modelo hoje chuta o pilar de toda nota livre, sem instrução nenhuma.</p>
+  </div>
+</section>
+
+<section>
+  <h2>A cor, e por que o argumento não é estético</h2>
+  <div class="hues">
+    <div class="hue-row">
+      <span class="lbl">Com sálvia</span>
+      <div class="swatches">
+        <span class="sw" style="background:hsl(42 90% 52%)">42°</span>
+        <span class="sw" style="background:hsl(150 38% 52%)">150°</span>
+        <span class="sw" style="background:hsl(258 65% 70%)">258°</span>
+      </div>
+    </div>
+    <p class="gap-note">Dois intervalos de <b>108°</b>. Cada pilar é distinguível numa bolinha de 6px.</p>
+    <div class="hue-row">
+      <span class="lbl">Com coral</span>
+      <div class="swatches">
+        <span class="sw" style="background:hsl(8 78% 62%)">8°</span>
+        <span class="sw" style="background:hsl(42 90% 52%)">42°</span>
+        <span class="sw" style="background:hsl(258 65% 70%)">258°</span>
+      </div>
+    </div>
+    <p class="gap-note">Coral e ouro a <b>34°</b> de distância. Em bolinha de 6px e ícone de 20px, isso não é uma paleta — é a mesma cor duas vezes.</p>
+  </div>
+  <p>E o ouro não é negociável: é o <code>--gold</code> do XP, do nível e do REGISTRAR, o “um só protagonista” que o <code>index.css</code> declara. <strong>Marca não gasta a cor do protagonista para salvar a cor de um coadjuvante.</strong></p>
+  <p>Reforço: o coral tem ficha corrida de contraste registrada no próprio código — branco sobre coral dá 2,86:1 no escuro. O risco de “app de dieta” não mora na matiz; mora no nome, no ícone e na primeira linha de copy. Por isso <strong>a maçã morre e fica o <code>HeartPulse</code></strong>. Sálvia + batimento é corpo vivo; sálvia + maçã é MyFitnessPal.</p>
+  <p>O coral não desaparece: ele se aposenta como <code>--mokari-raiz</code>, a cor das raízes da árvore — que é onde coral sempre fez mais sentido.</p>
+</section>
+
+<section>
+  <h2>O Mokari: o invariante escrito não era o invariante real</h2>
+  <p>O código diz “cada pilar tem uma peça e uma só”. O invariante <em>verdadeiro</em> é outro: cada órgão tem UMA fonte, e nenhuma fonte alimenta dois órgãos. Esse sobrevive à fusão intacto — o que morre é só o acoplamento órgão↔pilar.</p>
+  <blockquote>Vitalidade desenha duas peças porque tem duas naturezas: a raiz sustenta — treino e sono. A folha nutre — comida e água.</blockquote>
+  <div class="find grave">
+    <span class="tag">O pixel que mudaria sozinho</span>
+    <p><code>Mokari.tsx:55-57</code> pinta cada órgão com a cor do <strong>pilar</strong>. Com uma cor só para Vitalidade, raiz e folha ficariam do mesmo tom — <strong>regressão visual do conquistado</strong>, pela porta dos fundos, num módulo cuja regra 1 diz em maiúsculas que regressão é proibida, e que já foi mordido por isso antes.</p>
+    <p>Solução: a árvore ganha tokens de órgão e o <code>color()</code> passa a ler órgão, não pilar. Zero pixel alterado — e a árvore deixa de ser refém da paleta de pilares para sempre.</p>
+  </div>
+  <p>Contra dado sujo, um piso explícito durante a transição — porque uma única linha com <code>pillar='vitalidade'</code> num <code>meal</code> derrubaria a regra 1 por dado sujo, não por erro de desenho:</p>
+  <pre><code>raiz  = max( conta(kind in sleep,nap,workout), conta(pillar='vitalidade') )
+folha = max( conta(kind in meal,water),        conta(pillar='alimentacao') )</code></pre>
+</section>
+
+<section>
+  <h2>A tela: 16 cartões visíveis → 9</h2>
+  <p>Três abas — <strong>Meu dia</strong>, <strong>Meu corpo</strong>, <strong>Histórico</strong> — e a primeira dobra fora delas: um cartão só, registrar, com quatro chips de um toque.</p>
+  <div class="find nota">
+    <span class="tag">O que NÃO entra na dobra</span>
+    <p><strong>Barra de progresso nenhuma.</strong> A tela Hoje já é o painel do dia. Se Vitalidade abrir com “seu dia em números”, o app passa a ter <em>dois painéis do mesmo dia</em> — e a fusão terá dobrado a percepção de complexidade enquanto reduzia um pilar.</p>
+    <blockquote style="border-left-color:var(--salvia); margin-top:4px;">Hoje é o dono do dia. Vitalidade é a mesa de trabalho.</blockquote>
+  </div>
+  <h3>Os seis cortes que fazem a fusão valer</h3>
+  <p>Sem eles a fusão piora o app — e a culpa não será do Social.</p>
+  <ol class="cuts">
+    <li>Um cartão-assinatura, não dois: o “Plano que cabe no seu bolso” e o “Raio-X de Vitalidade” são a mesma peça na mesma posição.</li>
+    <li>Radar <em>e</em> barras dos mesmos sete números — dois gráficos da mesma tabela. Fica a barra ordenada.</li>
+    <li>Seis campos de meta espalhados viram uma folha “Minhas metas”. Hoje a pessoa caça meta em 6 cartões de 2 telas.</li>
+    <li>“Registro rápido em texto” sai — é a caixa de captura com menos poder, e o REGISTRAR já está em toda tela.</li>
+    <li>Hábitos diários sai: não é vitalidade, o próprio seletor oferece os quatro pilares.</li>
+    <li>Três históricos de janelas diferentes viram um.</li>
+  </ol>
+  <p><code>/app/alimentacao</code> continua <strong>renderizando</strong>, nunca redirecionando — o teste impõe doze condições, mas nunca afirma qual componente um caminho renderiza. Muda só o <code>Component</code>.</p>
+</section>
+
+<section>
+  <h2>Social: sim ao Social, não ao GymRats</h2>
+  <p>A distinção não é de grau, é de objeto. O GymRats é construído em volta do <strong>desempenho alheio</strong> — e esse motor só funciona enquanto a pessoa não percebe que a inquietação ao abrir o app foi projetada. O que passa é um Social construído em volta do <strong>compromisso</strong>: um combinado explícito, com início, fim e resultado coletivo. Compromisso com terceiros funciona <em>melhor</em> com a pessoa plenamente consciente do mecanismo — que é justamente o teste que o feed reprova.</p>
+
+  <div class="find grave">
+    <span class="tag">O achado que ninguém tinha procurado</span>
+    <p>A primeira linha dos modelos de Batalha do app é:</p>
+    <pre><code>{ name: "Redes sociais",
+  hint: "Rolagem infinita, comparação, horas perdidas" }</code></pre>
+    <p><strong>O Ascende vende uma batalha contra feed e comparação.</strong> Construir feed infinito e ranking aqui dentro é a estrutura exata do Dilema 3 — a casa de apostas: lucrar duas vezes com a mesma queda, uma vendendo a batalha, outra operando o gatilho.</p>
+    <p>Isso não veta o Social. Veta o <strong>feed</strong> e o <strong>ranking ordinal</strong> como forma. No dia em que a contradição for notada em público, não se perde o Social — perde-se a <code>/recusas</code> inteira.</p>
+    <span class="src">src/lib/battles.ts:29</span>
+  </div>
+</section>
+
+<section>
+  <h2>O teste do zero</h2>
+  <p>A regra que decide o catálogo inteiro: uma métrica só é compartilhável se <strong>o zero dela</strong> for informação que a pessoa não se importaria de ouvir lida em voz alta pelo grupo.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Métrica</th><th>O zero significa</th><th>Entra?</th></tr></thead>
+      <tbody>
+        <tr><td>Treino, água, sono, refeição, gratidão</td><td>“não registrou”</td><td class="yes">sim</td></tr>
+        <tr><td>Humor</td><td>“parou de conseguir se olhar”</td><td class="no">não</td></tr>
+        <tr><td>Prática espiritual</td><td>“se afastou da fé”</td><td class="no">não</td></tr>
+        <tr><td>Batalha</td><td>“recaiu”</td><td class="no">não</td></tr>
+        <tr><td>Peso e composição</td><td>—</td><td class="no">não</td></tr>
+        <tr><td>Qualquer coisa financeira</td><td>—</td><td class="no">nunca</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Isso é melhor que classificar por sensibilidade do conteúdo, porque no agregado o conteúdo já não existe — <strong>o que vaza é sempre a ausência</strong>. E “cumpriu o teto de gasto hoje: sim/não” já é dado financeiro.</p>
+</section>
+
+<section>
+  <h2>O que fica no lugar do ranking</h2>
+  <div class="stack">
+    <div class="phase">
+      <div class="h"><span class="r">0</span><span class="t">A barra coletiva — padrão de todo grupo</span></div>
+      <p>“34 de 50 treinos combinados nesta semana.” Quem está atrás continua <strong>contribuindo</strong> em vez de aparecer atrás.</p>
+    </div>
+    <div class="phase">
+      <div class="h"><span class="r">1</span><span class="t">A lista, sem ordem, contra a própria meta</span></div>
+      <p>“Ana: 3 de 3 · Você: 2 de 4.” Quem combinou 2 e cumpriu aparece completo ao lado de quem combinou 6 — que é a verdade que o ordinal apaga. Premia honestidade de meta, não tempo livre nem dinheiro; ou seja, não pune a nossa cliente.</p>
+    </div>
+    <div class="phase">
+      <div class="h"><span class="r">2</span><span class="t">Desafio competitivo — opt-in, posição privada</span></div>
+      <p>Cada um vê a própria posição; ninguém vê a de ninguém.</p>
+    </div>
+    <div class="phase">
+      <div class="h"><span class="r">3</span><span class="t">O reconhecimento assimétrico — construir primeiro</span></div>
+      <p>O grupo reconhece um <strong>retorno</strong> (“voltou depois de 9 dias”) com o mesmo peso visual de um recorde.</p>
+    </div>
+  </div>
+  <blockquote>A comparação social cura quando o grupo nota quem voltou, e fere quando o grupo ordena quem produziu.</blockquote>
+  <p>E o push do GymRats — <em>“fulano treinou, e você?”</em> — está <strong>vetado, sem versão suavizada</strong>. A primeira metade tem utilidade zero para a vida dela; a segunda é onde mora o valor, e o valor é nosso.</p>
+</section>
+
+<section>
+  <h2>O modelo de dados, e a frase que o justifica</h2>
+  <p>Três fatos do banco determinam tudo: <code>life_events</code> já contém dinheiro — o gatilho de transações grava tudo como <code>kind='transaction'</code> com <code>payload.amount</code>, na mesma tabela e no mesmo <code>jsonb</code> do treino e do diário. RLS é de linha, não de coluna: abrir a linha abre o <code>payload</code> inteiro. E <code>profiles</code> carrega renda, medicamentos e condições de saúde na mesma linha do nome.</p>
+  <blockquote>A decisão “dado financeiro nunca é compartilhável” é <strong>inexprimível</strong> como política sobre as tabelas de hoje. Não porque seja difícil — porque a forma do dado não comporta o recorte.</blockquote>
+  <p>Daí o desenho: <strong>o grupo lê projeção, nunca a fonte.</strong> As tabelas de origem não ganham uma única política nova. Nunca.</p>
+  <div class="find bom">
+    <span class="tag">A defesa é estrutural, não política</span>
+    <p>A tabela de projeção <strong>não tem uma única coluna de texto</strong>. O diário, a descrição da refeição e a análise da foto não vazam porque <em>não existe onde eles caberem</em> — <code>value</code> é <code>numeric</code>. Uma política pode ser escrita errado; uma coluna que não existe, não.</p>
+    <p>E <strong>allowlist, nunca denylist</strong>: um <code>kind</code> novo que apareça amanhã não vira métrica compartilhável — ele simplesmente não tem para onde ir. Uma denylist nasce aberta, e foi assim que o financeiro entraria: não por decisão, por um <code>kind</code> novo num sábado.</p>
+  </div>
+  <p><strong>Publicar é copiar; revogar é apagar.</strong> Fail-closed por deleção, não por predicado — porque regra de privacidade como cláusula <code>WHERE</code> é regra a um bug de distância: a janela esconde o passado, não o apaga, e uma regressão de um caractere reexpõe um ano de histórico num deploy, em silêncio.</p>
+  <p class="gap-note"><b>Custo:</b> 7 migrations · 13 tabelas · ~35 políticas, das quais 6 concentram todo o risco · 4 views · ~11 funções <code>security definer</code> · ~12 testes obrigatórios. Nada toca o front, e nenhuma linha existente de RLS muda — se a camada inteira for revertida, o app volta a ser de uma pessoa só sem migração de volta.</p>
+</section>
+
+<section>
+  <h2>A matemática da complexidade, respondida com honestidade</h2>
+  <p>4 − 1 + 1 = 4 em número. <strong>Em percepção, fica mais complexo</strong> — a menos que cinco coisas sejam verdade.</p>
+  <p>A fusão é uma redução real, mas é um ganho <em>de mapa</em>: a pessoa sente uma vez, ao reaprender onde as coisas ficam. O Social é um acréscimo de <em>superfície viva</em> — gente, convite, desafio, estado que muda sem você fazer nada. Um kg de mapa não compensa um kg de superfície viva.</p>
+  <ol class="cuts">
+    <li><strong>A fusão apaga superfície, não realoca.</strong> Os seis cortes entram. Se Vitalidade nascer com 16 cartões em 3 abas, a fusão piorou o app.</li>
+    <li><strong>Nenhuma barra de progresso nova.</strong> Hoje continua o único painel do dia.</li>
+    <li><strong>O Social nasce desligado e silencioso.</strong> Quem nunca abrir não deve sentir que existe.</li>
+    <li><strong>A barra continua com 5 alvos e um só dourado.</strong></li>
+    <li><strong>Duas entregas</strong> — decidido.</li>
+  </ol>
+  <p>Se as cinco valerem: percepção de <em>“app menor”</em> na Vitalidade, e <em>“app com um bairro opcional”</em> no Social. Líquido positivo. Se a 1 ou a 3 caírem, o saldo fica negativo e o número 4 vai mentir.</p>
+</section>
+
+<section>
+  <h2>A fatura visível</h2>
+  <p>Todo “não” caro deve virar fatura visível. A linha que entra em <code>/recusas</code>:</p>
+  <blockquote class="recusa">
+    <strong>“Nosso Social nunca terá feed infinito, ranking de quem está na frente, nem notificação de ‘fulano treinou, e você?’.”</strong><br><br>
+    Grupos aqui existem para combinar e sustentar, não para comparar. Você escolhe, um por um, o que o grupo vê — nada nasce aberto, dinheiro nunca é compartilhável, e suas batalhas nunca saem daqui. Recusamos a engrenagem que faz um app social crescer, porque ela cresce com a sua insegurança. Temos uma Batalha contra redes sociais dentro do produto: seria estranho construir uma aqui dentro.
+  </blockquote>
+  <p>E uma linha para a landing: <strong>“Tem grupo, sim. Não tem plateia.”</strong></p>
+</section>
+
+<section>
+  <h2>O que depende de você</h2>
+  <div class="ask">
+    <div class="ask-item">
+      <span class="num">01</span>
+      <div class="body">
+        <span class="q">Rodar a contagem antes de aprovar o E em <code>ai_scopes</code>.</span>
+        <span class="why">Quantos perfis negaram só Alimentação? Esse número é exatamente quem perde análise por causa da regra. Se for perto de zero — o provável, já que o default liga tudo — a discussão é teórica. O número é seu, não do time.</span>
+      </div>
+    </div>
+    <div class="ask-item">
+      <span class="num">02</span>
+      <div class="body">
+        <span class="q">A cópia publicada por grupo: o custo está pago?</span>
+        <span class="why">Duplica dado por grupo para que revogar seja <code>DELETE</code> e não <code>WHERE</code>. Custa amplificação de escrita e uma rotina de reconciliação permanente — e é o risco número 1 de gravidade do modelo inteiro.</span>
+      </div>
+    </div>
+    <div class="ask-item">
+      <span class="num">03</span>
+      <div class="body">
+        <span class="q"><code>peso_registrado</code> fica no catálogo?</span>
+        <span class="why">Sobreviveu ao corte do delta, mas “não subiu na balança” é frase que alguém pode usar contra outra pessoa. Cortando, o catálogo cai para 8 e nada mais muda no modelo.</span>
+      </div>
+    </div>
+    <div class="ask-item">
+      <span class="num">04</span>
+      <div class="body">
+        <span class="q">A janela de quem chega depois.</span>
+        <span class="why">Adotado o fechado: quem entra em setembro não vê julho de ninguém. Mais seguro, possivelmente frustrante. Reversível na direção segura, não na outra.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>O esquadrão</h2>
+  <div class="squad">
+    <div class="sq"><span class="n">Compass</span><span class="r">Planejamento — o inventário com arquivo:linha</span></div>
+    <div class="sq"><span class="n">Prisma</span><span class="r">UI/UX — a tela, os cortes, o lugar do Social</span></div>
+    <div class="sq"><span class="n">Vitral</span><span class="r">Arquitetura de IA — consentimento, deploy, custo</span></div>
+    <div class="sq"><span class="n">Aduana</span><span class="r">Dados compartilhados — 13 tabelas, as 4 revogações</span></div>
+    <div class="sq"><span class="n">Fiel</span><span class="r">Ética da persuasão — o veto</span></div>
+    <div class="sq"><span class="n">Farol</span><span class="r">Marca — o nome, a cor, o ícone</span></div>
+  </div>
+</section>
+
+<footer>
+  Plano completo em <code>docs/vitalidade-e-social.md</code>; os seis pareceres na íntegra em <code>docs/pareceres-vitalidade-social/</code>. Nenhuma linha de código foi escrita — este documento existe para ser aprovado antes disso.
+</footer>
+
+</div>

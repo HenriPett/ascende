@@ -99,7 +99,7 @@ describe("peso e gordura", () => {
     ))!;
     expect(r.events).toHaveLength(1);
     expect(r.events[0].kind).toBe("weight");
-    expect(r.events[0].pillar).toBe("alimentacao");  // o pilar que o app usa para peso
+    expect(r.events[0].pillar).toBe("vitalidade");   // o pilar que o app usa para peso
     expect(r.events[0].kg).toBe(101.5);              // a da manhã
     expect(r.events[0].summary).toBe("Peso: 101,5 kg · 28,4% de gordura");
     expect(r.stats.duplicates).toBe(1);

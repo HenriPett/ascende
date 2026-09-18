@@ -21,10 +21,10 @@ import {
   highWaterMark, daysBetween,
   computeMokariFromTotals, mokariAffinityFromCounts, mokariStageFromXpTotal,
   MOKARI_STATES, MOKARI_CALC_VERSION, MOKARI_DEFAULT_ENABLED,
-  IGNORED_KINDS, IGNORED_XP_REASONS, RECENT_WINDOW_DAYS,
+  IGNORED_KINDS, IGNORED_XP_REASONS, RECENT_WINDOW_DAYS, organTotalsFromEvents,
   type XpEntry, type MokariEvent, type MokariTotals,
 } from "@/lib/mokari";
-import { PILLARS, type PillarId } from "@/lib/pillars";
+import { PILLARS, pillarMatchValues, type PillarId } from "@/lib/pillars";
 import { addDays } from "@/lib/insights";
 
 /* ─── Fixtures ────────────────────────────────────────────────────────── */
@@ -183,7 +183,7 @@ describe("regra 2 — nunca pune", () => {
     expect(m.stage).toBe(1);
     expect(m.environment).toBe(1);
     expect(m.affinity).toEqual({
-      prosperidade: 0, vitalidade: 0, alimentacao: 0, mente: 0,
+      prosperidade: 0, vitalidade: 0, mente: 0,
     });
   });
 });
@@ -540,7 +540,9 @@ function totaisDe(
 ): MokariTotals {
   const contam = eventos.filter((e) => !IGNORED_KINDS.includes(e.kind));
   const pillarCounts = {} as Record<PillarId, number>;
-  for (const p of PILLARS) pillarCounts[p.id] = contam.filter((e) => e.pillar === p.id).length;
+  for (const p of PILLARS) {
+    pillarCounts[p.id] = contam.filter((e) => pillarMatchValues(p.id).includes(e.pillar)).length;
+  }
   const dias = contam.map((e) => e.occurred_at.slice(0, 10)).sort();
   const inicio = addDays(referenceDay, -(RECENT_WINDOW_DAYS - 1));
   return {
@@ -553,6 +555,10 @@ function totaisDe(
       const d = e.occurred_at.slice(0, 10);
       return d >= inicio && d <= referenceDay;
     }),
+    // A consulta real monta estas seis contagens com seis `head: true`; aqui
+    // elas saem da mesma função pura que o caminho por array usa, que é o que
+    // mantém a EQUIVALÊNCIA provando alguma coisa.
+    organTotals: organTotalsFromEvents(eventos),
   };
 }
 
@@ -582,6 +588,7 @@ describe("entrada por totais", () => {
   it("EQUIVALÊNCIA numa conta vazia", () => {
     const vazio: MokariTotals = {
       xpTotal: 0, pillarCounts: {}, eventsTotal: 0, journeyStart: null, recentEvents: [],
+      organTotals: organTotalsFromEvents([]),
     };
     const porTotais = computeMokariFromTotals(vazio, REF);
     const porArray = computeMokari([], [], REF);
@@ -614,11 +621,12 @@ describe("entrada por totais", () => {
     const comTruncagem = computeMokari([], truncado, ref, `${BASE}T00:00:00Z`);
     const totaisExatos = computeMokariFromTotals(totaisDe([], eventos, ref), ref);
 
-    // A pessoa registrou 120 refeições. Pela lista truncada, o pilar aparece zerado.
-    expect(comTruncagem.affinity.alimentacao).toBe(0);
-    expect(totaisExatos.affinity.alimentacao).toBe(3);
-    // E vitalidade, que sobreviveu ao corte, bate nas duas.
-    expect(comTruncagem.affinity.vitalidade).toBe(totaisExatos.affinity.vitalidade);
+    // A pessoa registrou 120 refeições. Pela lista truncada, elas somem — e o
+    // que some junto é a FOLHA, que é a peça que elas desenham.
+    expect(comTruncagem.detail.organ_events.folha).toBe(0);
+    expect(totaisExatos.detail.organ_events.folha).toBe(120);
+    // E a raiz, que sobreviveu ao corte, bate nas duas.
+    expect(comTruncagem.detail.organ_events.raiz).toBe(totaisExatos.detail.organ_events.raiz);
 
     // Sem truncagem, as duas entradas concordam — o erro era o corte, não a conta.
     expect(computeMokari([], eventos, ref, `${BASE}T00:00:00Z`).affinity)
@@ -635,7 +643,7 @@ describe("entrada por totais", () => {
     const ref = addDays(BASE, 400);
     const truncado = computeMokari([], eventos.slice(0, 1000), ref, `${BASE}T00:00:00Z`);
     const exato = computeMokariFromTotals(totaisDe([], eventos, ref), ref);
-    expect(truncado.affinity.alimentacao).toBe(exato.affinity.alimentacao); // nível igual
+    expect(truncado.affinity.vitalidade).toBe(exato.affinity.vitalidade); // nível igual
     expect(truncado.detail.events).toBe(1000);
     expect(exato.detail.events).toBe(1020);   // mas a contagem já mente
 

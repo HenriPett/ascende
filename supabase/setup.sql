@@ -19,7 +19,7 @@
 create table if not exists public.profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   name text,
-  pillars text[] not null default '{}',          -- pilares ativos: prosperidade | vitalidade | alimentacao | mente
+  pillars text[] not null default '{}',          -- pilares ativos: prosperidade | vitalidade | mente (o id `alimentacao` foi absorvido por `vitalidade` em 17/09/2026)
   spirituality_label text,                        -- como a pessoa chama sua prática (oração, meditação...)
   monthly_income numeric,                         -- renda mensal aproximada (opcional)
   monthly_budget numeric,                         -- quanto quer gastar por mês (opcional)
@@ -98,7 +98,7 @@ create trigger on_auth_user_created
 create table if not exists public.life_events (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  pillar text not null,        -- prosperidade | vitalidade | alimentacao | mente
+  pillar text not null,        -- prosperidade | vitalidade | mente (derivado do kind; ver canonicalPillar)
   kind text not null,          -- transaction | habit_done | sleep | nap | workout | meal | water | journal | weight | body | mood | gratitude | practice | note
   occurred_at timestamptz not null default now(),
   payload jsonb not null default '{}',
@@ -732,6 +732,12 @@ create trigger trg_plans_cap before insert or update of status on public.plans
   for each row execute function public.enforce_active_plans_cap();
 
 -- ─── 15. PRIVACIDADE: escopos que o Conselheiro pode analisar ───
+-- A chave `alimentacao` continua no DEFAULT de propósito, mesmo depois de o
+-- pilar ter sido absorvido por `vitalidade` (17/09/2026): enquanto houver
+-- instância antiga da edge function em produção, é ela que a função velha lê,
+-- e uma conta NOVA sem a chave seria lida como "autorizado" por ela. Sai na
+-- release de contração, junto com a leitura derivada de _shared/lib.ts e com o
+-- espelho da tela de Ajustes — os três saem juntos ou nenhum sai.
 alter table public.profiles add column if not exists ai_scopes jsonb not null default
   '{"prosperidade":true,"vitalidade":true,"alimentacao":true,"mente":true,"diario":true}'::jsonb;
 

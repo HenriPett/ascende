@@ -792,11 +792,10 @@ function parseMeasurement(text: string, detected: DetectedFormat) {
     const fat = fatIsMass ? null : num(cFat.get(row));
     events.push({
       kind: "weight",
-      // `alimentacao`, não `vitalidade`: é o pilar que o resto do app usa para
-      // peso (Alimentacao.tsx, Onboarding.tsx) e o que a regra do CAPTURE_TOOL
-      // no backend determina. Divergir aqui faria o peso importado não aparecer
-      // junto do peso registrado à mão, na aba Corpo.
-      pillar: "alimentacao",
+      // O pilar de todo evento é tabela, derivada do `kind` — ver
+      // canonicalPillar (src/lib/pillars.ts e _shared/lib.ts). Divergir aqui
+      // faria o peso importado não aparecer junto do registrado à mão.
+      pillar: "vitalidade",
       occurred_at: isoOf(when),
       day: dayOf(when),
       kg,
@@ -879,7 +878,7 @@ function parseNutrition(text: string, detected: DetectedFormat) {
 
     events.push({
       kind: "meal",
-      pillar: "alimentacao",
+      pillar: "vitalidade",
       occurred_at: isoOf(when),
       day: dayOf(when),
       meal_type: isWholeDay ? WHOLE_DAY : mapped,

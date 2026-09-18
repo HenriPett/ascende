@@ -52,11 +52,36 @@
     --gold: 42 95% 48%;                /* XP, nível, progresso */
     --gold-foreground: 240 25% 10%;
 
-    /* Pilares — etéreos, mas com contraste funcional */
+    /* Pilares — etéreos, mas com contraste funcional.
+       TRÊS, desde a fusão de 17/09/2026: as matizes ficam em 42° (ouro), 150°
+       (sálvia) e 258° (lilás), dois intervalos de 108°. O coral que Vitalidade
+       usava ficava a 34° do ouro — e cor de categoria a 34° de distância, numa
+       bolinha de 6px no hub ou num ícone de 20px, não é uma paleta: é a mesma
+       cor duas vezes. O ouro não é negociável (é o --gold do XP, do nível e do
+       REGISTRAR), então quem se muda é o coadjuvante. */
     --prosperidade: 42 90% 42%;        /* ouro profundo */
-    --vitalidade: 8 78% 56%;           /* coral suave */
-    --alimentacao: 150 38% 40%;        /* sálvia */
+    --vitalidade: 150 38% 40%;         /* sálvia */
+    /* @deprecated apelido de --vitalidade — REMOVER ATÉ 30/11/2026 (R3, a
+       release de contração, uma depois da fusão).
+       Ele existe para NÃO fazer 39 substituições num commit: enquanto durar,
+       nada quebra visualmente no meio do caminho e o grep final é mecânico.
+       A data está escrita porque apelido temporário sem prazo escrito vira
+       apelido permanente. */
+    --alimentacao: var(--vitalidade);
     --mente: 258 65% 62%;              /* lilás (o glow do céu) */
+
+    /* ── Mokari: cor de ÓRGÃO, não de pilar ────────────────────────────
+       O Mokari pintava cada peça com a cor do PILAR. Com Vitalidade desenhando
+       DUAS peças (a raiz sustenta — sono e treino; a folha nutre — comida e
+       água), uma cor só deixaria raiz e folha do mesmo tom: regressão visual do
+       conquistado pela porta dos fundos, que a regra 1 proíbe.
+       Os dois valores são exatamente os de antes da fusão — zero pixel alterado
+       na árvore — e o coral não morre: ele se aposenta como cor de raiz, que é
+       onde coral sempre fez mais sentido do que como cor de categoria.
+       Ao contrário de --mokari-cloud/spark/glow (que são cores completas),
+       estes dois são TRIPLAS HSL: o componente compõe `hsl(var(--x) / alfa)`. */
+    --mokari-raiz: 8 78% 56%;          /* o coral de sempre */
+    --mokari-folha: 150 38% 40%;       /* a sálvia de sempre */
 
     --border: 45 22% 89%;
     --input: 45 22% 87%;
@@ -139,9 +164,14 @@
 
     /* Pilares brilhando na noite */
     --prosperidade: 44 95% 58%;
-    --vitalidade: 8 88% 66%;
-    --alimentacao: 150 45% 56%;
+    --vitalidade: 150 45% 56%;
+    /* @deprecated — ver a nota no :root. REMOVER ATÉ 30/11/2026. */
+    --alimentacao: var(--vitalidade);
     --mente: 258 85% 74%;
+
+    /* Mokari — cor de órgão. Os mesmos valores de antes da fusão. */
+    --mokari-raiz: 8 88% 66%;
+    --mokari-folha: 150 45% 56%;
 
     --border: 240 6% 15%;
     --input: 240 6% 17%;
@@ -313,6 +343,19 @@
   /* Dourado para TEXTO pequeno: mais escuro no claro (contraste AA), vivo no escuro */
   .text-gold-ink { color: hsl(40 90% 34%); }
   .dark .text-gold-ink { color: hsl(44 95% 62%); }
+
+  /* Sálvia para TEXTO — mesma doutrina do dourado acima, e pelo mesmo motivo:
+     a cor que identifica o pilar não é obrigada a ser a cor que carrega
+     tinta. O token `--vitalidade` (150 38% 40%) sobre o marfim dá 3,9:1: passa
+     em AA para 24px/600 (que exige 3:1), mas é a cor-assinatura no PRIMEIRO
+     elemento da tela, a 0,6 do limite — e cor de marca no limite é a que
+     reprova assim que alguém diminuir uma fonte. Quatro pontos de luminosidade
+     a menos levam a 4,65:1, que passa em AA em qualquer tamanho.
+     O token do pilar NÃO muda: a árvore, os gráficos e as bolinhas do hub
+     continuam exatamente na mesma cor. No escuro o token já dá 8,76:1, então
+     lá a tinta é o próprio token. */
+  .text-vitalidade-ink { color: hsl(150 38% 36%); }
+  .dark .text-vitalidade-ink { color: hsl(var(--vitalidade)); }
 
   /* Celebração sutil quando uma meta do dia é batida (1x por dia) */
   @keyframes goal-hit {

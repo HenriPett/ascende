@@ -28,7 +28,7 @@
 // new Date() sem argumento. A data de referência ENTRA como parâmetro, então a
 // mesma história produz o mesmo Mokari — sempre.
 import { addDays } from "@/lib/insights";
-import { PILLARS, type PillarId } from "@/lib/pillars";
+import { PILLARS, pillarMatchValues, type PillarId } from "@/lib/pillars";
 // A regra de "que dia é este carimbo" mora num lugar só (lib/localDays.ts):
 // reimplementá-la aqui é como o `slice` errado nasceu em três telas.
 import { localDay } from "@/lib/localDays";
@@ -59,6 +59,102 @@ export const MOKARI_DEFAULT_ENABLED = false;
    estágio, e a regra estaria quebrada pela porta dos fundos. Por isso o XP
    também é filtrado, pelo texto do motivo que o gatilho grava. */
 export const IGNORED_KINDS: readonly string[] = ["weight", "body"];
+
+/* ═══ OS QUATRO ÓRGÃOS ════════════════════════════════════════════════
+   O contrato antigo dizia "cada pilar desenha uma peça e uma só". Ele era uma
+   descrição, não o invariante — e a fusão de `alimentacao` em `vitalidade`
+   (17/09/2026) o quebrou sem quebrar nada de verdade.
+
+   O INVARIANTE REAL é outro, e este sobrevive intacto:
+   **cada órgão tem UMA fonte, e nenhuma fonte alimenta dois órgãos.**
+
+   Então a unidade do Mokari deixa de ser o pilar e passa a ser o ÓRGÃO: 4
+   órgãos ← 4 grupos de `kind` ← 3 pilares. Escrito assim, "quatro peças para
+   três pilares" para de ser anomalia e volta a ser simetria — a assimetria
+   fica onde ela é verdade: Vitalidade desenha DUAS peças porque tem duas
+   naturezas. A raiz sustenta (sono, soneca, treino); a folha nutre (comida,
+   água). É o único par de órgãos em que a divisão é legível sem explicação.
+
+   E a aritmética prova que ninguém regride: `sleep+nap+workout` é exatamente
+   o antigo `pillar='vitalidade'`, e `meal+water` é exatamente o antigo
+   `pillar='alimentacao'` (weight/body saem antes de tudo, regra 3). Mesmas
+   somas ⇒ mesma densidade ⇒ mesma marca-d'água ⇒ ninguém vê uma folha a menos. */
+export const MOKARI_ORGANS = ["raiz", "folha", "fruto", "flor"] as const;
+export type MokariOrgan = typeof MOKARI_ORGANS[number];
+
+/** O que alimenta a raiz e o que alimenta a folha. Fruto e flor continuam
+ *  vindo do PILAR (prosperidade e mente), porque neles a fusão não mexeu. */
+export const ORGAN_KINDS: Record<"raiz" | "folha", readonly string[]> = {
+  raiz: ["sleep", "nap", "workout"],
+  folha: ["meal", "water"],
+};
+
+/** As seis contagens cruas de que os quatro órgãos precisam. Quem consulta o
+ *  banco entrega ISTO; a regra (o piso, abaixo) mora num lugar só. */
+export interface MokariOrganTotals {
+  /** Registros de kind `sleep|nap|workout`. */
+  raizPorKind: number;
+  /** Registros com `pillar='vitalidade'` que NÃO são de kind de folha. */
+  raizPorPilar: number;
+  /** Registros de kind `meal|water`. */
+  folhaPorKind: number;
+  /** Registros com `pillar='alimentacao'` que NÃO são de kind de raiz. */
+  folhaPorPilar: number;
+  /** Registros de `pillar='prosperidade'`. */
+  fruto: number;
+  /** Registros de `pillar='mente'`. */
+  flor: number;
+}
+
+/**
+ * PISO DE TRANSIÇÃO — contra dado sujo e contra hábito.
+ *
+ * Contar por `kind` só é idêntico a contar por pilar se toda linha histórica
+ * tiver `pillar` coerente com `kind`. Não dá para auditar isso daqui, e há um
+ * caso em que a incoerência é CERTA e não é sujeira: `habit_done`. O gatilho
+ * do banco grava o pilar do HÁBITO, e `habit_done` não está em nenhum grupo de
+ * kind — contar só por kind apagaria da raiz todas as vezes em que a pessoa
+ * cumpriu um compromisso diário. Numa história de meses isso são dezenas de
+ * marcas, e regressão do conquistado é o que a regra 1 proíbe.
+ *
+ * Então o desenho fica com a MAIOR das duas leituras. Mesmo espírito da prova
+ * de não-regressão da densidade: a garantia é por propriedade, não por um
+ * campo gravado que pode faltar.
+ *
+ * As duas leituras são recortadas para não se sobreporem (a de raiz exclui
+ * kinds de folha, a de folha exclui kinds de raiz). Sem esse recorte, depois do
+ * backfill `pillar='vitalidade'` passaria a incluir as refeições e a mesma
+ * refeição alimentaria raiz E folha — que é exatamente o invariante desta
+ * seção, quebrado pela porta dos fundos.
+ */
+export function organEventsFromCounts(t: MokariOrganTotals): Record<MokariOrgan, number> {
+  const n = (v: number) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+  return {
+    raiz: Math.max(n(t.raizPorKind), n(t.raizPorPilar)),
+    folha: Math.max(n(t.folhaPorKind), n(t.folhaPorPilar)),
+    fruto: n(t.fruto),
+    flor: n(t.flor),
+  };
+}
+
+/** As mesmas seis contagens, a partir da lista de eventos. Não é uma segunda
+ *  implementação: é a MESMA conta com a entrada em outra forma — a regra
+ *  continua só em organEventsFromCounts. */
+export function organTotalsFromEvents(events: readonly MokariEvent[]): MokariOrganTotals {
+  const contaveis = events.filter((e) => !IGNORED_KINDS.includes(String(e.kind)));
+  const kindOf = (e: MokariEvent) => String(e.kind);
+  const ehRaiz = (e: MokariEvent) => ORGAN_KINDS.raiz.includes(kindOf(e));
+  const ehFolha = (e: MokariEvent) => ORGAN_KINDS.folha.includes(kindOf(e));
+  const conta = (f: (e: MokariEvent) => boolean) => contaveis.filter(f).length;
+  return {
+    raizPorKind: conta(ehRaiz),
+    raizPorPilar: conta((e) => e.pillar === "vitalidade" && !ehFolha(e)),
+    folhaPorKind: conta(ehFolha),
+    folhaPorPilar: conta((e) => e.pillar === "alimentacao" && !ehRaiz(e)),
+    fruto: conta((e) => e.pillar === "prosperidade"),
+    flor: conta((e) => e.pillar === "mente"),
+  };
+}
 
 /** Motivos de xp_log que vêm de peso/composição corporal. As duas primeiras
  *  formas são as do gatilho atual; as duas últimas cobrem linhas legadas
@@ -122,7 +218,7 @@ export interface Mokari {
   /** Último dia considerado. Parâmetro, nunca relógio. */
   reference_day: string;
   stage: MokariStage;
-  /** Marca-d'água por pilar. Sempre traz os quatro. */
+  /** Marca-d'água por pilar. Sempre traz os três. */
   affinity: Record<PillarId, PillarAffinity>;
   state: MokariState;
   environment: MokariEnvironment;
@@ -144,6 +240,12 @@ export interface Mokari {
      *  tem três níveis e três níveis acabam: era por isso que o desenho
      *  parava de responder por volta do dia 40. A contagem crua não acaba. */
     pillar_events: Record<PillarId, number>;
+    /** Registros por ÓRGÃO (já sem peso/corpo). É ISTO que a árvore desenha:
+     *  raiz, folha, fruto e flor, quatro chaves fixas. `pillar_events` continua
+     *  existindo para o que fala em PILAR — a marca de destaque na legenda e
+     *  os brotos —, e as duas contagens não são a mesma coisa desde que
+     *  Vitalidade passou a desenhar duas peças. Ver o bloco OS QUATRO ÓRGÃOS. */
+    organ_events: Record<MokariOrgan, number>;
   };
 }
 
@@ -304,7 +406,8 @@ export function mokariAffinity(events: readonly MokariEvent[]): Record<PillarId,
   const counts = {} as Record<PillarId, number>;
   for (const pillar of PILLARS) {
     counts[pillar.id] = events.filter(
-      (e) => e.pillar === pillar.id && !IGNORED_KINDS.includes(String(e.kind)),
+      (e) => pillarMatchValues(pillar.id).includes(e.pillar)
+        && !IGNORED_KINDS.includes(String(e.kind)),
     ).length;
   }
   return mokariAffinityFromCounts(counts);
@@ -420,6 +523,8 @@ export interface MokariTotals {
   journeyStart: string | null;
   /** Eventos dos últimos RECENT_WINDOW_DAYS dias. Só o estado usa. */
   recentEvents: readonly MokariEvent[];
+  /** As seis contagens dos órgãos, TAMBÉM já sem weight/body (na consulta). */
+  organTotals: MokariOrganTotals;
 }
 
 /**
@@ -448,11 +553,12 @@ export function computeMokariFromTotals(
       journey_days: journeyDays,
       active_days_recent: activeDays,
       pillar_events: pillarEventsFromCounts(totals.pillarCounts),
+      organ_events: organEventsFromCounts(totals.organTotals),
     },
   };
 }
 
-/** Normaliza a contagem por pilar: sempre os quatro, sempre número finito. */
+/** Normaliza a contagem por pilar: sempre os três, sempre número finito. */
 export function pillarEventsFromCounts(
   counts: Readonly<Partial<Record<PillarId, number>>>,
 ): Record<PillarId, number> {
@@ -498,9 +604,13 @@ export function computeMokari(
       // alimenta a densidade sem teto.
       pillar_events: pillarEventsFromCounts(
         Object.fromEntries(PILLARS.map((p) => [
-          p.id, contaveis.filter((e) => e.pillar === p.id).length,
+          // Leitor TOLERANTE: enquanto houver linha histórica não migrada,
+          // contar só `vitalidade` faria sumir da marca-d'água tudo o que a
+          // pessoa registrou sob o pilar absorvido.
+          p.id, contaveis.filter((e) => pillarMatchValues(p.id).includes(e.pillar)).length,
         ])),
       ),
+      organ_events: organEventsFromCounts(organTotalsFromEvents(events)),
     },
   };
 }

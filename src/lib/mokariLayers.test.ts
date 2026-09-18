@@ -291,30 +291,30 @@ describe("idempotência da geometria", () => {
 
 describe("a gema (afinidade 0) é \"ainda não\", nunca \"faltou\"", () => {
   it("não aparece quando NENHUM pilar começou", () => {
-    // Quatro gemas cinzentas num broto leem como quatro caixinhas vazias para
-    // preencher. Com tudo em zero, o broto sozinho já diz "começando".
+    // Gemas cinzentas num broto leem como caixinhas vazias para preencher.
+    // Com tudo em zero, o broto sozinho já diz "começando".
     expect(shouldShowBuds({
-      prosperidade: 0, vitalidade: 0, alimentacao: 0, mente: 0,
+      prosperidade: 0, vitalidade: 0, mente: 0,
     })).toBe(false);
   });
 
   it("aparece assim que ALGUM outro pilar tem marca", () => {
     expect(shouldShowBuds({
-      prosperidade: 1, vitalidade: 0, alimentacao: 0, mente: 0,
+      prosperidade: 1, vitalidade: 0, mente: 0,
     })).toBe(true);
   });
 
   it("a cor é neutra, jamais a do pilar", () => {
     // Se a gema já viesse colorida, começar a registrar não mudaria nada.
     expect(BUD_STROKE).toContain("--muted-foreground");
-    for (const v of ["--prosperidade", "--vitalidade", "--alimentacao", "--mente"]) {
+    for (const v of ["--prosperidade", "--vitalidade", "--mente", "--mokari-raiz", "--mokari-folha"]) {
       expect(BUD_STROKE).not.toContain(v);
     }
   });
 
   it("nasce numa âncora real de cada estágio", () => {
     for (const stage of STAGES) {
-      for (const pillar of ["prosperidade", "vitalidade", "alimentacao", "mente"] as const) {
+      for (const pillar of ["prosperidade", "vitalidade", "mente"] as const) {
         const slot = budSlot(pillar, stage);
         expect(Number.isFinite(slot.x) && Number.isFinite(slot.y)).toBe(true);
       }

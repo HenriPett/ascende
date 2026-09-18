@@ -1,10 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile, DEFAULT_WATER_GOAL_ML } from "@/hooks/useProfile";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import CaptureBar from "@/components/core/CaptureBar";
 import { WhatsappHojeCard } from "@/components/core/WhatsappCard";
 import BattleCheckinCard from "@/components/core/BattleCheckin";
@@ -13,7 +16,7 @@ import { toast } from "sonner";
 import {
   Sunrise, ChevronRight, CircleCheck, Circle, Flame, Droplet, Dumbbell, Moon, Smile,
   BookOpen, X, UserRound, ListChecks, MessageCircle, Trophy, CalendarHeart,
-  HandHeart, ClipboardList,
+  HandHeart, ClipboardList, Trash2, Plus,
 } from "lucide-react";
 import { PLAN_KIND_META } from "@/lib/blueprint";
 import { appPath } from "@/lib/routes";
@@ -25,7 +28,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { greet, todayISO } from "@/lib/format";
 import { focusLine } from "@/lib/dailyFocus";
 import { dateISOInSP, daysAgoISOInSP } from "@/lib/dates";
-import { pillarById } from "@/lib/pillars";
+import { PILLARS, pillarById, type PillarId } from "@/lib/pillars";
 import { activeTrackerSet } from "@/lib/trackers";
 import SleepCheckin from "@/components/core/SleepCheckin";
 import { cn } from "@/lib/utils";
@@ -293,7 +296,7 @@ function FirstSteps() {
   const steps = data ? [
     { label: "Conte seu dia na captura abaixo", xp: "+XP por registro", done: data.events >= 1, to: null },
     { label: "Mapeie seu mês em 60 segundos (Raio-X)", xp: "destrava o plano no seu bolso", done: raioxDone, to: "/app/prosperidade" },
-    { label: "Registre uma refeição (vale foto do prato)", xp: "+4 XP", done: data.meals > 0, to: "/app/alimentacao" },
+    { label: "Registre uma refeição (vale foto do prato)", xp: "+4 XP", done: data.meals > 0, to: "/app/vitalidade?s=comida" },
     { label: "Peça o plano que cabe no seu bolso", xp: "vira meta viva", done: data.plans > 0, to: `/app/conselheiro?q=${encodeURIComponent(SIGNATURE_QUESTION)}` },
   ] : [];
   const allDone = steps.length > 0 && steps.every((st) => st.done);
@@ -536,12 +539,23 @@ function DayProgress() {
   // Grid de pilares tocados: só o que está ativo (antes mostrava tudo
   // para todo mundo — era exatamente a "modularidade cosmética" do plano).
   const pillarsTouched = [
-    { label: "Treino", done: has("workout"), icon: Dumbbell, to: "/app/vitalidade", colorVar: "--vitalidade", show: trackers.has("workouts") },
-    { label: "Sono", done: has("sleep") || has("nap"), icon: Moon, to: "/app/vitalidade", colorVar: "--vitalidade", show: trackers.has("sleep") || trackers.has("naps") },
+    { label: "Treino", done: has("workout"), icon: Dumbbell, to: "/app/vitalidade?s=treino", colorVar: "--vitalidade", show: trackers.has("workouts") },
+    { label: "Sono", done: has("sleep") || has("nap"), icon: Moon, to: "/app/vitalidade?s=treino", colorVar: "--vitalidade", show: trackers.has("sleep") || trackers.has("naps") },
     { label: "Humor", done: has("mood"), icon: Smile, to: "/app/mente", colorVar: "--mente", show: trackers.has("mood") },
     { label: "Mente", done: has("practice") || has("journal") || has("gratitude"), icon: BookOpen, to: "/app/mente", colorVar: "--mente", show: trackers.has("practice") || trackers.has("journal") || trackers.has("gratitude") },
   ].filter((pt) => pt.show);
 
+  /* ── COR POR DOMÍNIO, NÃO POR LINHA ─────────────────────────────────────
+     Com a fusão, kcal, proteína, treinos e sono passaram a ser o mesmo pilar —
+     e quatro barras sálvia empilhadas viram uma parede, não um painel. A regra
+     que vale aqui: uma cor por DOMÍNIO, e cada cor responde a uma pergunta
+     diferente.
+       sálvia → kcal, proteína, treinos, sono   (Vitalidade)
+       azul   → água                            (hsl(205 70% 55%), desde antes)
+       ouro   → teto de gasto                   (Prosperidade)
+     Rótulo e ícone distinguem as linhas dentro do domínio, como já distinguiam.
+     De quebra, a incoerência velha se conserta sozinha: a barra de proteína era
+     pintada de --vitalidade sendo tracker de alimentação. */
   const Bar = ({ value, goal, color, celebrating }: { value: number; goal: number; color: string; celebrating?: boolean }) => (
     <div className={cn("h-2 rounded-full bg-muted overflow-hidden", celebrating && "goal-celebrate")}>
       <div
@@ -607,7 +621,7 @@ function DayProgress() {
       <div className="space-y-1">
         <div className="flex items-center justify-between text-sm">
           <span className="flex items-center gap-1.5 font-medium">
-            <Flame className="w-4 h-4" style={{ color: "hsl(var(--alimentacao))" }} /> Calorias
+            <Flame className="w-4 h-4" style={{ color: "hsl(var(--vitalidade))" }} /> Calorias
           </span>
           {kcalGoal > 0 ? (
             <span className="text-muted-foreground">
@@ -619,7 +633,7 @@ function DayProgress() {
         </div>
         {kcalGoal > 0 ? (
           <>
-            <Bar value={kcal} goal={kcalGoal} color="hsl(var(--alimentacao))" celebrating={celebrate === "kcal"} />
+            <Bar value={kcal} goal={kcalGoal} color="hsl(var(--vitalidade))" celebrating={celebrate === "kcal"} />
             <p className="text-[11px] text-muted-foreground">
               {kcal < kcalGoal
                 ? `Faltam ${fmt(kcalGoal - kcal)} kcal para a meta do dia.`
@@ -631,7 +645,7 @@ function DayProgress() {
         ) : (
           <p className="text-[11px] text-muted-foreground">
             Sem meta diária definida.{" "}
-            <Link to="/app/alimentacao" className="underline text-foreground">Definir meta</Link>
+            <Link to="/app/vitalidade?s=metas" className="underline text-foreground">Definir meta</Link>
             {" "}ou peça um plano alimentar ao Conselheiro — a meta do plano é aplicada aqui.
           </p>
         )}
@@ -919,10 +933,33 @@ function useHabitsTodayQuery() {
   });
 }
 
+/* ── A PORTA DE CRIAR UM COMPROMISSO ───────────────────────────────────────
+   Ela vive AQUI, junto da lista, e não numa tela de pilar: compromisso é
+   transversal (o seletor oferece os três pilares), e foi exatamente por isso
+   que ele saiu da Vitalidade.
+
+   `/app?novo=compromisso` existe para o beco sem saída: sem nenhum
+   compromisso a zona inteira se esconde (`return null`, logo abaixo), e aí
+   não sobra onde clicar. A saída NÃO é um quarto convite na Hoje — o hub já
+   convida, na seção Planos, e convite repetido em três lugares é a superfície
+   que a Fase 4 cortou. A saída é o convite que JÁ EXISTE passar a apontar
+   para cá quando não há compromisso nenhum: mesmo convite, mesmo lugar, e a
+   zona só aparece para quem pediu por ela. */
+const QUERY_NOVO_COMPROMISSO = "compromisso";
+
+function useQuerCriarCompromisso(): boolean {
+  const { search } = useLocation();
+  return new URLSearchParams(search).get("novo") === QUERY_NOVO_COMPROMISSO;
+}
+
 function HabitsToday() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const today = todayISO();
+  const querCriar = useQuerCriarCompromisso();
+  const [novo, setNovo] = useState("");
+  const [novoPilar, setNovoPilar] = useState<PillarId>("vitalidade");
+  const [criando, setCriando] = useState(false);
 
   const { data, isLoading } = useHabitsTodayQuery();
 
@@ -939,49 +976,131 @@ function HabitsToday() {
     qc.invalidateQueries({ queryKey: ["xp"] });
   };
 
-  if (isLoading) return <Skeleton className="h-24 w-full" />;
-  // Sem compromissos, a zona não existe: quem é conta nova recebe o convite
-  // pelo FirstSteps, e quem não é recebe pelo hub, na seção Planos. Convite
-  // repetido em três lugares é a superfície que a Fase 4 corta.
-  if (!data?.habits.length) return null;
+  /* O mesmo formulário que vivia na Vitalidade, com o mesmo insert: nome livre
+     e o pilar escolhido à mão, porque o pilar aqui É a escolha da pessoa (não
+     dá para derivar de um `kind`, como nos eventos). */
+  const criar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !novo.trim() || criando) return;
+    setCriando(true);
+    const { error } = await supabase.from("habits")
+      .insert({ user_id: user.id, name: novo.trim(), pillar: novoPilar });
+    setCriando(false);
+    if (error) { toast.error("Não consegui criar o compromisso. Tente de novo."); return; }
+    toast.success("Compromisso criado. Consistência constrói a subida!");
+    setNovo("");
+    qc.invalidateQueries({ queryKey: ["habits-today"] });
+    qc.invalidateQueries({ queryKey: ["jornada-habits"] });
+  };
 
-  const done = data.logs.length;
+  /* Arquivar mudou de casa junto com a lista. Sem isto, um compromisso
+     proposto pelo Conselheiro seria impossível de tirar da tela: remover uma
+     função sem dar outra porta é a perda que ninguém reclama e todo mundo
+     sente. */
+  const archive = async (id: string, nome: string) => {
+    const ultimo = (data?.habits.length ?? 0) <= 1;
+    await supabase.from("habits").update({ active: false }).eq("id", id);
+    toast.success(ultimo
+      // Arquivar o último faz a zona inteira sumir no próximo render. Dizer
+      // para onde ela foi é o que separa "sumiu" de "acabou sem aviso".
+      ? `"${nome}" arquivado. Era o último: para criar outro, vá em Jornada > Planos.`
+      : `"${nome}" arquivado. O histórico dele fica guardado.`);
+    qc.invalidateQueries({ queryKey: ["habits-today"] });
+    qc.invalidateQueries({ queryKey: ["jornada-habits"] });
+  };
+
+  if (isLoading) return <Skeleton className="h-24 w-full" />;
+  /* Sem compromissos a zona não existe — quem é conta nova recebe o convite
+     pelo FirstSteps, e quem não é recebe pelo hub, na seção Planos. A exceção
+     é quem chegou pelo próprio convite (`?novo=compromisso`): aí a zona é a
+     resposta ao clique, não um convite a mais. */
+  if (!data?.habits.length && !querCriar) return null;
+
+  const vazio = !data?.habits.length;
+  const done = data?.logs.length ?? 0;
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-display font-semibold">Compromissos de hoje</h2>
-        <span className="text-xs text-muted-foreground">{done}/{data.habits.length}</span>
+        {!vazio && <span className="text-xs text-muted-foreground">{done}/{data!.habits.length}</span>}
       </div>
+
+      {vazio && (
+        <p className="text-sm text-muted-foreground mb-3">
+          Comece com um só, e pequeno o bastante para você cumprir num dia ruim:
+          "beber água ao acordar", "10 flexões", "anotar o gasto do dia". O truque não é
+          escolher o compromisso certo — é escolher um que não dê para falhar.
+        </p>
+      )}
+
       <div className="space-y-1.5">
-        {data.habits.map((h) => {
-          const isDone = data.logs.some((l) => l.habit_id === h.id);
+        {(data?.habits ?? []).map((h) => {
+          const isDone = (data?.logs ?? []).some((l) => l.habit_id === h.id);
           const meta = pillarById(h.pillar);
           return (
-            <button
+            <div
               key={h.id}
-              onClick={() => toggle(h.id)}
               className={cn(
-                "w-full flex items-center gap-3 rounded-md border p-3 text-left transition-colors",
+                "flex items-center gap-1 rounded-md border pr-1.5 transition-colors",
                 isDone ? "bg-success/5 border-success/30" : "hover:bg-muted/60"
               )}
-              aria-pressed={isDone}
             >
-              {isDone
-                ? <CircleCheck className="w-5 h-5 text-success shrink-0" />
-                : <Circle className="w-5 h-5 text-muted-foreground shrink-0" />}
-              <span className={cn("text-sm flex-1", isDone && "line-through text-muted-foreground")}>{h.name}</span>
-              {(data.streaks?.[h.id] ?? 0) >= 2 && (
-                <span className="text-[11px] font-semibold text-gold-ink flex items-center gap-0.5 shrink-0" title={`${data.streaks[h.id]} dias seguidos`}>
-                  <Flame className="w-3 h-3" /> {data.streaks[h.id]}
-                </span>
-              )}
-              {meta && (
-                <span className="w-2 h-2 rounded-full" style={{ background: `hsl(var(${meta.colorVar}))` }} aria-hidden />
-              )}
-            </button>
+              <button
+                onClick={() => toggle(h.id)}
+                className="flex items-center gap-3 flex-1 min-w-0 p-3 text-left"
+                aria-pressed={isDone}
+              >
+                {isDone
+                  ? <CircleCheck className="w-5 h-5 text-success shrink-0" />
+                  : <Circle className="w-5 h-5 text-muted-foreground shrink-0" />}
+                <span className={cn("text-sm flex-1 min-w-0", isDone && "line-through text-muted-foreground")}>{h.name}</span>
+                {(data?.streaks?.[h.id] ?? 0) >= 2 && (
+                  <span className="text-[11px] font-semibold text-gold-ink flex items-center gap-0.5 shrink-0" title={`${data!.streaks[h.id]} dias seguidos`}>
+                    <Flame className="w-3 h-3" /> {data!.streaks[h.id]}
+                  </span>
+                )}
+                {meta && (
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: `hsl(var(${meta.colorVar}))` }} aria-hidden />
+                )}
+              </button>
+              <Button
+                variant="ghost" size="icon"
+                className="w-11 h-11 shrink-0 text-muted-foreground"
+                onClick={() => archive(h.id, h.name)}
+                aria-label={`Arquivar compromisso ${h.name}`}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
           );
         })}
       </div>
+
+      {/* Exemplo no lugar do rótulo: "Novo compromisso" repete o título do
+          cartão e deixa o campo mudo; um exemplo concreto é o que faz a pessoa
+          preencher sem pensar. `min-h-11` nos três controles porque esta linha
+          tem campo, seletor e botão lado a lado — é onde o dedo erra. */}
+      <form onSubmit={criar} className="flex gap-2 mt-3">
+        <Input
+          maxLength={80} placeholder='Ex.: "beber água ao acordar"'
+          className="min-h-11 min-w-0 flex-1" value={novo}
+          onChange={(e) => setNovo(e.target.value)}
+          autoFocus={vazio}
+          aria-label="Novo compromisso diário"
+        />
+        <Select value={novoPilar} onValueChange={(v) => setNovoPilar(v as PillarId)}>
+          <SelectTrigger className="w-[112px] min-h-11 shrink-0" aria-label="Pilar do compromisso">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PILLARS.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Button type="submit" size="icon" className="w-11 h-11 shrink-0"
+          disabled={criando} aria-label="Criar este compromisso">
+          <Plus className="w-4 h-4" />
+        </Button>
+      </form>
     </Card>
   );
 }
@@ -1016,7 +1135,11 @@ function useFirstStepsVisible(): boolean {
 
 function useHabitsTodayVisible(): boolean {
   const { data } = useHabitsTodayQuery();
-  return (data?.habits.length ?? 0) > 0;
+  /* Chamado SEMPRE, nunca depois de um `||` que possa curto-circuitar: hook
+     dentro de expressão preguiçosa quebra a ordem dos hooks na hora em que a
+     lista deixa de estar vazia. */
+  const querCriar = useQuerCriarCompromisso();
+  return (data?.habits.length ?? 0) > 0 || querCriar;
 }
 
 function useActivePlansVisible(): boolean {
