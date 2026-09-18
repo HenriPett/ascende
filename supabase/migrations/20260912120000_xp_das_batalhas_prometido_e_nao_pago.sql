@@ -101,7 +101,13 @@ begin
   -- `do nothing`: uma correção não repaga a honestidade já paga.
   insert into public.xp_log (user_id, points, reason, battle_checkin_id, battle_xp_slot)
   values (new.user_id, 5, 'Honestidade no check-in', new.id, 'honestidade')
-  on conflict (battle_checkin_id, battle_xp_slot) do nothing;
+  -- `where battle_checkin_id is not null` REPETE O PREDICADO do índice
+  -- parcial. Sem ele o Postgres não consegue inferir o índice, e o comando
+  -- falha em tempo de PLANEJAMENTO — aqui dentro da função, o que quebra o
+  -- INSERT em `battle_checkins` inteiro: a pessoa não consegue nem registrar
+  -- o check-in. Ver a nota longa mais abaixo.
+  on conflict (battle_checkin_id, battle_xp_slot)
+    where battle_checkin_id is not null do nothing;
 
   -- LINHA 2 — o desfecho. A recaída não tem bônus (é o 5 sozinho), e é daí
   -- que sai a hierarquia 5 < 10 < 12.
@@ -114,7 +120,8 @@ begin
 
     insert into public.xp_log (user_id, points, reason, battle_checkin_id, battle_xp_slot)
     values (new.user_id, bonus, bonus_label, new.id, 'desfecho')
-    on conflict (battle_checkin_id, battle_xp_slot) do update
+    on conflict (battle_checkin_id, battle_xp_slot)
+      where battle_checkin_id is not null do update
       -- Só SOBE. Ver a nota sobre a precondição do Mokari, acima: baixar os
       -- pontos de uma linha existente derrubaria o total corrido e poderia
       -- fazer o Mokari regredir de estágio — e puniria quem corrigiu.
@@ -137,6 +144,22 @@ drop trigger if exists trg_award_xp_battle on public.battle_checkins;
 create trigger trg_award_xp_battle after insert or update of status on public.battle_checkins
   for each row execute function public.award_xp_for_battle_checkin();
 
+-- ─── CORREÇÃO DE 18/09/2026: O PREDICADO DO ÍNDICE PARCIAL ───
+-- O índice `xp_log_battle_checkin_slot_unique` é PARCIAL (`where
+-- battle_checkin_id is not null`, acima). Postgres só infere um índice parcial
+-- num ON CONFLICT quando o comando repete o predicado dele — sem isso, o
+-- planejador responde "there is no unique or exclusion constraint matching the
+-- ON CONFLICT specification" e a migration ABORTA.
+--
+-- Erro de PLANEJAMENTO, não de dados: não depende de haver linha nenhuma, e
+-- portanto esta migration nunca aplicou do zero. Encontrado quando o autoteste
+-- de privacidade do Social entrou no CI e a cadeia inteira passou a ser
+-- levantada num Postgres limpo a cada push — que é exatamente o tipo de coisa
+-- que um CI de banco existe para achar.
+--
+-- Se o backfill nunca rodou em produção, quem fez check-in antes de 12/09/2026
+-- não recebeu o XP retroativo que estas linhas prometem. `do nothing` mantém a
+-- reaplicação inofensiva.
 -- ─── A DÍVIDA ACUMULADA ───
 -- Quem já fez check-in antes desta migração fez a ação e não recebeu nada.
 -- Pagar retroativamente é o certo: o produto prometeu, a pessoa cumpriu, e o
@@ -144,7 +167,8 @@ create trigger trg_award_xp_battle after insert or update of status on public.ba
 insert into public.xp_log (user_id, points, reason, battle_checkin_id, battle_xp_slot)
 select c.user_id, 5, 'Honestidade no check-in', c.id, 'honestidade'
 from public.battle_checkins c
-on conflict (battle_checkin_id, battle_xp_slot) do nothing;
+on conflict (battle_checkin_id, battle_xp_slot)
+  where battle_checkin_id is not null do nothing;
 
 insert into public.xp_log (user_id, points, reason, battle_checkin_id, battle_xp_slot)
 select
@@ -155,4 +179,5 @@ select
   'desfecho'
 from public.battle_checkins c
 where c.status in ('clean', 'resisted')
-on conflict (battle_checkin_id, battle_xp_slot) do nothing;
+on conflict (battle_checkin_id, battle_xp_slot)
+  where battle_checkin_id is not null do nothing;
