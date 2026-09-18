@@ -1171,7 +1171,9 @@ Deno.test("escopo · quem fechou só `alimentacao`, SEM a chave nova, continua f
   assertFalse(retrato.includes("META DE SONO"), "meio corpo visível voltou a existir");
 
   // A linha de privacidade existe, e fala em português, não em id de banco.
-  assert(retrato.includes("PRIVACIDADE:"));
+  // (o rótulo virou "PRIVACIDADE — ÁREA FECHADA PELA PESSOA" no conserto do
+  //  achado de QA da v67; o teste abaixo cobre o conteúdo novo)
+  assert(retrato.includes("PRIVACIDADE"));
   assert(retrato.includes("Vitalidade"), "a linha de privacidade não nomeou a área");
   assertFalse(retrato.includes("alimentacao"), "id cru do sistema foi entregue ao modelo");
   assertFalse(/Pilares ativos:.*\balimentacao\b/.test(retrato));
@@ -1187,4 +1189,60 @@ Deno.test("escopo · com a chave nova já gravada, o resultado é o MESMO", () =
   assertFalse(deriva({ vitalidade: false }));                      // chave antiga já removida
   assert(deriva({ vitalidade: true, alimentacao: true }));
   assert(deriva({}));                                              // conta nova: tudo aberto
+});
+
+Deno.test("escopo · área fechada não vira pendência, e o retrato não pede para reativar", async () => {
+  /* ACHADO DE QA EM PRODUÇÃO (v67). O Conselheiro escreveu, em duas respostas:
+       "Se quiser reativar a análise de Vitalidade, é isso que me devolve
+        visibilidade sobre sono, treino e peso."
+       "Se quiser essa visão, precisaria reativar a análise de Vitalidade."
+     Nada vazou: o dano é cutucar uma escolha de privacidade deliberada
+     (PRINCIPIOS.md, micro-incoerência 3 — "isso é serviço ou é culpa?").
+
+     Este teste cobre a metade do problema que é NOSSA: enquanto a linha de
+     privacidade mandava não cobrar, os blocos administrativos do MESMO
+     retrato cobravam. O perfil aqui é o oposto do teste acima — nenhuma meta
+     definida e nenhum peso registrado —, que é exatamente quando esses blocos
+     disparam. */
+  const retratoCom = (scopes: Record<string, unknown>) => {
+    const { db } = fakeDb();
+    db.from("profiles").insert({
+      user_id: USER, name: "Ana", ai_scopes: scopes,
+      pillars: ["vitalidade", "prosperidade"],
+      // Sem meta nenhuma e sem peso: é o gatilho de METAS AINDA SEM VALOR e
+      // de DADOS AINDA NÃO INFORMADOS.
+    }).run();
+    return buildSnapshot(db, USER);
+  };
+
+  const fechado = await retratoCom({ vitalidade: false, alimentacao: false });
+
+  // 1. O comportamento SUBSTITUTO chegou (é ele que desarma o impulso de ajudar).
+  assert(fechado.includes("O QUE FAZER"), "a regra voltou a ser só proibição");
+  assert(fechado.includes("ESTA REGRA VENCE"), "o conflito com o system não foi resolvido");
+
+  // 2. A área fechada não aparece como pendência a preencher.
+  assertFalse(
+    fechado.includes("peso atual"),
+    "o retrato cobrou peso de quem fechou a análise do corpo",
+  );
+  for (const meta of ["meta calórica diária", "meta de proteína", "meta de treinos por semana", "meta de sono"]) {
+    assertFalse(fechado.includes(meta), `"${meta}" foi anunciada como pendência numa área fechada`);
+  }
+  assertFalse(
+    /Onde preencher:[^]*aba Vitalidade/.test(fechado),
+    "o retrato apontou a aba da área que ela fechou",
+  );
+
+  /* 3. CONTROLE — sem esta metade, um retrato vazio (banco falso mudo,
+        consulta renomeada) passaria anunciando uma correção que é bug. Com a
+        área ABERTA, cada cobrança tem de aparecer; e o pilar que continua
+        aberto (prosperidade) segue cobrando nos DOIS casos. */
+  const aberto = await retratoCom({});
+  assert(aberto.includes("peso atual"), "o teste está cego: nem com a área aberta o peso é cobrado");
+  assert(aberto.includes("meta de treinos por semana"), "o teste está cego");
+  assert(aberto.includes("aba Vitalidade"), "o teste está cego");
+  for (const retrato of [aberto, fechado]) {
+    assert(retrato.includes("teto de gasto diário"), "a meta de um pilar ABERTO foi escondida junto");
+  }
 });

@@ -700,7 +700,54 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     Object.entries(scopes).filter(([, v]) => !v).map(([k]) => rotuloPilar(k)),
   )];
   if (disabled.length) {
-    lines.push(`PRIVACIDADE: a pessoa desativou a análise das áreas: ${disabled.join(", ")}. Esses dados foram omitidos deste retrato de propósito. Não especule sobre eles nem peça para reativar.`);
+    /* ACHADO DE QA EM PRODUÇÃO (v67): o modelo obedecia "não especule" e
+       desobedecia "nem peça para reativar", em duas respostas diferentes:
+         "Se quiser reativar a análise de Vitalidade, é isso que me devolve
+          visibilidade sobre sono, treino e peso."
+         "Se quiser essa visão, precisaria reativar a análise de Vitalidade."
+       Nenhum dado fechado vazou — a leitura derivada segurou tudo. O dano é
+       outro: cutucar uma escolha de privacidade que a pessoa tomou de
+       propósito. PRINCIPIOS.md, micro-incoerência 3: "isso é serviço ou é
+       culpa?". Oferecer o caminho de volta, sem ela pedir, é culpa.
+
+       POR QUE ELE DESOBEDECIA, e não é só "instrução negativa é fraca":
+       havia CONFLITO. O system do Conselheiro manda, na primeira seção e no
+       bloco CACHEADO (ai-chat/index.ts:54), "se faltar dado importante, diga
+       o que registrar para você ajudar melhor". Essa é uma regra geral, em
+       posição de alta autoridade. A exceção vivia aqui, como oração
+       subordinada no fim de uma linha de dado, sem nunca dizer que vencia a
+       regra geral. O modelo resolveu o conflito a favor da mais proeminente —
+       e, do ponto de vista dele, foi prestativo.
+
+       AS TRÊS MUDANÇAS, nesta ordem de importância:
+       1. COMPORTAMENTO SUBSTITUTO ANTES DA PROIBIÇÃO. Proibir um caminho sem
+          dar outro deixa o modelo reconstruir o caminho proibido. Agora ele
+          recebe o que FAZER (responder pelo que está aberto e seguir).
+       2. RESOLUÇÃO EXPLÍCITA DO CONFLITO, a partir daqui — o lado barato.
+          Consertar pelo outro lado (editar o system) invalidaria o prefixo
+          cacheado de TODA a base; esta linha não está no prefixo em nenhuma
+          das quatro superfícies que leem o retrato.
+       3. A EXCEÇÃO QUE EVITA CRIAR OUTRO BUG. Sem ela, a regra empurra o
+          modelo a ser evasivo quando ELA pergunta direto — e evasão, neste
+          código, é a falha que `insightErr` e `universoPodado` existem para
+          impedir. Responder o que ela perguntou é serviço; oferecer o
+          caminho de volta sem ela pedir é cutucão. A linha separa os dois.
+
+       POR QUE AQUI E NÃO EM SAFETY_RULES: esta regra é CONDICIONAL (só existe
+       para quem fechou uma área, uma minoria), e SAFETY_RULES é incondicional,
+       vai em toda chamada de toda superfície e carrega CVV, medicamento e
+       transtorno alimentar. Pôr regra de etiqueta de privacidade lá dentro
+       faria 100% dos usuários pagarem token por uma regra que quase nenhum
+       aciona, e diluiria o bloco de maior risco do produto. Instrução
+       condicional viaja com a condição que a dispara. */
+    lines.push(
+      `PRIVACIDADE — ÁREA FECHADA PELA PESSOA: ela desativou a análise de: ${disabled.join(", ")}. ` +
+      `Os dados dessas áreas foram omitidos deste retrato de propósito, e não especule sobre eles. Isso não é lacuna, não é pendência e não é assunto: a decisão é dela e já está tomada. ` +
+      `O QUE FAZER quando a conversa encostar nessas áreas: responda com o que você VÊ nas áreas abertas e siga adiante. Se não sobrar nada a dizer, diga em uma frase que você não acompanha isso com ela, e pare aí. ` +
+      `ESTA REGRA VENCE qualquer instrução geral de "diga o que falta registrar" ou "aponte onde preencher": ali o dado falta, aqui ele existe e ela escolheu guardá-lo. Não cobre registro, não proponha meta, não sugira hábito e não ofereça análise dessas áreas. ` +
+      `PROIBIDO, na letra: as palavras "reativar" e "ativar", citar Ajustes ou a tela de privacidade, e qualquer variação de "se quiser reativar a análise de X, eu volto a enxergar Y" ou "para essa visão, precisaria reativar X". Oferecer o caminho de volta é cutucar uma escolha que ela tomou de propósito. ` +
+      `ÚNICA exceção: se ELA perguntar diretamente por que você não fala daquela área, responda com honestidade, em uma frase, que ela pediu para deixar essa área fora das suas análises — e só explique como mudar isso se ela pedir para mudar.`
+    );
   }
   // Modularidade total (nível tracker): o que a pessoa ESCOLHEU não acompanhar.
   // Regra inegociável para quem lê este retrato (briefing, Conselheiro,
@@ -1164,13 +1211,20 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
     ));
   }
 
-    if (!kinds["weight"]?.length) missing.push("peso atual (registrar na aba Vitalidade)");
+  /* MESMO ACHADO, outro caminho: os blocos administrativos abaixo cobravam a
+     área fechada mesmo com a linha de privacidade logo acima mandando não
+     cobrar. O retrato instruía as duas coisas ao mesmo tempo, e a frase de
+     "reativar" era, em parte, obediência a ESTA metade. Área fechada não gera
+     pendência: o que ela guardou não é dado faltando. */
+  if (scopes.vitalidade && !kinds["weight"]?.length) missing.push("peso atual (registrar na aba Vitalidade)");
 
   if (missing.length) {
     lines.push(
       `DADOS AINDA NÃO INFORMADOS: ${missing.join("; ")}. ` +
       `Para planos definitivos (alimentar, treino, financeiro), siga o protocolo de planos do seu prompt: peça o que falta antes de gerar. ` +
-      `Onde preencher: idade, sexo, altura, atividade e restrições em Ajustes (seção "Sobre você"); peso, condições e medicamentos na aba Vitalidade. ` +
+      (scopes.vitalidade
+        ? `Onde preencher: idade, sexo, altura, atividade e restrições em Ajustes (seção "Sobre você"); peso, condições e medicamentos na aba Vitalidade. `
+        : `Onde preencher: idade, sexo, altura, atividade e restrições em Ajustes (seção "Sobre você"). `) +
       `REGRA DE TOM (inegociável): NUNCA atribua causa à ausência de um dado. Você NÃO sabe se a pessoa pulou, esqueceu, recusou ou se o app nem perguntou. ` +
       `Nunca diga "você pulou", "você deixou em branco" ou "como você não preencheu": convide de forma neutra ("se quiser me contar X, eu ajusto") ou simplesmente trabalhe com o que existe. ` +
       `Também nunca invente o nome de uma tela ou etapa: cite apenas os lugares listados acima.`
@@ -1181,12 +1235,20 @@ export async function buildSnapshot(supabase: SupabaseClient, userId: string): P
   // Sem isto, um retrato sem meta calórica levava a IA a inventar o motivo
   // ("você pulou essa etapa") para algo que o app nem pergunta: a meta nasce
   // de um plano, não de um campo de formulário.
+  /* Cada meta vive sob o escopo do SEU pilar — a mesma disciplina que os
+     blocos de dado já seguem algumas linhas acima. Antes, um retrato com a
+     Vitalidade fechada continuava anunciando "meta de treinos por semana,
+     meta de sono ainda sem valor" e mandando "ofereça calcular a meta": uma
+     meta que o modelo não tem como calcular sem os dados que ela fechou, e
+     cujo único caminho de saída era pedir a área de volta. */
   const goalState: string[] = [];
-  if (!Number(p.calorie_goal_kcal)) goalState.push("meta calórica diária");
-  if (!Number(p.protein_goal_g)) goalState.push("meta de proteína");
-  if (!Number(p.weekly_workouts_goal)) goalState.push("meta de treinos por semana");
-  if (!Number(p.sleep_goal_h)) goalState.push("meta de sono");
-  if (!Number(p.daily_spend_limit)) goalState.push("teto de gasto diário");
+  if (scopes.vitalidade) {
+    if (!Number(p.calorie_goal_kcal)) goalState.push("meta calórica diária");
+    if (!Number(p.protein_goal_g)) goalState.push("meta de proteína");
+    if (!Number(p.weekly_workouts_goal)) goalState.push("meta de treinos por semana");
+    if (!Number(p.sleep_goal_h)) goalState.push("meta de sono");
+  }
+  if (scopes.prosperidade && !Number(p.daily_spend_limit)) goalState.push("teto de gasto diário");
   if (goalState.length) {
     lines.push(
       `METAS AINDA SEM VALOR: ${goalState.join(", ")}. ` +
