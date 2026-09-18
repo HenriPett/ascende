@@ -1176,7 +1176,13 @@ Deno.test("escopo · quem fechou só `alimentacao`, SEM a chave nova, continua f
   assert(retrato.includes("PRIVACIDADE"));
   assert(retrato.includes("Vitalidade"), "a linha de privacidade não nomeou a área");
   assertFalse(retrato.includes("alimentacao"), "id cru do sistema foi entregue ao modelo");
-  assertFalse(/Pilares ativos:.*\balimentacao\b/.test(retrato));
+  /* Casa com o prefixo INTEIRO da linha ("Pilares ativos no app: ..."). A
+     versão anterior prendia-se a "Pilares ativos:" com dois-pontos colados e
+     ficou cega no dia em que o rótulo mudou — assertFalse contra regex que
+     não casa mais passa sempre. O assert de existência acima é o antídoto. */
+  const linhaPilares = retrato.split("\n").find((l) => l.startsWith("Pilares ativos"));
+  assert(linhaPilares, "o teste está cego: a linha de pilares ativos sumiu do retrato");
+  assertFalse(/\balimentacao\b/.test(linhaPilares), "id cru do sistema na linha de pilares");
 });
 
 Deno.test("escopo · com a chave nova já gravada, o resultado é o MESMO", () => {
@@ -1245,4 +1251,71 @@ Deno.test("escopo · área fechada não vira pendência, e o retrato não pede p
   for (const retrato of [aberto, fechado]) {
     assert(retrato.includes("teto de gasto diário"), "a meta de um pilar ABERTO foi escondida junto");
   }
+});
+
+Deno.test("escopo · o retrato não pode dizer que a área fechada está aberta", async () => {
+  /* REGRESSÃO DA CORREÇÃO ANTERIOR (v68). Pergunta INDIRETA, com o escopo de
+     Vitalidade fechado: "Por que você não fala nada sobre o meu sono e os meus
+     treinos?". O Conselheiro acertou o sono e errou o treino, na mesma frase:
+       "Já os treinos são outra história: essa área está aberta, só que eu não
+        vi nenhum registro seu de treino."
+     Os dois erros, e a conta tinha 11 treinos em 30 dias:
+       (a) informou à pessoa que a área estava ABERTA — mentira sobre a
+           configuração que ela mesma fez;
+       (b) afirmou AUSÊNCIA de registro — ele não "não viu", ele não PODE ver.
+           É a doutrina do insightErr ("leitura que falhou não vira não há
+           padrão") aplicada no lugar errado, e convida a pessoa a redigitar o
+           que o app já tem.
+
+     A CAUSA não foi o modelo deixar de ligar "treino" ao rótulo "Vitalidade":
+     ele liga (acerta quando a pergunta é direta). Era CONTRADIÇÃO no próprio
+     retrato — "ÁREA FECHADA: Vitalidade" contra "Pilares ativos: Vitalidade",
+     duas linhas abaixo, mesma palavra, sentidos diferentes. */
+  const retratoCom = (scopes: Record<string, unknown>) => {
+    const { db } = fakeDb();
+    db.from("profiles").insert({
+      user_id: USER, name: "Ana", ai_scopes: scopes,
+      pillars: ["vitalidade", "prosperidade", "mente"],
+    }).run();
+    db.from("life_events").insert({
+      user_id: USER, pillar: "vitalidade", kind: "workout",
+      occurred_at: new Date().toISOString(), payload: { description: "Costas" },
+    }).run();
+    return buildSnapshot(db, USER);
+  };
+
+  const fechado = await retratoCom({ vitalidade: false, alimentacao: false });
+
+  // (a) As duas linhas deixam de se contradizer: onde a palavra se repete, a
+  //     segunda ocorrência já chega carimbada.
+  const linhaAtivos = fechado.split("\n").find((l) => l.startsWith("Pilares ativos"))!;
+  assert(linhaAtivos.includes("Vitalidade"), "o teste está cego: a área nem aparece");
+  assert(
+    /Vitalidade \(ativo para ela, FECHADO para a sua análise\)/.test(linhaAtivos),
+    "a linha de pilares ativos volta a desmentir a de privacidade",
+  );
+  assert(linhaAtivos.includes("NÃO é permissão"), "a distinção entre os dois sentidos sumiu");
+
+  // (b) A área fechada é enumerada: não sobra inferência sobre o que ela cobre.
+  for (const assunto of ["sono", "treinos", "peso", "refeições", "hidratação"]) {
+    assert(fechado.includes(assunto), `a linha de privacidade não enumerou "${assunto}"`);
+  }
+
+  // (c) Afirmar ausência sobre área fechada é proibido na letra.
+  assert(fechado.includes("VOCÊ NÃO ESTÁ SEM DADO, VOCÊ ESTÁ SEM PERMISSÃO"));
+  assert(fechado.includes("PROIBIDO afirmar ausência"));
+
+  // (d) O que já funcionava em produção (v68) continua de pé.
+  assert(fechado.includes('as palavras "reativar" e "ativar"'), "a proibição que passou no scan sumiu");
+  // (e) E a exceção não virou evasão.
+  assert(fechado.includes("NÃO é motivo para se esquivar"));
+
+  /* CONTROLE — quem não fechou nada não paga por nada disso: sem carimbo, sem
+     cláusula extra e sem a linha de privacidade. O custo da regra fica com a
+     minoria que a aciona. */
+  const aberto = await retratoCom({});
+  assertFalse(aberto.includes("PRIVACIDADE"), "linha de privacidade em conta sem área fechada");
+  assertFalse(aberto.includes("FECHADO para a sua análise"), "carimbo cobrado de quem não fechou nada");
+  assertFalse(aberto.includes("NÃO é permissão"), "cláusula extra cobrada de quem não fechou nada");
+  assert(aberto.includes("Pilares ativos no app: Vitalidade, Prosperidade, Mente."));
 });
