@@ -11,8 +11,12 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription,
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody,
 } from "@/components/ui/drawer";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Markdown } from "@/components/core/Markdown";
 import QueryError from "@/components/core/QueryError";
 import PlanSections from "@/components/core/PlanSections";
@@ -100,6 +104,8 @@ export default function Planos() {
   // refeita, e o plano aberto precisa mostrar o conteúdo NOVO. Com o objeto
   // congelado no estado, a tela continuaria exibindo a versão anterior.
   const [openId, setOpenId] = useState<string | null>(null);
+  // O plano que a pessoa pediu para excluir, aguardando a confirmação.
+  const [confirmDel, setConfirmDel] = useState<Plan | null>(null);
 
   const { data: plans, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["plans", user?.id],
@@ -128,12 +134,16 @@ export default function Planos() {
       if (isPlanCapError(error)) {
         toast.error(
           "Seu plano mantém um número limitado de planos ativos. Arquive o que está ativo e depois reative este — nada se perde na troca.",
+          { id: "plano-status" },
         );
         return;
       }
-      toast.error("Não consegui atualizar o plano. Tente de novo.");
+      toast.error("Não consegui atualizar o plano. Tente de novo.", { id: "plano-status" });
       return;
     }
+    // Um `id` para os dois erros acima: arquivar o outro e reativar este, que
+    // é o caminho que o próprio erro ensina, tem de levar o aviso embora.
+    toast.dismiss("plano-status");
     toast.success(status === "arquivado" ? "Plano arquivado." : "Plano reativado.");
     setOpenId(null);
     qc.invalidateQueries({ queryKey: ["plans"] });
@@ -142,7 +152,9 @@ export default function Planos() {
   const remove = async (plan: Plan) => {
     const { error } = await supabase.from("plans").delete().eq("id", plan.id);
     if (error) { toast.error("Não consegui excluir o plano. Tente de novo."); return; }
-    toast.success("Plano excluído.");
+    toast.dismiss("Não consegui excluir o plano. Tente de novo.");
+    // Sem toast de sucesso: a pessoa acabou de confirmar no alerta, a folha
+    // fecha e o plano some da lista — a própria tela já é a confirmação.
     setOpenId(null);
     qc.invalidateQueries({ queryKey: ["plans"] });
   };
@@ -156,7 +168,9 @@ export default function Planos() {
       toast.error("Não consegui salvar a alteração. Seu texto continua aqui — tente de novo.");
       return false;
     }
-    toast.success("Alteração salva no plano.");
+    toast.dismiss("Não consegui salvar a alteração. Seu texto continua aqui — tente de novo.");
+    // Sem toast de sucesso: a seção sai do modo de edição mostrando o texto
+    // novo — é a confirmação, no lugar onde a pessoa estava olhando.
     qc.invalidateQueries({ queryKey: ["plans"] });
     return true;
   };
@@ -180,7 +194,7 @@ export default function Planos() {
               {KIND_LABEL[p.kind] ?? "Plano"} · {formatDate(p.created_at)}
             </p>
           </div>
-          {p.status === "arquivado" && <Badge variant="secondary" className="text-[10px] shrink-0">arquivado</Badge>}
+          {p.status === "arquivado" && <Badge variant="secondary" className="text-caption2 shrink-0">arquivado</Badge>}
           <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
         </Card>
       </button>
@@ -214,20 +228,22 @@ export default function Planos() {
 
   const detailMeta = open && (
     <div className="flex items-center gap-2 pt-0.5">
-      <span className="inline-flex items-center text-[11px] font-semibold rounded-full px-2.5 py-0.5"
+      <span className="inline-flex items-center text-caption2 font-semibold rounded-full px-2.5 py-0.5"
         style={{ background: kindTint(open.kind), color: kindColor(open.kind) }}>
         {KIND_LABEL[open.kind] ?? "Plano"}
       </span>
       <span className="text-xs text-muted-foreground">criado em {formatDate(open.created_at)}</span>
       {open.status === "arquivado" && (
-        <Badge variant="secondary" className="text-[10px]">arquivado</Badge>
+        <Badge variant="secondary" className="text-caption2">arquivado</Badge>
       )}
     </div>
   );
 
   const detailActions = open && (
     <div className="flex flex-wrap gap-2 justify-end pt-2 border-t shrink-0">
-      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => remove(open)}>
+      {/* Excluir apagava na hora, sem volta e sem pergunta — e fica ao lado
+          do Arquivar, que é o que quase sempre se quer. Agora pede confirmação. */}
+      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmDel(open)}>
         <Trash2 className="w-4 h-4 mr-1" /> Excluir
       </Button>
       {open.status === "ativo" ? (
@@ -248,16 +264,21 @@ export default function Planos() {
   );
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 animate-fade-up">
+    <div className="max-w-2xl mx-auto space-y-5 animate-fade-up [&_:is(h1,h2,h3)]:hyphens-auto [&_:is(h1,h2,h3)]:[overflow-wrap:break-word]">
+      {/* Títulos podem quebrar no meio da palavra, e só quando a palavra
+        não cabe: com Texto Maior a 40 pt, "Prosperidade" ou "Conselheiro"
+        num `text-2xl` passam da largura da tela sozinhos. Hifeniza em
+        pt-BR onde o dicionário deixa; senão, quebra onde precisar. No
+        tamanho padrão nenhum título chega na borda, então nada muda. */}
       <div>
         <h1 className="font-display text-2xl font-semibold">Meus planos</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-subhead text-muted-foreground">
           Os planos que o Conselheiro montou para você, guardados aqui fora da conversa.
           Ele consulta os planos ativos sempre que responde.
         </p>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+      {isLoading && <p role="status" className="text-sm text-muted-foreground">Carregando…</p>}
 
       {isError && (
         <QueryError
@@ -285,13 +306,17 @@ export default function Planos() {
                 de renda e de corpo no onboarding, e falso na voz dele,
                 afirmando um conhecimento que ele não tem. É o mesmo defeito
                 que semOrigemTexto (memories.ts:203) já existe para combater. */}
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-subhead text-muted-foreground mt-1">
               Com o que você já contou, o Conselheiro monta: um plano alimentar dentro do seu
               orçamento, um treino que caiba na sua rotina ou um teto de gasto. O que faltar,
               ele pergunta — e você guarda o plano aqui.
             </p>
           </div>
-          <Button asChild variant="secondary">
+          {/* `w-full`: no tamanho padrão o rótulo cabe numa linha na largura do
+              cartão (antes o botão ficava em 295 de 348 e "bolso" caía sozinho
+              na segunda linha); `text-balance` divide por igual quando, com
+              texto grande, ele precisar mesmo de duas. */}
+          <Button asChild variant="secondary" className="w-full text-balance">
             <Link to={`/app/conselheiro?q=${encodeURIComponent(EMPTY_STATE_QUESTION)}`}>
               <MessageCircle className="w-4 h-4 mr-1.5" /> Pedir um plano que cabe no meu bolso
             </Link>
@@ -321,18 +346,25 @@ export default function Planos() {
       {/* Detalhe do plano.
           No celular vira gaveta quase inteira: um plano é documento, e editar
           um textarea com o teclado aberto dentro de um diálogo de 85dvh fica
-          apertado demais (recomendação da Prisma). */}
+          apertado demais (recomendação da Prisma).
+          92dvh, e não os 85dvh do primitivo, de propósito: as outras folhas são
+          tarefas curtas que deixam a tela de trás à vista; esta é um documento
+          que se lê e edita, o equivalente ao degrau grande da folha do iOS. Os
+          8% de cima mantêm a status bar e uma faixa da tela de trás, que dizem
+          "isto é uma folha, arraste para fechar". Por isso `max-h` também: o
+          primitivo trava em 85dvh e só a altura não venceria.
+          Rolagem no DrawerBody, área segura e Fechar já vêm do primitivo. */}
       {isMobile ? (
         <Drawer open={!!open} onOpenChange={(v) => !v && setOpenId(null)}>
-          <DrawerContent className="h-[92dvh] flex flex-col">
-            <DrawerHeader className="text-left shrink-0 pb-2">
-              <DrawerTitle className="pr-6 break-words font-display">{open?.title}</DrawerTitle>
+          <DrawerContent className="h-[92dvh] max-h-[92dvh]">
+            <DrawerHeader className="shrink-0 pb-2">
+              <DrawerTitle className="break-words font-display">{open?.title}</DrawerTitle>
               <DrawerDescription asChild><div>{detailMeta}</div></DrawerDescription>
             </DrawerHeader>
-            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 text-sm">
+            <DrawerBody className="pb-2 text-subhead">
               {detailBody}
-            </div>
-            <div className="shrink-0 px-4 pb-3 safe-bottom">{detailActions}</div>
+            </DrawerBody>
+            <div className="shrink-0 px-4 pb-3">{detailActions}</div>
           </DrawerContent>
         </Drawer>
       ) : (
@@ -342,13 +374,36 @@ export default function Planos() {
               <DialogTitle className="pr-6 break-words font-display">{open?.title}</DialogTitle>
               <DialogDescription asChild><div>{detailMeta}</div></DialogDescription>
             </DialogHeader>
-            <div className="flex-1 min-h-0 overflow-y-auto text-sm pr-1">
+            <div className="flex-1 min-h-0 overflow-y-auto text-subhead pr-1">
               {detailBody}
             </div>
             {detailActions}
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Excluir é a única ação sem volta desta tela. O botão seguro diz o que
+          acontece, como nos outros alertas da casa, e lembra que Arquivar
+          guarda tudo. A ação sai em vermelho (`destrutiva`): aqui o ouro
+          significaria recompensa. */}
+      <AlertDialog open={!!confirmDel} onOpenChange={(o) => { if (!o) setConfirmDel(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir este plano?</AlertDialogTitle>
+            <AlertDialogDescription>
+              “{confirmDel?.title}” sai da sua lista para sempre. Se você só quer tirá-lo da
+              frente, arquivar guarda tudo e dá para reativar depois.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Manter o plano</AlertDialogCancel>
+            <AlertDialogAction destrutiva
+              onClick={() => { const p = confirmDel; setConfirmDel(null); if (p) remove(p); }}>
+              Excluir plano
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

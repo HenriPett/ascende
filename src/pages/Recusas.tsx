@@ -91,7 +91,7 @@ export default function Recusas() {
                 </span>
                 <div>
                   <h2 className="font-semibold text-sm md:text-base">{r.title}</h2>
-                  <p className="text-sm text-muted-foreground mt-1.5">{r.detail}</p>
+                  <p className="text-subhead text-muted-foreground mt-1.5">{r.detail}</p>
                 </div>
               </div>
             </li>
@@ -102,7 +102,7 @@ export default function Recusas() {
           <p className="flex items-center gap-2 text-sm font-semibold">
             <ShieldCheck className="w-4 h-4 text-gold" /> Por que existe um plano pago, então?
           </p>
-          <p className="text-sm text-muted-foreground mt-1.5">
+          <p className="text-subhead text-muted-foreground mt-1.5">
             Porque a alternativa seria uma das portas acima. O Ascende vive de assinatura:
             ganhamos dinheiro quando a sua vida melhora — nunca quando você fica mais tempo
             no app. É por isso que os limites do plano gratuito existem, e é por isso que dá

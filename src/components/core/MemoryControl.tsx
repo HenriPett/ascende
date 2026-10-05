@@ -130,34 +130,55 @@ export default function MemoryControl({
       (list ?? []).map((m) => (m.id === updated.id ? { ...m, ...updated } : m)));
   };
 
-  const run = async (id: string, action: () => Promise<AiMemory>, ok: string) => {
-    if (busy) return;
+  /* `ok` é OPCIONAL, e `null` é uma decisão: quando a própria linha já mostra
+     o resultado ("Confirmado por você", o texto corrigido, a memória de volta à
+     lista), um toast repetindo isso é só mais uma coisa para ler e fechar
+     (`feedback.md`: "people typically expect their action or task to succeed,
+     they only need to know when it doesn't"). Fica o toast que diz algo que a
+     tela NÃO mostra: até quando vale, e para onde foi o que foi descartado. */
+  /** Devolve se a ação deu certo. Quem só dispara (`onConfirm`, `onReject`…)
+   *  ignora o retorno; quem tem estado na tela que depende do resultado
+   *  (`onSaveEdit`) decide por ele. */
+  const run = async (id: string, action: () => Promise<AiMemory>, ok: string | null): Promise<boolean> => {
+    if (busy) return false;
     setBusy(id);
     try {
       patch(await action());
-      toast.success(ok);
+      toast.dismiss("memoria-acao");
+      if (ok) toast.success(ok);
+      return true;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Não consegui salvar. Tente de novo.");
+      // `id` estável: a mensagem pode vir do servidor, e a próxima ação que
+      // der certo nesta lista dispensa este erro.
+      toast.error(err instanceof Error ? err.message : "Não consegui salvar. Tente de novo.", { id: "memoria-acao" });
+      return false;
     } finally {
       setBusy(null);
     }
   };
 
   const onConfirm = (m: MemoryWithSources) =>
-    run(m.id, () => confirmMemory(m.id), "Obrigado — vou tratar isso como certo.");
+    run(m.id, () => confirmMemory(m.id), null);
+
+  // O erro da edição fica embaixo do texto que está sendo editado, não num
+  // toast que some: é ali que ela vai corrigir.
+  const [erroEdicao, setErroEdicao] = useState<string | null>(null);
 
   const onSaveEdit = async (m: MemoryWithSources) => {
     const check = validateMemoryContent(draft);
-    if (!check.ok) { toast.error(check.error); return; }
+    if (!check.ok) { setErroEdicao(check.error); return; }
     if (check.content === m.content) { setEditing(null); return; }
-    await run(m.id, () => updateMemoryContent(m.id, check.content), "Corrigido. É assim que vou lembrar.");
-    setEditing(null);
+    /* Só fecha a edição se gravou. Fechar sempre fazia uma falha de rede
+       levar junto o texto que a pessoa acabou de escrever: o erro aparecia, e
+       o campo onde ela ia tentar de novo já não existia. */
+    if (await run(m.id, () => updateMemoryContent(m.id, check.content), null)) setEditing(null);
   };
 
   const onPreset = async (m: MemoryWithSources, preset: MemoryValidityPreset) => {
     const until = validUntilFromPreset(preset);
-    await run(m.id, () => setMemoryValidity(m.id, until), `Combinado: vale até ${longDay(until)}.`);
-    setScheduling(null);
+    // Mesma regra da edição: só fecha a escolha de prazo se gravou — senão a
+    // falha fechava o seletor e a pessoa tinha de reabri-lo para tentar de novo.
+    if (await run(m.id, () => setMemoryValidity(m.id, until), `Combinado: vale até ${longDay(until)}.`)) setScheduling(null);
   };
 
   const onClearValidity = (m: MemoryWithSources) =>
@@ -167,7 +188,7 @@ export default function MemoryControl({
     run(m.id, () => rejectMemory(m.id), "Tirei isso do seu retrato. Está em Descartadas, se mudar de ideia.");
 
   const onReactivate = (m: MemoryWithSources) =>
-    run(m.id, () => reactivateMemory(m.id), "De volta ao seu retrato.");
+    run(m.id, () => reactivateMemory(m.id), null);
 
   const onDelete = async (m: MemoryWithSources) => {
     if (busy) return;
@@ -176,6 +197,7 @@ export default function MemoryControl({
       await deleteMemory(m.id);
       qc.setQueryData<MemoryWithSources[]>(queryKey, (list) =>
         (list ?? []).filter((x) => x.id !== m.id));
+      toast.dismiss("Não consegui apagar. Tente de novo.");
       toast.success("Apagado de vez.");
     } catch {
       toast.error("Não consegui apagar. Tente de novo.");
@@ -202,29 +224,32 @@ export default function MemoryControl({
         <div className="rounded-xl border p-3 space-y-2">
           {isEditing ? (
             <div className="space-y-2">
-              <label htmlFor={`memoria-${m.id}`} className="text-[11px] font-medium text-muted-foreground">
+              <label htmlFor={`memoria-${m.id}`} className="text-caption2 font-medium text-muted-foreground">
                 Como isso deveria estar escrito?
               </label>
               <Textarea
                 id={`memoria-${m.id}`}
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={(e) => { setDraft(e.target.value); setErroEdicao(null); }}
+                aria-invalid={!!erroEdicao || undefined}
+                aria-describedby={erroEdicao ? `erro-memoria-${m.id}` : undefined}
                 maxLength={MEMORY_CONTENT_MAX}
                 rows={3}
                 className="resize-none"
               />
+              {erroEdicao && (
+                <p id={`erro-memoria-${m.id}`} role="alert" className="text-footnote text-destructive">{erroEdicao}</p>
+              )}
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-caption2 text-muted-foreground">
                   {draft.trim().length}/{MEMORY_CONTENT_MAX}
                 </span>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setEditing(null)} disabled={working}>
                     Cancelar
                   </Button>
-                  <Button size="sm" onClick={() => onSaveEdit(m)} disabled={working || !draft.trim()}>
-                    {working
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : (<><Check className="w-4 h-4 mr-1" /> Salvar</>)}
+                  <Button size="sm" onClick={() => onSaveEdit(m)} disabled={working || !draft.trim()} loading={working}>
+                    <Check className="w-4 h-4 mr-1" /> Salvar
                   </Button>
                 </div>
               </div>
@@ -234,14 +259,14 @@ export default function MemoryControl({
           )}
 
           {/* Categoria e ORIGEM resumida: em toda memória, sempre visível. */}
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-caption2 text-muted-foreground">
             {MEMORY_CATEGORY_LABEL[m.category] ?? MEMORY_CATEGORY_LABEL.outro}
             {primarySource && <> · {memorySourceLine(primarySource)}</>}
             {!primarySource && <> · aprendido {agoLabel(m.created_at)}</>}
           </p>
 
           {validity && (
-            <p className="text-[11px] flex items-center gap-1 text-muted-foreground">
+            <p className="text-caption2 flex items-center gap-1 text-muted-foreground">
               <Clock className="w-3 h-3 shrink-0" aria-hidden /> {validity}
             </p>
           )}
@@ -250,15 +275,13 @@ export default function MemoryControl({
               cinco ações à mostra num cartão de duas linhas viram ruído. */}
           <div className="flex items-center justify-between gap-2">
             {confirmed ? (
-              <p className="text-[11px] flex items-center gap-1 text-muted-foreground">
+              <p className="text-caption2 flex items-center gap-1 text-muted-foreground">
                 <Check className="w-3.5 h-3.5 shrink-0" style={{ color: "hsl(var(--success))" }} aria-hidden />
                 Confirmado por você{m.last_verified_at && ` · ${agoLabel(m.last_verified_at)}`}
               </p>
             ) : (
-              <Button size="sm" variant="outline" onClick={() => onConfirm(m)} disabled={working}>
-                {working
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : (<><Check className="w-3.5 h-3.5 mr-1.5" /> Isso está certo</>)}
+              <Button size="sm" variant="outline" onClick={() => onConfirm(m)} disabled={working} loading={working}>
+                <Check className="w-3.5 h-3.5 mr-1.5" /> Isso está certo
               </Button>
             )}
 
@@ -272,7 +295,7 @@ export default function MemoryControl({
 
           <CollapsibleContent className="space-y-3 pt-1">
             <div className="space-y-1.5">
-              <p className="text-[11px] font-semibold text-muted-foreground">De onde eu tirei isso</p>
+              <p className="text-caption2 font-semibold text-muted-foreground">De onde eu tirei isso</p>
               {m.sources.length ? (
                 <ul className="space-y-2">
                   {m.sources.map((s) => <SourceDetail key={s.id} source={s} />)}
@@ -284,7 +307,7 @@ export default function MemoryControl({
 
             {isScheduling ? (
               <div className="space-y-2">
-                <p className="text-[11px] font-semibold text-muted-foreground">Vale até quando?</p>
+                <p className="text-caption2 font-semibold text-muted-foreground">Vale até quando?</p>
                 <div className="flex flex-wrap gap-2">
                   {PRESETS.map((preset) => (
                     <Button
@@ -295,7 +318,7 @@ export default function MemoryControl({
                     </Button>
                   ))}
                 </div>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-caption2 text-muted-foreground">
                   Passado o prazo, sai do seu retrato sozinha — sem você precisar voltar aqui.
                 </p>
                 <Button variant="ghost" size="sm" onClick={() => setScheduling(null)} disabled={working}>
@@ -306,7 +329,7 @@ export default function MemoryControl({
               <div className="flex flex-wrap gap-1.5">
                 <Button
                   variant="ghost" size="sm" className="text-muted-foreground"
-                  onClick={() => { setEditing(m.id); setDraft(m.content); }}
+                  onClick={() => { setEditing(m.id); setDraft(m.content); setErroEdicao(null); }}
                   disabled={working}
                 >
                   <Pencil className="w-3.5 h-3.5 mr-1.5" /> Corrigir
@@ -360,10 +383,9 @@ export default function MemoryControl({
           <Button
             variant="ghost" size="sm" className="shrink-0 text-muted-foreground"
             onClick={onClearAll} disabled={clearing}
+            loading={clearing}
           >
-            {clearing
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : (<><Trash2 className="w-3.5 h-3.5 mr-1" /> Apagar tudo</>)}
+            <Trash2 className="w-3.5 h-3.5 mr-1" /> Apagar tudo
           </Button>
         )}
       </div>
@@ -398,7 +420,7 @@ export default function MemoryControl({
       )}
 
       {!isLoading && !isError && !all.length && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-subhead text-muted-foreground">
           Ainda não aprendi nada sobre você. Converse com o Conselheiro ou use a caixa
           "Conte como foi" na tela Hoje — o que eu aprender aparece aqui, com a origem.
         </p>
@@ -425,7 +447,7 @@ export default function MemoryControl({
             {discarded.map((m) => (
               <div key={m.id} className="rounded-xl border p-3 space-y-2">
                 <p className="text-sm break-words">{m.content}</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-caption2 text-muted-foreground">
                   {discardReason(m)}
                   {m.sources[0] && <> · {memorySourceLine(m.sources[0])}</>}
                 </p>
@@ -433,10 +455,9 @@ export default function MemoryControl({
                   <Button
                     variant="outline" size="sm"
                     onClick={() => onReactivate(m)} disabled={busy === m.id}
+                    loading={busy === m.id}
                   >
-                    {busy === m.id
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : (<><Undo2 className="w-3.5 h-3.5 mr-1.5" /> Trazer de volta</>)}
+                    <Undo2 className="w-3.5 h-3.5 mr-1.5" /> Trazer de volta
                   </Button>
                   <Button
                     variant="ghost" size="sm" className="text-destructive"

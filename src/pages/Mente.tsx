@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { HeartHandshake, Send, BookOpen, Loader2, Trash2, Brain } from "lucide-react";
+import { HeartHandshake, Send, BookOpen, Trash2, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import QueryError from "@/components/core/QueryError";
 import { eventLabel } from "@/lib/eventLabels";
@@ -80,6 +80,7 @@ export default function Mente() {
       payload: { score, label, summary: `Humor: ${label}` }, source: "form",
     });
     if (error) { toast.error("Não consegui salvar o humor. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar o humor. Tente de novo.");
     toast.success("Humor registrado. Obrigado pela honestidade. +5 XP");
     qc.invalidateQueries();
   };
@@ -91,6 +92,7 @@ export default function Mente() {
       payload: { description: practiceLabel, summary: practiceLabel }, source: "form",
     });
     if (error) { toast.error("Não consegui salvar a prática. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar a prática. Tente de novo.");
     toast.success("Prática registrada. +8 XP");
     qc.invalidateQueries();
   };
@@ -103,6 +105,7 @@ export default function Mente() {
       payload: { text: gratitude.trim(), summary: "Gratidão registrada" }, source: "form",
     });
     if (error) { toast.error("Não consegui guardar a gratidão. Tente de novo."); return; }
+    toast.dismiss("Não consegui guardar a gratidão. Tente de novo.");
     toast.success("Gratidão guardada. +5 XP");
     setGratitude("");
     qc.invalidateQueries();
@@ -123,6 +126,7 @@ export default function Mente() {
     });
     setSavingJournal(false);
     if (error) { toast.error("Não consegui guardar a entrada. Tente de novo."); return; }
+    toast.dismiss("Não consegui guardar a entrada. Tente de novo.");
     toast.success("Guardado no seu diário. +6 XP");
     setJournalText("");
     qc.invalidateQueries();
@@ -138,18 +142,24 @@ export default function Mente() {
     const { error } = await supabase.from("profiles")
       .update({ journal_color: colorId }).eq("user_id", user.id);
     if (error) { toast.error("Não consegui trocar a cor. Tente de novo."); return; }
+    toast.dismiss("Não consegui trocar a cor. Tente de novo.");
     refreshProfile();
   };
 
   const recent = (events ?? []).filter((e) => e.kind !== "journal");
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up [&_:is(h1,h2,h3)]:hyphens-auto [&_:is(h1,h2,h3)]:[overflow-wrap:break-word]">
+      {/* Títulos podem quebrar no meio da palavra, e só quando a palavra
+        não cabe: com Texto Maior a 40 pt, "Prosperidade" ou "Conselheiro"
+        num `text-2xl` passam da largura da tela sozinhos. Hifeniza em
+        pt-BR onde o dicionário deixa; senão, quebra onde precisar. No
+        tamanho padrão nenhum título chega na borda, então nada muda. */}
       <div>
         <h1 className="font-display text-2xl font-semibold" style={{ color: "hsl(var(--mente))" }}>
           {pageTitle}
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-subhead text-muted-foreground">
           {hasReligion
             ? "Aqui não existe resposta certa. Só o seu momento, registrado com honestidade."
             : "Treinar a mente também é subida: foco, clareza e emoções registradas com honestidade."}
@@ -185,7 +195,7 @@ export default function Mente() {
               )}
             >
               <span className="text-xl" aria-hidden>{m.emoji}</span>
-              <span className="text-[11px] text-muted-foreground">{m.label}</span>
+              <span className="text-caption2 text-muted-foreground">{m.label}</span>
             </button>
           ))}
         </div>
@@ -213,7 +223,7 @@ export default function Mente() {
 
           {/* Cor do diário */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] text-muted-foreground mr-1">Cor do diário:</span>
+            <span className="text-caption2 text-muted-foreground mr-1">Cor do diário:</span>
             {JOURNAL_COLORS.map((c) => {
               const active = (profile?.journal_color ?? "violeta") === c.id;
               return (
@@ -243,9 +253,9 @@ export default function Mente() {
           <div className="flex justify-end">
             {/* A tinta acompanha a cor escolhida: sobre violeta o padrão
                 escuro dava 3,36:1. Ver journalInkHsl. */}
-            <Button onClick={saveJournal} disabled={savingJournal || !journalText.trim()}
+            <Button onClick={saveJournal} loading={savingJournal} disabled={!journalText.trim()}
               style={{ background: `hsl(${journalHsl})`, color: `hsl(${journalInk})` }}>
-              {savingJournal ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar no diário"}
+              Guardar no diário
             </Button>
           </div>
 
@@ -263,7 +273,7 @@ export default function Mente() {
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                  <p className="text-caption2 text-muted-foreground mt-1.5">
                     {new Date(e.occurred_at).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" })}
                   </p>
                 </div>
@@ -313,7 +323,10 @@ export default function Mente() {
           <div className="space-y-1.5">
             {recent.slice(0, 12).map((e) => (
               <div key={e.id} className="flex items-center gap-2 text-sm">
-                <span className="text-xs text-muted-foreground w-14 shrink-0">
+                {/* `min-w-14`, não `w-14`: a largura fixa partia "05 de out."
+                    em três linhas com o Texto Maior. Mínimo mantém a coluna
+                    alinhada no padrão e deixa a data crescer quando precisa. */}
+                <span className="text-xs text-muted-foreground min-w-14 shrink-0">
                   {new Date(e.occurred_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                 </span>
                 <span className="truncate min-w-0 flex-1">

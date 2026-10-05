@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/collapsible";
 import { ChevronDown, RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { PILLARS, type PillarId } from "@/lib/pillars";
 import { useMokariPreference } from "@/hooks/useMokariPreference";
 import { useMokariData } from "@/hooks/useMokariData";
@@ -39,19 +40,11 @@ import {
  * NADA murcha, cai, seca ou aponta para baixo. A geometria que garante isso
  * está em mokariLayers.ts, com teste. */
 
-/** Sem animação para quem pediu para não ter. Checado em JS além do CSS
- *  porque as partículas têm de continuar desenhadas e paradas. */
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return reduced;
-}
+/* Sem animação para quem pediu para não ter — checado em JS além do CSS
+   porque as partículas têm de continuar DESENHADAS e paradas, não sumir. A
+   checagem morava aqui, copiada; agora é a única da casa, em
+   hooks/useReducedMotion.ts, que também sobrevive a teste sem `matchMedia`
+   (a cópia daqui quebraria nesse ambiente). */
 
 /* ── A UNIDADE DO MOKARI É O ÓRGÃO, NÃO O PILAR ────────────────────────────
  *
@@ -563,7 +556,7 @@ export default function Mokari() {
               ].map((n) => (
                 <div key={n.t} className="rounded-md border p-2">
                   <dd className="text-sm font-medium">{n.v}</dd>
-                  <dt className="text-[11px] text-muted-foreground">{n.t}</dt>
+                  <dt className="text-caption2 text-muted-foreground">{n.t}</dt>
                 </div>
               ))}
             </dl>

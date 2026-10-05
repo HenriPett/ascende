@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import TrendInsights from "@/components/core/TrendInsights";
-import { Flame, TrendingUp, TrendingDown, Minus, CalendarCheck, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
+import { Flame, TrendingUp, TrendingDown, Minus, CalendarCheck, AlertTriangle, RefreshCw } from "lucide-react";
 
 function clamp(n: number) { return Math.max(0, Math.min(100, Math.round(n))); }
 
@@ -43,7 +43,7 @@ function LevelRing({ level, progress }: { level: number; progress: number }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[11px] uppercase tracking-widest text-white/60">Nível</span>
+        <span className="text-caption2 uppercase tracking-widest text-white/60">Nível</span>
         <span className="font-display text-5xl font-semibold leading-none" style={{ color: "hsl(var(--gold))" }}>
           {level}
         </span>
@@ -242,13 +242,21 @@ export default function Score() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up [&_:is(h1,h2,h3)]:hyphens-auto [&_:is(h1,h2,h3)]:[overflow-wrap:break-word]">
+      {/* Títulos podem quebrar no meio da palavra, e só quando a palavra
+        não cabe: com Texto Maior a 40 pt, "Prosperidade" ou "Conselheiro"
+        num `text-2xl` passam da largura da tela sozinhos. Hifeniza em
+        pt-BR onde o dicionário deixa; senão, quebra onde precisar. No
+        tamanho padrão nenhum título chega na borda, então nada muda. */}
       <div>
-        <h1 className="font-display text-2xl font-semibold flex items-center gap-2">
-          Indicadores
-          <Badge variant="secondary" className="text-[10px] font-normal align-middle">beta</Badge>
+        {/* `flex-wrap`: com Texto Maior o selo "beta" desce para a linha de
+            baixo em vez de empurrar a página; `hyphens-auto` deixa o próprio
+            título quebrar (com hífen, em pt-BR) quando nem ele cabe sozinho. */}
+        <h1 className="font-display text-2xl font-semibold flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 break-words hyphens-auto">
+          <span className="min-w-0">Indicadores</span>
+          <Badge variant="secondary" className="text-caption2 font-normal align-middle">beta</Badge>
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-subhead text-muted-foreground">
           O XP mede a sua <strong>consistência</strong> (registrar, praticar) e nunca diminui.
           Os indicadores por pilar são aproximações em revisão: use-os como bússola, não como nota.
         </p>
@@ -279,7 +287,7 @@ export default function Score() {
           <div className="flex flex-col items-center text-center gap-4 sm:flex-row sm:items-center sm:text-left sm:gap-5">
             <LevelRing level={level} progress={progress} />
             <div className="min-w-0 w-full sm:flex-1">
-              <p className="text-[11px] uppercase tracking-widest text-white/55">Título da subida</p>
+              <p className="text-caption2 uppercase tracking-widest text-white/55">Título da subida</p>
               <p className="font-display text-2xl sm:text-3xl font-semibold" style={{ color: "hsl(var(--gold))" }}>
                 {nbsp(title)}
               </p>
@@ -310,24 +318,27 @@ export default function Score() {
                 <span key={m} className="absolute top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/40" style={{ left: `${m * 100}%` }} />
               ))}
             </div>
-            <div className="flex justify-between text-[11px] text-white/50 mt-1.5">
+            <div className="flex justify-between text-caption2 text-white/50 mt-1.5">
               <span>Nv {level}</span>
               <span>Nv {level + 1}</span>
             </div>
           </div>
 
           {/* Estatísticas rápidas */}
-          <div className="grid grid-cols-3 gap-2 mt-4">
+          {/* Três colunas no padrão; com Texto Maior o piso em rem (que cresce
+              junto com a fonte) faz a grade cair para duas e depois uma, em
+              vez de "Dias ativos (7 dias)" vazar a página pela direita. */}
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,5.5rem),1fr))] gap-2 mt-4 [&>*]:min-w-0 [&>*]:[overflow-wrap:break-word]">
             <div className="rounded-lg border border-white/10 px-3 py-2" style={{ background: "hsl(0 0% 100% / 0.07)" }}>
-              <p className="text-[11px] text-white/55 flex items-center gap-1"><Flame className="w-3 h-3" /> XP total</p>
+              <p className="text-caption2 text-white/55 flex items-center gap-1"><Flame className="w-3 h-3" /> XP total</p>
               <p className="text-sm font-semibold">{xp}</p>
             </div>
             <div className="rounded-lg border border-white/10 px-3 py-2" style={{ background: "hsl(0 0% 100% / 0.07)" }}>
-              <p className="text-[11px] text-white/55 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> XP na semana</p>
+              <p className="text-caption2 text-white/55 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> XP na semana</p>
               <p className="text-sm font-semibold">{data ? xpWeek : "—"}</p>
             </div>
             <div className="rounded-lg border border-white/10 px-3 py-2" style={{ background: "hsl(0 0% 100% / 0.07)" }}>
-              <p className="text-[11px] text-white/55 flex items-center gap-1"><CalendarCheck className="w-3 h-3" /> Dias ativos (7 dias)</p>
+              <p className="text-caption2 text-white/55 flex items-center gap-1"><CalendarCheck className="w-3 h-3" /> Dias ativos (7 dias)</p>
               <p className="text-sm font-semibold">{data ? `${activeDays}/7` : "—"}</p>
             </div>
           </div>
@@ -383,10 +394,8 @@ export default function Score() {
               Parece falha de conexão — não um retrato do seu mês. Seus registros
               continuam salvos, e o XP acima não depende desta leitura.
             </p>
-            <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
-              {isFetching
-                ? (<><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Tentando...</>)
-                : (<><RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Tentar de novo</>)}
+            <Button size="sm" variant="outline" onClick={() => refetch()} loading={isFetching}>
+              <RefreshCw className="w-3.5 h-3.5 mr-1.5" aria-hidden /> Tentar de novo
             </Button>
           </div>
         </Card>
@@ -415,21 +424,24 @@ export default function Score() {
           const s = scores[p.id];
           return (
             <Card key={p.id} className="p-4">
-              <div className="flex items-center gap-3 mb-2">
-                <p.icon className="w-4 h-4" style={{ color: `hsl(var(${p.colorVar}))` }} />
-                <p className="text-sm font-semibold flex-1">{p.attribute}</p>
+              {/* `flex-wrap` com piso-com-teto no nome: no padrão, nome,
+                  tendência e "72/100" ficam numa linha; a 40 pt o número e a
+                  tendência descem em vez de empurrar a página. */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
+                <p.icon className="w-4 h-4 shrink-0" style={{ color: `hsl(var(${p.colorVar}))` }} />
+                <p className="text-sm font-semibold flex-1 min-w-[min(6rem,100%)] hyphens-auto [overflow-wrap:break-word]">{p.attribute}</p>
                 {trendByPillar[p.id] === "up" && (
-                  <span className="flex items-center gap-1 text-[11px] text-success" title="Mais registros nos últimos 7 dias do que nos 7 anteriores">
+                  <span className="flex items-center gap-1 text-caption2 text-success" title="Mais registros nos últimos 7 dias do que nos 7 anteriores">
                     <TrendingUp className="w-3.5 h-3.5" /> em alta
                   </span>
                 )}
                 {trendByPillar[p.id] === "down" && (
-                  <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title="Menos registros nos últimos 7 dias do que nos 7 anteriores">
+                  <span className="flex items-center gap-1 text-caption2 text-muted-foreground" title="Menos registros nos últimos 7 dias do que nos 7 anteriores">
                     <TrendingDown className="w-3.5 h-3.5" /> em queda
                   </span>
                 )}
                 {trendByPillar[p.id] === "flat" && (
-                  <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1 text-caption2 text-muted-foreground">
                     <Minus className="w-3.5 h-3.5" /> estável
                   </span>
                 )}

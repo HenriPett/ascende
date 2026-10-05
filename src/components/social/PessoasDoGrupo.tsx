@@ -52,7 +52,7 @@ export default function PessoasDoGrupo({
           novidades, sem ponto vermelho; e se o socket cair, a única coisa que
           acontece é este texto parar de andar. */}
       {!!atualizadoHa && (
-        <p className="text-[11px] text-muted-foreground text-right">{atualizadoHa}</p>
+        <p className="text-caption2 text-muted-foreground text-right">{atualizadoHa}</p>
       )}
 
       {!vigente && (
@@ -78,8 +78,8 @@ export default function PessoasDoGrupo({
             <FichaFantasma texto="Água" />
           </div>
           <div className="space-y-1">
-            <p className="text-[15px]">Ninguém publicou nada ainda.</p>
-            <p className="text-[13px] text-muted-foreground max-w-sm mx-auto">
+            <p className="text-subhead">Ninguém publicou nada ainda.</p>
+            <p className="text-footnote text-muted-foreground max-w-sm mx-auto">
               Cada pessoa escolhe o que sai daqui — e a meta de cada um vem junto
               com a escolha.
             </p>
@@ -101,7 +101,7 @@ export default function PessoasDoGrupo({
           origem em vez de anotada aqui. Ela fica porque é VERDADE, e porque é
           aqui, uma vez só, que a tela responde de vez "por que não aparece
           peso". A doutrina se explica uma vez; não em toda seção, toda vez. */}
-      <p className="text-[11px] text-muted-foreground border-t pt-2.5">
+      <p className="text-caption2 text-muted-foreground border-t pt-2.5">
         Cada um contra o próprio combinado. Os números de pessoas diferentes não se
         comparam — as metas não são as mesmas. Peso, corpo e dinheiro não aparecem
         aqui em forma nenhuma: o que o grupo vê é o ato (treino, refeição, sono, água),

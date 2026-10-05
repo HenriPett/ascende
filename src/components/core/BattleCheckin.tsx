@@ -43,6 +43,7 @@ export function CheckinRow({ battle, todayCheckin }: { battle: Battle; todayChec
     );
     setSaving(false);
     if (error) { toast.error("Não consegui salvar. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar. Tente de novo.");
     toast.success(STATUS_META[status].toastMsg);
     setPendingStatus(null); setTrigger(null); setNote("");
     qc.invalidateQueries();
@@ -130,7 +131,7 @@ export function CheckinRow({ battle, todayCheckin }: { battle: Battle; todayChec
                 )}
               >
                 <M.icon className="w-4 h-4" />
-                <span className="text-[11px] leading-tight">{M.label}</span>
+                <span className="text-caption2 leading-tight">{M.label}</span>
               </button>
             );
           })}

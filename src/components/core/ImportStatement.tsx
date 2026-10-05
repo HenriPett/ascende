@@ -58,6 +58,11 @@ export default function ImportStatement({
 
   const pick = () => fileRef.current?.click();
 
+  /* Um `id` só para todas as falhas de LER o arquivo: as mensagens variam
+     (vêm do servidor), e a próxima leitura que der certo dispensa qualquer
+     uma delas — senão o erro persistente ficaria afirmando uma falha velha. */
+  const ERRO_LEITURA = "importar-fatura-leitura";
+
   const analyze = async (picked: File) => {
     if (picked.size > MAX_FILE_BYTES) {
       toast.error("Arquivo muito grande. Envie só a fatura do mês (até ~6 MB).");
@@ -73,19 +78,22 @@ export default function ImportStatement({
       if (error) {
         const body = await readFnError(error);
         if (isPlanLimit(body)) { setOpen(false); onPlanLimit(body); return; }
-        toast.error((body?.error as string) ?? "Não consegui ler o documento. Tente de novo.");
+        toast.error((body?.error as string) ?? "Não consegui ler o documento. Tente de novo.", { id: ERRO_LEITURA });
         return;
       }
-      if (data?.error) { toast.error(String(data.error)); return; }
+      if (data?.error) { toast.error(String(data.error), { id: ERRO_LEITURA }); return; }
       if (!data?.is_statement) {
-        toast.error(data?.note ?? "Isso não parece uma fatura ou extrato.");
+        toast.error(data?.note ?? "Isso não parece uma fatura ou extrato.", { id: ERRO_LEITURA });
         return;
       }
       const list = (data.items ?? []) as ProposedStatementTx[];
       if (!list.length) {
-        toast.error("Não encontrei lançamentos legíveis no documento.");
+        toast.error("Não encontrei lançamentos legíveis no documento.", { id: ERRO_LEITURA });
         return;
       }
+      // Leu: qualquer erro de leitura de uma tentativa anterior já não vale.
+      toast.dismiss(ERRO_LEITURA);
+      toast.dismiss("Arquivo muito grande. Envie só a fatura do mês (até ~6 MB).");
       const dups = user ? await findStatementDuplicates(user.id, list) : list.map(() => false);
       // Hash do próprio arquivo (Blob), que é o que foi enviado para leitura.
       const hash = await hashFile(picked);
@@ -99,7 +107,7 @@ export default function ImportStatement({
       setChecked(list.map((_, i) => !dups[i]));
       setNote(data.note ?? null);
     } catch {
-      toast.error("Não consegui ler o documento. Tente de novo.");
+      toast.error("Não consegui ler o documento. Tente de novo.", { id: ERRO_LEITURA });
     } finally {
       setAnalyzing(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -110,6 +118,7 @@ export default function ImportStatement({
     if (!items) return;
     const selected = items.filter((_, i) => checked[i]);
     if (!selected.length) { toast.error("Selecione pelo menos um lançamento."); return; }
+    toast.dismiss("Selecione pelo menos um lançamento.");
 
     // As contas do recibo, particionando o documento inteiro: o que entrou,
     // o que ficou fora por já estar registrado, e o que a pessoa descartou na

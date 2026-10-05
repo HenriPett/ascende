@@ -204,6 +204,7 @@ export default function Onboarding() {
     if (!user) return false;
     const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar. Tente de novo."); return false; }
+    toast.dismiss("Não consegui salvar. Tente de novo.");
     return true;
   };
 
@@ -300,7 +301,12 @@ export default function Onboarding() {
     try {
       const { error } = await supabase.from("battles").insert({ user_id: user.id, name });
       if (error) { toast.error("Não consegui criar a batalha agora — dá para criar depois, em Batalhas."); }
-      else { setBattleCreated(name); toast.success(`Batalha "${name}" criada. Um check-in por dia, sem culpa — recaída não zera sua história.`); }
+      // A batalha entra no resumo do Blueprint (`battleCreated`): é ali que a
+      // pessoa vê que deu certo, sem um toast por cima repetindo.
+      else {
+        toast.dismiss("Não consegui criar a batalha agora — dá para criar depois, em Batalhas.");
+        setBattleCreated(name);
+      }
       next();
     } finally { setSaving(false); }
   };
@@ -324,6 +330,7 @@ export default function Onboarding() {
   // Bloco 7 → 8: pilares + trackers
   const finishTrackers = async () => {
     if (!pillars.length) { toast.error("Escolha pelo menos um pilar para começar."); return; }
+    toast.dismiss("Escolha pelo menos um pilar para começar.");
     setSaving(true);
     try {
       const withMente = pillars.includes("mente");
@@ -478,6 +485,7 @@ export default function Onboarding() {
       }
       qc.invalidateQueries();
       refresh();
+      toast.dismiss("Não consegui ativar agora. Tente de novo.");
       toast.success(applied.length
         ? `Ativado: ${applied.join(", ")}. Tudo isso vive na tela Hoje e em Jornada > Planos.`
         : "Tudo bem — nada foi ativado. O Blueprint continua disponível com o Conselheiro.");
@@ -571,8 +579,8 @@ export default function Onboarding() {
   const navRow = (onContinue: () => void, disabled = false) => (
     <div className="flex gap-2">
       <Button variant="ghost" onClick={back} aria-label="Voltar"><ArrowLeft className="w-4 h-4" /></Button>
-      <Button className="flex-1" disabled={disabled || saving} onClick={onContinue}>
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (<>Continuar <ArrowRight className="w-4 h-4 ml-1" /></>)}
+      <Button className="flex-1" disabled={disabled} onClick={onContinue} loading={saving}>
+        Continuar <ArrowRight className="w-4 h-4 ml-1" />
       </Button>
     </div>
   );
@@ -582,7 +590,7 @@ export default function Onboarding() {
     <div key="goal" className="space-y-4">
       <div>
         <h1 className="font-display text-2xl font-semibold">O que "subir de nível" significa para você?</h1>
-        <p className="text-sm text-muted-foreground mt-1.5">
+        <p className="text-subhead text-muted-foreground mt-1.5">
           Em uma frase, no seu jeito. Cada resposta daqui em diante monta o seu Blueprint:
           um plano de partida feito só para você, pronto antes de você entrar no app.
         </p>
@@ -594,8 +602,8 @@ export default function Onboarding() {
       <Input value={goal} onChange={(e) => setGoal(e.target.value)} maxLength={200}
         aria-label="O que subir de nível significa para você"
         placeholder='Ex.: "Ganhar massa muscular sem estourar o orçamento"' />
-      <Button className="w-full" disabled={saving} onClick={() => finishGoal(false)}>
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (<>Continuar <ArrowRight className="w-4 h-4 ml-1" /></>)}
+      <Button className="w-full" onClick={() => finishGoal(false)} loading={saving}>
+        Continuar <ArrowRight className="w-4 h-4 ml-1" />
       </Button>
       {skipLink("Prefiro pular por enquanto", () => finishGoal(true))}
     </div>,
@@ -604,7 +612,7 @@ export default function Onboarding() {
     <div key="body" className="space-y-4">
       <div>
         <h1 className="font-display text-2xl font-semibold">Seu corpo, em números básicos</h1>
-        <p className="text-sm text-muted-foreground mt-1.5">
+        <p className="text-subhead text-muted-foreground mt-1.5">
           Com isso a gente calcula na hora o seu gasto energético — a base do plano
           alimentar. Só o que você quiser contar.
         </p>
@@ -651,7 +659,7 @@ export default function Onboarding() {
     <div key="activity" className="space-y-4">
       <div>
         <h1 className="font-display text-2xl font-semibold">Como está a sua rotina física HOJE?</h1>
-        <p className="text-sm text-muted-foreground mt-1.5">
+        <p className="text-subhead text-muted-foreground mt-1.5">
           Não a meta — o real. Vale chutar honesto: o plano de treino nasce do seu ponto
           de partida, não de um ideal.
         </p>
@@ -676,7 +684,7 @@ export default function Onboarding() {
       </div>
       <div className="space-y-1">
         <Label htmlFor="ob-conditions" className="text-xs">Condições de saúde ou lesões (opcional)</Label>
-        <p className="text-[11px] text-muted-foreground">O plano respeita o seu corpo. Ex.: "hérnia de disco", "diabetes tipo 2".</p>
+        <p className="text-caption2 text-muted-foreground">O plano respeita o seu corpo. Ex.: "hérnia de disco", "diabetes tipo 2".</p>
         {chipInput(conditions, setConditions, conditionInput, setConditionInput, "Adicionar condição", "ob-conditions")}
       </div>
       {navRow(finishActivity)}
@@ -687,7 +695,7 @@ export default function Onboarding() {
     <div key="sleep" className="space-y-4">
       <div>
         <h1 className="font-display text-2xl font-semibold">Sua rotina de sono</h1>
-        <p className="text-sm text-muted-foreground mt-1.5">
+        <p className="text-subhead text-muted-foreground mt-1.5">
           Arraste a lua e o sol. Depois, todo dia de manhã, um toque confirma a noite —
           e o Ascende cruza sono com dinheiro, comida e humor (é o que ninguém mais faz).
         </p>
@@ -707,7 +715,7 @@ export default function Onboarding() {
     <div key="food" className="space-y-4">
       <div>
         <h1 className="font-display text-2xl font-semibold">Comida e bolso, juntos</h1>
-        <p className="text-sm text-muted-foreground mt-1.5">
+        <p className="text-subhead text-muted-foreground mt-1.5">
           O recurso-símbolo do Ascende é o plano alimentar que cabe no SEU orçamento.
           Para isso, ele precisa conhecer os dois lados.
         </p>
@@ -719,7 +727,7 @@ export default function Onboarding() {
       <div className="grid grid-cols-1 gap-2.5">
         <div className="space-y-1">
           <Label htmlFor="ob-food-spend" className="text-xs">Quanto você gasta com comida por mês, mais ou menos? (R$)</Label>
-          <p className="text-[11px] text-muted-foreground">Mercado + comida fora. Chute honesto — é premissa, não registro.</p>
+          <p className="text-caption2 text-muted-foreground">Mercado + comida fora. Chute honesto — é premissa, não registro.</p>
           <Input id="ob-food-spend" inputMode="numeric" placeholder="Ex.: 800" value={foodSpend}
             onChange={(e) => setFoodSpend(e.target.value)} />
         </div>
@@ -751,7 +759,7 @@ export default function Onboarding() {
     <div key="battle" className="space-y-4">
       <div>
         <h1 className="font-display text-2xl font-semibold">Existe uma batalha que você quer vencer?</h1>
-        <p className="text-sm text-muted-foreground mt-1.5">
+        <p className="text-subhead text-muted-foreground mt-1.5">
           Redes sociais, cigarro, apostas, compras por impulso... Este bloco é opcional e
           totalmente seu: você escolhe depois se o Conselheiro pode ver. Recaída nunca zera sua
           história — o que conta é o acumulado.
@@ -768,7 +776,7 @@ export default function Onboarding() {
     <div key="trackers" className="space-y-4">
       <div>
         <h1 className="font-display text-2xl font-semibold">O que você quer acompanhar?</h1>
-        <p className="text-sm text-muted-foreground mt-1.5">
+        <p className="text-subhead text-muted-foreground mt-1.5">
           O Ascende é modular de verdade: você só vê o que escolher. Dá para mudar tudo
           depois em Ajustes — desligar esconde, nunca apaga.
         </p>
@@ -784,7 +792,7 @@ export default function Onboarding() {
                   <p.icon className="w-4 h-4 shrink-0" style={{ color: `hsl(var(${p.colorVar}))` }} />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold">{p.name}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">{p.desc}</p>
+                    <p className="text-caption2 text-muted-foreground truncate">{p.desc}</p>
                   </div>
                 </div>
                 <Switch checked={on} onCheckedChange={(v) => togglePillar(p.id, !!v)}
@@ -833,8 +841,8 @@ export default function Onboarding() {
       </div>
 
       {generating && (
-        <div className="rounded-lg border p-6 grid place-items-center">
-          <Loader2 className="w-6 h-6 animate-spin text-gold" />
+        <div className="rounded-lg border p-6 grid place-items-center" role="status">
+          <Loader2 className="w-6 h-6 animate-spin text-gold" aria-hidden />
           <p className="text-xs text-muted-foreground mt-2">Cruzando corpo, comida, sono e bolso...</p>
         </div>
       )}
@@ -848,7 +856,7 @@ export default function Onboarding() {
             </p>
           )}
           {blueprint.overview && (
-            <p className="text-sm text-muted-foreground">{blueprint.overview}</p>
+            <p className="text-subhead text-muted-foreground">{blueprint.overview}</p>
           )}
           {blueprint.plans.map((pl, i) => {
             const meta = PLAN_KIND_META[pl.kind];
@@ -857,7 +865,7 @@ export default function Onboarding() {
                 <Checkbox className="mt-0.5" checked={plansChecked[i]}
                   onCheckedChange={(v) => setPlansChecked((c) => c.map((x, j) => (j === i ? !!v : x)))} />
                 <span className="flex-1 min-w-0">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider"
+                  <span className="text-caption2 font-semibold uppercase tracking-wider"
                     style={{ color: meta ? `hsl(var(${meta.colorVar}))` : "hsl(var(--gold))" }}>
                     Plano de {meta?.label ?? "vida"}
                   </span>
@@ -911,10 +919,8 @@ export default function Onboarding() {
               trocar qual está ativo quando quiser.
             </p>
           )}
-          <Button className="w-full min-h-11" onClick={activate} disabled={activating}>
-            {activating
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : (<><Check className="w-4 h-4 mr-1.5" /> Ativar {plansChecked.filter(Boolean).length > 1 ? "meus planos" : "meu plano"}</>)}
+          <Button className="w-full min-h-11" onClick={activate} loading={activating}>
+            <Check className="w-4 h-4 mr-1.5" /> Ativar {plansChecked.filter(Boolean).length > 1 ? "meus planos" : "meu plano"}
           </Button>
           {skipLink("Agora não — quero explorar primeiro", next)}
         </div>
@@ -965,7 +971,7 @@ export default function Onboarding() {
         <h1 className="font-display text-2xl font-semibold flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-gold" /> Agora, a mágica
         </h1>
-        <p className="text-sm text-muted-foreground mt-1.5">
+        <p className="text-subhead text-muted-foreground mt-1.5">
           {landingPhrase
             ? "Sua frase da página inicial está aqui — agora é de verdade: a IA separa e registra nos pilares certos."
             : "Conte como foi seu dia até agora, numa frase — a IA separa e registra tudo nos pilares certos. É assim que o Ascende funciona todo dia, em 10 segundos."}
@@ -979,7 +985,7 @@ export default function Onboarding() {
       )}
       <div className="rounded-lg border p-3 space-y-1.5">
         <p className="text-xs font-semibold">Tudo que você contou já está no app:</p>
-        <ul className="text-[11px] text-muted-foreground space-y-1">
+        <ul className="text-caption2 text-muted-foreground space-y-1">
           {savedMap.map((row) => (
             <li key={row} className="flex gap-1.5">
               <Check className="w-3 h-3 mt-0.5 shrink-0 text-success" />
@@ -988,7 +994,7 @@ export default function Onboarding() {
           ))}
         </ul>
       </div>
-      <Button className="w-full" onClick={() => { toast.success("Bem-vindo(a) à subida!"); navigate("/app", { replace: true }); }}>
+      <Button className="w-full" onClick={() => navigate("/app", { replace: true })}>
         {captured ? "Começar minha subida" : "Ir para o app"} <ArrowRight className="w-4 h-4 ml-1" />
       </Button>
       {!captured && (
@@ -1027,7 +1033,7 @@ export default function Onboarding() {
         {portrait.length > 0 && step > 0 && step < 7 && (
           <div className="flex flex-wrap gap-1.5 mb-4" aria-label="Seu retrato até agora">
             {portrait.map((f) => (
-              <span key={f.label} className="text-[11px] rounded-full border bg-muted/50 px-2 py-0.5">
+              <span key={f.label} className="text-caption2 rounded-full border bg-muted/50 px-2 py-0.5">
                 <span className="text-muted-foreground">{f.label}:</span> <strong>{f.value}</strong>
               </span>
             ))}

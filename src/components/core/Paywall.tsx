@@ -94,7 +94,7 @@ export default function Paywall({
           </DialogDescription>
         </DialogHeader>
 
-        <p className="text-sm text-muted-foreground">
+        <p className="text-subhead text-muted-foreground">
           O Ascende não vive da sua atenção infinita nem dos seus dados. Vive de assinatura.
           É por isso que os limites existem — e é por isso que dá para confiar no que o
           Conselheiro diz.
@@ -129,7 +129,7 @@ export default function Paywall({
             </Button>
           </div>
         </div>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-caption2 text-muted-foreground">
           Registros manuais, hábitos, exportação e privacidade continuam sempre gratuitos.
           Nossos compromissos públicos estão em{" "}
           <a href="/recusas" target="_blank" rel="noreferrer" className="underline underline-offset-2">

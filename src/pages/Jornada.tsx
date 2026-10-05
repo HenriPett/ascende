@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
   ChevronRight, Layers, BarChart3, ClipboardList, Swords, Users,
-  AlertTriangle, RefreshCw, Loader2,
+  AlertTriangle, RefreshCw,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useProfile } from "@/hooks/useProfile";
@@ -101,7 +101,7 @@ function HubSection({
         <div className="px-4 pb-3 -mt-1">
           <Link
             to={invite.to}
-            className="text-sm underline underline-offset-2 text-foreground rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="inline-flex items-center min-h-11 text-sm underline underline-offset-2 text-foreground rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             {invite.label}
           </Link>
@@ -282,7 +282,12 @@ export default function Jornada() {
     : undefined;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up [&_:is(h1,h2,h3)]:hyphens-auto [&_:is(h1,h2,h3)]:[overflow-wrap:break-word]">
+      {/* Títulos podem quebrar no meio da palavra, e só quando a palavra
+        não cabe: com Texto Maior a 40 pt, "Prosperidade" ou "Conselheiro"
+        num `text-2xl` passam da largura da tela sozinhos. Hifeniza em
+        pt-BR onde o dicionário deixa; senão, quebra onde precisar. No
+        tamanho padrão nenhum título chega na borda, então nada muda. */}
       <div>
         <h1 className="font-display text-2xl font-semibold">Jornada</h1>
         <p className="text-sm text-muted-foreground">
@@ -304,7 +309,7 @@ export default function Jornada() {
           na meta da própria pessoa corrói a motivação em vez de sustentá-la. */}
       {profile?.goal && (
         <Card className="p-4">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Sua bússola</p>
+          <p className="text-caption2 uppercase tracking-wide text-muted-foreground">Sua bússola</p>
           <p className="text-sm mt-0.5">"{profile.goal}"</p>
           <Link
             to={appPath("ajustes")}
@@ -337,10 +342,8 @@ export default function Jornada() {
               Parece falha de conexão. Seus planos, batalhas e registros continuam salvos —
               o que falhou foi carregar a tela, não os seus dados.
             </p>
-            <Button variant="outline" size="sm" onClick={recarregar} disabled={recarregando}>
-              {recarregando
-                ? (<><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Tentando...</>)
-                : (<><RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Tentar de novo</>)}
+            <Button variant="outline" size="sm" onClick={recarregar} loading={recarregando}>
+              <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Tentar de novo
             </Button>
           </div>
         </Card>

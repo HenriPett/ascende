@@ -34,8 +34,11 @@ export default function QueryError({
   variant?: "card" | "plain";
   className?: string;
 }) {
+  /* `role="alert"`: a falha SUBSTITUI o conteúdo, e para quem não vê a tela
+     isso acontecia em silêncio — a lista simplesmente não chegava. O papel faz
+     o leitor de tela anunciar o que não carregou assim que o aviso aparece. */
   const body = (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-3" role="alert">
       <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" aria-hidden />
       <div className="flex-1 min-w-0 space-y-2">
         <p className="text-sm font-medium">{title}</p>

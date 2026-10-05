@@ -16,7 +16,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Moon, Check, Loader2, X } from "lucide-react";
+import { Moon, Check, X } from "lucide-react";
 import { todayISO } from "@/lib/format";
 import { hourInSP } from "@/lib/dates";
 import { sleepWindowHours, timeForInput, formatWindowHours } from "@/lib/sleep";
@@ -41,6 +41,11 @@ export default function SleepCheckin() {
 
   const { data: sleptToday } = useSleepTodayQuery(eligible);
 
+  // O erro fica embaixo do campo, e não num toast que some: ver QuickActions.
+  // Declarado ANTES do retorno antecipado: hook depois de `return null` muda a
+  // ordem dos hooks entre um render e outro, e o React quebra.
+  const [erroHoras, setErroHoras] = useState<string | null>(null);
+
   if (!eligible || sleptToday !== false) return null;
 
   const dismiss = () => {
@@ -64,6 +69,7 @@ export default function SleepCheckin() {
     });
     setSaving(false);
     if (error) { toast.error("Não consegui registrar o sono."); return; }
+    toast.dismiss("Não consegui registrar o sono.");
     toast.success(
       followed
         ? `Rotina seguida: ${formatWindowHours(hours)} de sono. +5 XP`
@@ -77,7 +83,7 @@ export default function SleepCheckin() {
 
   const confirmAdjust = () => {
     const h = Number(hoursInput.replace(",", "."));
-    if (!h || h <= 0 || h > 24) { toast.error("Informe quantas horas você dormiu — por exemplo, 6,5."); return; }
+    if (!h || h <= 0 || h > 24) { setErroHoras("Informe quantas horas você dormiu — por exemplo, 6,5."); return; }
     log(Math.round(h * 10) / 10, false);
   };
 
@@ -92,7 +98,7 @@ export default function SleepCheckin() {
           <div>
             <p className="text-sm font-semibold">Você seguiu sua rotina de sono?</p>
             <p className="text-xs text-muted-foreground">
-              {timeForInput(profile?.sleep_bedtime)} → {timeForInput(profile?.sleep_waketime)}
+              {timeForInput(profile?.sleep_bedtime)} <span aria-hidden>→</span><span className="sr-only">até</span> {timeForInput(profile?.sleep_waketime)}
               {" · "}{formatWindowHours(scheduleHours!)}
             </p>
           </div>
@@ -105,26 +111,33 @@ export default function SleepCheckin() {
 
       {!adjusting ? (
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={followedYes} disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Segui</>)}
+          <Button size="sm" onClick={followedYes} disabled={saving} loading={saving}>
+            <Check className="w-4 h-4 mr-1" /> Segui
           </Button>
           <Button size="sm" variant="secondary" onClick={() => setAdjusting(true)} disabled={saving}>
             Foi diferente
           </Button>
         </div>
       ) : (
-        <div className="flex gap-2 animate-fade-up">
-          <Input
-            inputMode="decimal" autoFocus
-            aria-label="Quantas horas você dormiu"
-            placeholder="Quantas horas? Ex.: 6,5"
-            value={hoursInput}
-            onChange={(e) => setHoursInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirmAdjust(); } }}
-          />
-          <Button size="sm" className="h-10" onClick={confirmAdjust} disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Registrar"}
-          </Button>
+        <div className="space-y-1.5 animate-fade-up">
+          <div className="flex gap-2">
+            <Input
+              inputMode="decimal" autoFocus
+              aria-label="Quantas horas você dormiu"
+              placeholder="Quantas horas? Ex.: 6,5"
+              value={hoursInput}
+              onChange={(e) => { setHoursInput(e.target.value); setErroHoras(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirmAdjust(); } }}
+              aria-invalid={!!erroHoras || undefined}
+              aria-describedby={erroHoras ? "erro-horas-sono" : undefined}
+            />
+            <Button size="sm" className="h-10" onClick={confirmAdjust} disabled={saving} loading={saving}>
+              Registrar
+            </Button>
+          </div>
+          {erroHoras && (
+            <p id="erro-horas-sono" role="alert" className="text-footnote text-destructive">{erroHoras}</p>
+          )}
         </div>
       )}
     </Card>

@@ -491,6 +491,7 @@ export function useAcoesDoGrupo(grupoId: string, consentimentos: ConsentimentoDa
       const { error } = await supabase.from("group_data_consents")
         .delete().eq("group_id", grupoId).eq("user_id", user.id).in("metric_key", desligar);
       if (error) { toast.error("Não consegui salvar. Nada foi alterado."); return false; }
+      toast.dismiss("Não consegui salvar. Nada foi alterado.");
     }
     if (ligar.length) {
       const { error } = await supabase.from("group_data_consents").insert(
@@ -500,6 +501,7 @@ export function useAcoesDoGrupo(grupoId: string, consentimentos: ConsentimentoDa
         })),
       );
       if (error) { toast.error("Não consegui ligar tudo. Confira a lista."); invalidar(); return false; }
+      toast.dismiss("Não consegui ligar tudo. Confira a lista.");
     }
     /* O TERCEIRO RAMO TAMBÉM CONFERE O ERRO. Ele não conferia, e os dois de
        cima sim — então mudar a meta de treino de 6 para 3 e ver o `update` ser
@@ -519,11 +521,12 @@ export function useAcoesDoGrupo(grupoId: string, consentimentos: ConsentimentoDa
       const quais = falhas
         .map((k) => SHAREABLE_METRICS[k as SocialMetricKey]?.label ?? k)
         .join(", ");
-      toast.error(`Não consegui salvar a meta de ${quais}. Confira a lista.`);
+      toast.error(`Não consegui salvar a meta de ${quais}. Confira a lista.`, { id: "grupo-metas" });
       invalidar();
       return false;
     }
 
+    toast.dismiss("grupo-metas");
     toast.success(proximos.length
       ? "Pronto. O grupo passa a ver só o que você ligou."
       : "Pronto. O grupo não vê nada seu — dá para ser só torcida.");
@@ -540,9 +543,10 @@ export function useAcoesDoGrupo(grupoId: string, consentimentos: ConsentimentoDa
       // vencido, muitos convites em pouco tempo). Mostrar o motivo dele é
       // melhor que um "tente de novo" que manda a pessoa repetir uma ação que
       // nunca vai funcionar.
-      toast.error(error?.message ?? "Não consegui criar o convite. Tente de novo.");
+      toast.error(error?.message ?? "Não consegui criar o convite. Tente de novo.", { id: "grupo-convite" });
       return;
     }
+    toast.dismiss("grupo-convite");
     setLinkNovo(`${window.location.origin}/app/social?convite=${encodeURIComponent(String(codigo))}`);
     invalidar();
   };
@@ -551,6 +555,7 @@ export function useAcoesDoGrupo(grupoId: string, consentimentos: ConsentimentoDa
     const { error } = await supabase.from("group_invites")
       .update({ revoked_at: new Date().toISOString() }).eq("id", id);
     if (error) { toast.error("Não consegui cancelar. Tente de novo."); return; }
+    toast.dismiss("Não consegui cancelar. Tente de novo.");
     toast.success("Convite cancelado. O link deixa de funcionar agora.");
     invalidar();
   };
@@ -589,7 +594,8 @@ export function useAcoesDoGrupo(grupoId: string, consentimentos: ConsentimentoDa
         .insert({ challenge_id: novo.id, user_id: user.id });
     }
     setCriandoDesafio(false);
-    if (error) { toast.error(error.message ?? "Não consegui criar o desafio."); return false; }
+    if (error) { toast.error(error.message ?? "Não consegui criar o desafio.", { id: "grupo-desafio" }); return false; }
+    toast.dismiss("grupo-desafio");
     toast.success("Combinado. Ele termina sozinho na data — sem prêmio, e sem cobrança.");
     invalidar();
     return true;
@@ -602,6 +608,7 @@ export function useAcoesDoGrupo(grupoId: string, consentimentos: ConsentimentoDa
       .insert({ challenge_id: desafioId, user_id: user.id });
     setEntrandoNoDesafio(false);
     if (error) { toast.error("Não consegui entrar no desafio. Tente de novo."); return; }
+    toast.dismiss("Não consegui entrar no desafio. Tente de novo.");
     invalidar();
   };
 
@@ -612,6 +619,7 @@ export function useAcoesDoGrupo(grupoId: string, consentimentos: ConsentimentoDa
       .insert({ group_id: grupoId, author_id: user.id, text: texto.trim() });
     setEnviandoRecado(false);
     if (error) { toast.error("Não consegui enviar. Tente de novo."); return false; }
+    toast.dismiss("Não consegui enviar. Tente de novo.");
     invalidar();
     return true;
   };
@@ -621,6 +629,7 @@ export function useAcoesDoGrupo(grupoId: string, consentimentos: ConsentimentoDa
     const { error } = await supabase.rpc("sair_do_grupo", { p_group: grupoId });
     setSaindo(false);
     if (error) { toast.error("Não consegui sair agora. Tente de novo."); return; }
+    toast.dismiss("Não consegui sair agora. Tente de novo.");
     // Sem diálogo de retenção. "Tem certeza? seus amigos vão sentir sua falta"
     // é proibido — sair é um toque, e o grupo não recebe anúncio.
     toast.success("Você saiu. O que o grupo via de você foi apagado.");

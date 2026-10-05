@@ -33,6 +33,7 @@ const Planos = lazy(() => import("@/pages/Planos"));
 const Ajustes = lazy(() => import("@/pages/Ajustes"));
 const Assinatura = lazy(() => import("@/pages/Assinatura"));
 const Social = lazy(() => import("@/pages/Social"));
+const Conta = lazy(() => import("@/pages/Conta"));
 
 /** Prefixo da área autenticada. */
 export const APP_BASE = "/app";
@@ -55,8 +56,27 @@ export interface AppRoute {
    * procedência que não existe em lugar nenhum — e este arquivo é, antes de
    * tudo, um registro de procedência.
    */
-  since: "legacy" | "fase-4" | "social";
+  since: "legacy" | "fase-4" | "social" | "padrao-apple";
+  /**
+   * A ABA a que esta tela pertence. Ela decide duas coisas que o AppLayout
+   * desenha, e por isso mora aqui, como dado, e não numa lista à parte:
+   *
+   *   · qual aba fica ACESA — sem isso, nas telas de segundo nível (Pilares,
+   *     Vitalidade, Score…) nenhuma aba acendia, e a barra parava de responder
+   *     "onde eu estou" (`tab-bars.md`: sem a seção indicada, "people can
+   *     forget which area of the app they're in");
+   *   · se a tela ganha o botão VOLTAR no cabeçalho — toda tela que não é a
+   *     raiz da própria aba ganha.
+   *
+   * É campo OBRIGATÓRIO de propósito, como o `since`: rota nova não nasce sem
+   * dizer de que seção é, porque uma tela sem seção é uma tela em que a pessoa
+   * se perde.
+   */
+  secao: Secao;
 }
+
+/** As quatro abas da barra. REGISTRAR não é uma delas: é AÇÃO, não lugar. */
+export type Secao = "hoje" | "jornada" | "conselheiro" | "conta";
 
 /**
  * A tabela de rotas de /app. O App.tsx monta os <Route> a partir daqui.
@@ -66,11 +86,11 @@ export interface AppRoute {
  * o desenho está errado — o teste vai reprovar, e é para isso que ele existe.
  */
 export const APP_ROUTES: readonly AppRoute[] = [
-  { path: "", Component: Hoje, page: "Hoje", since: "legacy" },
-  { path: "conselheiro", Component: Chat, page: "Chat", since: "legacy" },
-  { path: "pilares", Component: Pilares, page: "Pilares", since: "legacy" },
-  { path: "prosperidade", Component: Prosperidade, page: "Prosperidade", since: "legacy" },
-  { path: "vitalidade", Component: Vitalidade, page: "Vitalidade", since: "legacy" },
+  { path: "", Component: Hoje, page: "Hoje", since: "legacy", secao: "hoje" },
+  { path: "conselheiro", Component: Chat, page: "Chat", since: "legacy", secao: "conselheiro" },
+  { path: "pilares", Component: Pilares, page: "Pilares", since: "legacy", secao: "jornada" },
+  { path: "prosperidade", Component: Prosperidade, page: "Prosperidade", since: "legacy", secao: "jornada" },
+  { path: "vitalidade", Component: Vitalidade, page: "Vitalidade", since: "legacy", secao: "jornada" },
   /* FUSÃO DE 17/09/2026 — `alimentacao` foi absorvido por `vitalidade`, e a
      rota continua RENDERIZANDO, nunca redirecionando. Só o `Component` mudou:
      `path` e `page` estão INTOCADOS, porque routes.test.ts compara `page`
@@ -82,15 +102,15 @@ export const APP_ROUTES: readonly AppRoute[] = [
      lazy passam nas doze. Apagar a linha reprova em cinco delas.
      Quem chega por /app/alimentacao (link de WhatsApp antigo, atalho do PWA,
      favorito) cai na tela nova sem tropeço nenhum. */
-  { path: "alimentacao", Component: Vitalidade, page: "Alimentacao", since: "legacy" },
-  { path: "mente", Component: Mente, page: "Mente", since: "legacy" },
-  { path: "batalhas", Component: Batalhas, page: "Batalhas", since: "legacy" },
-  { path: "assinatura", Component: Assinatura, page: "Assinatura", since: "legacy" },
-  { path: "planos", Component: Planos, page: "Planos", since: "legacy" },
-  { path: "score", Component: Score, page: "Score", since: "legacy" },
-  { path: "ajustes", Component: Ajustes, page: "Ajustes", since: "legacy" },
+  { path: "alimentacao", Component: Vitalidade, page: "Alimentacao", since: "legacy", secao: "jornada" },
+  { path: "mente", Component: Mente, page: "Mente", since: "legacy", secao: "jornada" },
+  { path: "batalhas", Component: Batalhas, page: "Batalhas", since: "legacy", secao: "jornada" },
+  { path: "assinatura", Component: Assinatura, page: "Assinatura", since: "legacy", secao: "conta" },
+  { path: "planos", Component: Planos, page: "Planos", since: "legacy", secao: "jornada" },
+  { path: "score", Component: Score, page: "Score", since: "legacy", secao: "jornada" },
+  { path: "ajustes", Component: Ajustes, page: "Ajustes", since: "legacy", secao: "conta" },
   // ─── Fase 4 ───
-  { path: "jornada", Component: Jornada, page: "Jornada", since: "fase-4" },
+  { path: "jornada", Component: Jornada, page: "Jornada", since: "fase-4", secao: "jornada" },
   /* ─── Social ───
      A ROTA FALTOU, e o buraco só apareceu quando alguém CLICOU: o cartão em
      Pilares.tsx:180 e a linha do hub em Jornada.tsx apontavam para
@@ -107,7 +127,15 @@ export const APP_ROUTES: readonly AppRoute[] = [
      UMA rota só, e o grupo aberto vive na query (`?g=`): ver Social.tsx:99.
      Não há /app/social/:id, e é decisão — sub-rota por grupo faria o endereço
      carregar a identidade de um grupo privado. */
-  { path: "social", Component: Social, page: "Social", since: "social" },
+  { path: "social", Component: Social, page: "Social", since: "social", secao: "jornada" },
+  /* ─── Conta ───
+     Era uma FOLHA aberta pela quinta célula da barra, e por isso a barra tinha
+     uma célula que não navegava (`tab-bars.md`: "Use a tab bar to support
+     navigation, not to provide actions"). Virou lugar: ela agora fica acesa
+     como as outras, e Ajustes e Assinatura — que eram abertas a partir dela —
+     são da seção dela. Continua embaixo, ao alcance do polegar, que era o
+     argumento original para a folha não ir para o canto de cima. */
+  { path: "conta", Component: Conta, page: "Conta", since: "padrao-apple", secao: "conta" },
 ] as const;
 
 /**
@@ -228,8 +256,40 @@ export const NAV = {
   hoje: appPath(""),
   jornada: appPath("jornada"),
   conselheiro: appPath("conselheiro"),
+  conta: appPath("conta"),
   avatar: appPath("ajustes"),
 } as const;
+
+/** A raiz de cada aba: é para onde o VOLTAR leva quando não há histórico (a
+ *  pessoa abriu um link direto para /app/vitalidade, e `history.back()` a
+ *  tiraria do app). */
+export const RAIZ_DA_SECAO: Readonly<Record<Secao, string>> = {
+  hoje: NAV.hoje,
+  jornada: NAV.jornada,
+  conselheiro: NAV.conselheiro,
+  conta: NAV.conta,
+};
+
+/**
+ * A seção de uma URL de /app, ou `null` fora dela.
+ *
+ * Casa pelo PRIMEIRO segmento depois de /app: `/app/vitalidade?x=1` e
+ * `/app/social` com `?g=` caem na seção certa. Rota desconhecida devolve
+ * `null`, e aí nenhuma aba acende — é verdade que a pessoa não está em
+ * nenhuma delas.
+ */
+export function secaoDe(pathname: string): Secao | null {
+  if (pathname !== APP_BASE && !pathname.startsWith(`${APP_BASE}/`)) return null;
+  const sub = pathname.slice(APP_BASE.length).replace(/^\//, "").split("/")[0] ?? "";
+  return APP_ROUTES.find((r) => r.path === sub)?.secao ?? null;
+}
+
+/** É a raiz de uma aba? As raízes não ganham VOLTAR: voltar de "Hoje" para
+ *  fora do app não é navegação, é saída. */
+export function ehRaizDeSecao(pathname: string): boolean {
+  const limpo = pathname.replace(/\/+$/, "") || "/";
+  return (Object.values(RAIZ_DA_SECAO) as string[]).includes(limpo);
+}
 
 /** Rotas de /app que dependem de query string para funcionar direito. Um
  *  redirect que descarte a query quebra a função, não só o endereço. */

@@ -91,7 +91,7 @@ function periodLabel(source: DataSourceWithReceipt): string {
 function Chip({ value, label, colorVar }: { value: number; label: string; colorVar?: string }) {
   return (
     <span
-      className="inline-flex items-baseline gap-1 rounded-full border px-2 py-0.5 text-[11px]"
+      className="inline-flex items-baseline gap-1 rounded-full border px-2 py-0.5 text-caption2"
       style={colorVar ? { color: `hsl(var(${colorVar}))`, borderColor: `hsl(var(${colorVar}) / 0.35)` } : undefined}
     >
       <strong className="font-semibold">{value.toLocaleString("pt-BR")}</strong> {label}
@@ -238,6 +238,7 @@ export default function SourcesAndImports() {
     setDeleting(true);
     try {
       await deleteSource(toDelete.id);
+      toast.dismiss("Não consegui remover a fonte. Tente de novo.");
       toast.success("Fonte removida da lista. Seus registros continuam no histórico.");
       setToDelete(null);
       qc.invalidateQueries({ queryKey: ["data-sources"] });
@@ -252,7 +253,7 @@ export default function SourcesAndImports() {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-subhead text-muted-foreground">
         Cada arquivo que você trouxe fica registrado aqui com o <strong>recibo</strong> da
         importação: o que entrou, o que já estava lá e o que não deu para ler. Serve para você
         conferir depois, sem depender da nossa palavra.
@@ -323,12 +324,12 @@ export default function SourcesAndImports() {
                 <p className="text-xs text-muted-foreground">
                   {sourceKindLabel(source.kind)} · {periodLabel(source)}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-caption2 text-muted-foreground">
                   {source.confirmed_at ? "Importado" : "Lido"} em {shortDate(importedAt)}
                 </p>
               </div>
               {badge && (
-                <Badge variant="secondary" className="text-[10px] shrink-0">{badge.label}</Badge>
+                <Badge variant="secondary" className="text-caption2 shrink-0">{badge.label}</Badge>
               )}
             </div>
 
@@ -343,7 +344,7 @@ export default function SourcesAndImports() {
               ? <ReceiptCounts receipt={source.receipt} storedCount={storedCounts?.[source.id]} />
               : source.receiptUnavailable
                 ? (
-                  <p className="text-xs rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5">
+                  <p className="text-xs rounded-md border border-warning/40 bg-warning/5 p-2.5">
                     Não consegui carregar os recibos agora. Isso é um problema meu, de
                     conexão — <strong>não quer dizer que esta importação ficou sem recibo</strong>.
                     Recarregue a página em instantes.
@@ -386,7 +387,7 @@ export default function SourcesAndImports() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="pr-6 break-words font-display flex items-center gap-2">
-              <ScrollText className="w-4 h-4 shrink-0 text-primary" /> Recibo da importação
+              <ScrollText className="w-4 h-4 shrink-0 text-gold-ink" /> Recibo da importação
             </DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-0.5">
@@ -420,7 +421,7 @@ export default function SourcesAndImports() {
                   { label: "Não entraram", value: receipt.rejected_rows },
                 ].map((row) => (
                   <div key={row.label} className="rounded-lg border px-3 py-2">
-                    <dt className="text-[11px] text-muted-foreground">{row.label}</dt>
+                    <dt className="text-caption2 text-muted-foreground">{row.label}</dt>
                     <dd className="font-semibold">{row.value.toLocaleString("pt-BR")}</dd>
                   </div>
                 ))}
@@ -459,7 +460,7 @@ export default function SourcesAndImports() {
                   incluía linha ilegível — mas a partição é de REGISTROS
                   (1.500 linhas de exercício viram 40 treinos), e linha
                   ilegível nunca virou registro: ela sai nos avisos acima. */}
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-caption2 text-muted-foreground">
                 Os três números acima somam o total de <strong>registros</strong> reconhecidos
                 no arquivo — é o que permite conferir que nada se perdeu no caminho. Um arquivo
                 pode ter mais linhas que registros (1.500 linhas de exercício viram um treino
@@ -501,10 +502,15 @@ export default function SourcesAndImports() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Manter fonte</AlertDialogCancel>
+            {/* A intenção declarada (`destrutiva`), no lugar do vermelho escrito à
+                mão — era a terceira regra para o mesmo tipo de ação. Aqui o
+                texto de progresso fica: o `preventDefault` mantém o alerta
+                aberto enquanto a exclusão roda, e "Excluindo..." é o que diz
+                que ela está acontecendo. */}
             <AlertDialogAction
+              destrutiva
               onClick={(e) => { e.preventDefault(); confirmDelete(); }}
               disabled={deleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting
                 ? (<><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Excluindo...</>)

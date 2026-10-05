@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import QueryError from "@/components/core/QueryError";
 import { toast } from "sonner";
-import { Check, Loader2, Sparkles, ExternalLink } from "lucide-react";
+import { Check, Sparkles, ExternalLink } from "lucide-react";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { formatSP } from "@/lib/dates";
 
@@ -66,9 +66,11 @@ export default function Assinatura() {
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout", { body: { plan } });
       if (error || !data?.url) throw new Error(data?.error ?? "erro");
+      toast.dismiss("assinatura-checkout");
       window.location.href = data.url as string;
     } catch (e) {
-      toast.error(e instanceof Error && e.message !== "erro" ? e.message : "Não consegui abrir o pagamento. Tente de novo.");
+      // `id` estável: a mensagem pode vir do servidor.
+      toast.error(e instanceof Error && e.message !== "erro" ? e.message : "Não consegui abrir o pagamento. Tente de novo.", { id: "assinatura-checkout" });
       setStarting(null);
     }
   };
@@ -78,15 +80,21 @@ export default function Assinatura() {
     try {
       const { data, error } = await supabase.functions.invoke("customer-portal", { body: {} });
       if (error || !data?.url) throw new Error(data?.error ?? "erro");
+      toast.dismiss("assinatura-portal");
       window.location.href = data.url as string;
     } catch (e) {
-      toast.error(e instanceof Error && e.message !== "erro" ? e.message : "Não consegui abrir a página de gerenciamento. Tente de novo.");
+      toast.error(e instanceof Error && e.message !== "erro" ? e.message : "Não consegui abrir a página de gerenciamento. Tente de novo.", { id: "assinatura-portal" });
       setOpeningPortal(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 pb-8">
+    <div className="max-w-2xl mx-auto space-y-4 pb-8 [&_:is(h1,h2,h3)]:hyphens-auto [&_:is(h1,h2,h3)]:[overflow-wrap:break-word]">
+      {/* Títulos podem quebrar no meio da palavra, e só quando a palavra
+        não cabe: com Texto Maior a 40 pt, "Prosperidade" ou "Conselheiro"
+        num `text-2xl` passam da largura da tela sozinhos. Hifeniza em
+        pt-BR onde o dicionário deixa; senão, quebra onde precisar. No
+        tamanho padrão nenhum título chega na borda, então nada muda. */}
       <div>
         <h1 className="text-xl font-display font-bold">Assinatura</h1>
         <p className="text-sm text-muted-foreground">
@@ -129,19 +137,15 @@ export default function Assinatura() {
                 susto — pagamento recusado costuma ser limite ou cartão vencido,
                 não inadimplência, e ninguém precisa cancelar por vergonha. */}
             {ent?.subscription?.status === "past_due" && (
-              <p className="text-sm text-destructive">
+              <p className="text-subhead text-destructive">
                 O pagamento deste mês não passou — costuma ser limite ou cartão vencido, e não
                 tem multa. Toque em "Trocar meu cartão" abaixo. Seu Ascende+ segue ativo até lá.
               </p>
             )}
             {ent?.subscription && ent.subscription.provider === "stripe" && (
-              <Button variant="outline" size="sm" onClick={openPortal} disabled={openingPortal}>
-                {openingPortal ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-                  <>
-                    <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                    {ent.subscription.status === "past_due" ? "Trocar meu cartão" : "Gerenciar assinatura"}
-                  </>
-                )}
+              <Button variant="outline" size="sm" onClick={openPortal} loading={openingPortal}>
+                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                {ent.subscription.status === "past_due" ? "Trocar meu cartão" : "Gerenciar assinatura"}
               </Button>
             )}
           </>
@@ -182,15 +186,11 @@ export default function Assinatura() {
               para onde leva e que dá para conferir antes de confirmar. */}
           {canOfferUpgrade && (checkoutEnabled ? (
             <div className="flex flex-col gap-2 pt-1">
-              <Button onClick={() => startCheckout("monthly")} disabled={starting !== null}>
-                {starting === "monthly"
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : `Assinar por ${ent?.pricing?.monthly_label ?? "R$ 29,90/mês"}`}
+              <Button onClick={() => startCheckout("monthly")} disabled={starting !== null} loading={starting === "monthly"}>
+                {`Assinar por ${ent?.pricing?.monthly_label ?? "R$ 29,90/mês"}`}
               </Button>
-              <Button variant="outline" onClick={() => startCheckout("annual")} disabled={starting !== null}>
-                {starting === "annual"
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : `Assinar por ${ent?.pricing?.annual_label ?? "R$ 239,90/ano — economia de R$ 118,90"}`}
+              <Button variant="outline" onClick={() => startCheckout("annual")} disabled={starting !== null} loading={starting === "annual"}>
+                {`Assinar por ${ent?.pricing?.annual_label ?? "R$ 239,90/ano — economia de R$ 118,90"}`}
               </Button>
               <p className="text-xs text-muted-foreground">
                 O pagamento é feito numa página segura do Stripe. Você confere tudo antes de

@@ -146,10 +146,10 @@ export default function FichaDaMetrica({
       className="inline-flex items-center gap-1.5 max-w-full rounded-full border border-border bg-muted/40 px-2.5 py-1"
     >
       <span className={cn("w-1.5 h-1.5 rounded-full bg-current shrink-0", tinta)} aria-hidden />
-      <span className="text-[13px] text-foreground font-medium min-w-0">{label}</span>
+      <span className="text-footnote text-foreground font-medium min-w-0">{label}</span>
       {linha.tipo === "contagem" ? (
         <span
-          className="text-[13px] text-foreground font-medium whitespace-nowrap"
+          className="text-footnote text-foreground font-medium whitespace-nowrap"
           style={{ fontVariantNumeric: "proportional-nums" }}
         >
           {/* A forma canônica. O zero entra aqui como qualquer outro número:
@@ -161,7 +161,7 @@ export default function FichaDaMetrica({
         /* Consentida SEM meta semanal: não se inventa denominador (regra A.4),
            e "sem registro" só pode aparecer aqui — nunca como eufemismo de um
            zero que tem meta. A distinção que o tipo faz sobrevive na forma. */
-        <span className="text-[13px] text-muted-foreground whitespace-nowrap">{linha.texto}</span>
+        <span className="text-footnote text-muted-foreground whitespace-nowrap">{linha.texto}</span>
       )}
       {marcar && (
         /* SÓ NO MEU CARTÃO — ver o bloco acima. Aqui a cor pode ficar: não há
@@ -187,7 +187,7 @@ export function FichaFantasma({ texto }: { texto: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-muted-foreground/50 px-2.5 py-1">
       <span className="w-1.5 h-1.5 rounded-full border border-muted-foreground/50" aria-hidden />
-      <span className="text-[13px] text-muted-foreground whitespace-nowrap">{texto}</span>
+      <span className="text-footnote text-muted-foreground whitespace-nowrap">{texto}</span>
     </span>
   );
 }

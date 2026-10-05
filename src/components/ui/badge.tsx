@@ -20,10 +20,15 @@ const badgeVariants = cva(
   },
 );
 
-export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}
 
+/* <span>, não <div>. O selo é sempre usado EM LINHA — ao lado de um título,
+   dentro de uma frase — e o <div> do shadcn dentro de <p> é HTML inválido
+   (o React avisava `validateDOMNesting` em Prosperidade, achado B3 da
+   Sentinela; o navegador ainda fecha o <p> antes do selo e pode quebrar a
+   linha). Visualmente nada muda: a classe já é `inline-flex`. */
 function Badge({ className, variant, ...props }: BadgeProps) {
-  return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
+  return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 
 export { Badge, badgeVariants };

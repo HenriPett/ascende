@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { HandHeart, Loader2, Send, Sunrise } from "lucide-react";
+import { HandHeart, Send, Sunrise } from "lucide-react";
 import { frasePublica } from "@/components/core/socialPhrases";
 import { SHAREABLE_METRICS } from "@/lib/socialMetrics";
 import { diaLocal, tintaDaMetrica } from "@/lib/socialSemana";
@@ -163,7 +163,7 @@ export default function FeedDoGrupo({
                 sticky existia e nunca era visto, e quem rolava perdia a
                 referência de qual dia estava lendo. Desce para 58px e sobe de
                 camada — deslocamento, não redesenho. */}
-            <p className="sticky top-[58px] z-20 bg-background/95 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <p className="sticky top-[58px] z-20 bg-background/95 py-1.5 text-caption2 font-semibold uppercase tracking-wider text-muted-foreground">
               {rotuloDoDia(dia)}
             </p>
 
@@ -213,7 +213,7 @@ export default function FeedDoGrupo({
       {dias.length > 0 && (
         <div className="pt-1 space-y-1.5">
           <div className="ascend-line" aria-hidden />
-          <p className="text-[11px] text-center text-muted-foreground">
+          <p className="text-caption2 text-center text-muted-foreground">
             Aqui acaba. O grupo mostra hoje e ontem.
           </p>
         </div>
@@ -229,12 +229,14 @@ export default function FeedDoGrupo({
             placeholder="Escrever um recado para o grupo"
             value={recado} onChange={(e) => setRecado(e.target.value)}
             aria-label="Recado para o grupo"
+            enterKeyHint="send"
           />
           <Button
             type="submit" size="icon" className="w-11 h-11 shrink-0"
             disabled={enviando || !recado.trim()} aria-label="Enviar recado"
+            loading={enviando}
           >
-            {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            <Send className="w-4 h-4" />
           </Button>
         </form>
       )}
@@ -254,7 +256,7 @@ function LinhaDeAto({ item }: { item: Extract<ItemDoFeed, { forma: "ato" }> }) {
         {frasePublica(p.nome, p.souEu, { kind: "ato", metricKey: p.metricKey, texto: null })}
       </span>
       {item.estado && (
-        <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
+        <span className="text-caption2 text-muted-foreground shrink-0 tabular-nums">
           {item.estado}
         </span>
       )}
@@ -308,7 +310,7 @@ function BlocoDeRecado({ recado }: { recado: Recado }) {
   return (
     <div className="my-2 border-l-2 border-border bg-muted/30 rounded-r-lg py-2.5 px-3">
       <p className="text-sm italic text-foreground break-words">“{recado.texto}”</p>
-      <p className="text-[11px] text-muted-foreground text-right mt-1">
+      <p className="text-caption2 text-muted-foreground text-right mt-1">
         — {recado.souEu ? "Você" : recado.nome},{" "}
         {new Date(recado.criadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
       </p>

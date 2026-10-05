@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Sparkles, Loader2, Check, X, Mic, MicOff, Camera, ClipboardCheck, Image as ImageIcon } from "lucide-react";
+import { Sparkles, Check, X, Mic, MicOff, Camera, ClipboardCheck, Image as ImageIcon } from "lucide-react";
 import { pillarById } from "@/lib/pillars";
 import { useProfile } from "@/hooks/useProfile";
 import { saveProposedEvents, type ProposedEvent } from "@/lib/captureEvents";
@@ -92,6 +92,11 @@ export default function CaptureBar({
   const [draft0] = useState(() => (initialText ? null : readDraft()));
   const [text, setText] = useState(initialText ?? draft0?.text ?? "");
   const [loading, setLoading] = useState(false);
+  /* A falha de interpretar mora EMBAIXO DA CAIXA, não num toast no topo da
+     tela — a ~700 pt do campo e do polegar. O texto digitado fica onde está:
+     a pessoa só toca de novo. Some quando ela volta a escrever ou tenta outra
+     vez. */
+  const [erroAnalise, setErroAnalise] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [proposed, setProposed] = useState<ProposedEvent[] | null>(draft0?.proposed ?? null);
   const [limitInfo, setLimitInfo] = useState<PlanLimitError | null>(null);
@@ -127,14 +132,16 @@ export default function CaptureBar({
     e.target.value = "";
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      toast.error("Envie uma imagem (print da fatura, comprovante, foto). Para PDF de fatura completa, use \"Importar fatura\" em Prosperidade.");
+      toast.error("Envie uma imagem (print da fatura, comprovante, foto). Para PDF de fatura completa, use \"Importar fatura\" em Prosperidade.", { id: "captura-imagem" });
       return;
     }
     try {
       const data = await imageToBase64(file, 1400);
       setImage({ name: file.name, data });
+      // Uma imagem entrou: o aviso da escolha anterior (tipo errado, ilegível) sai.
+      toast.dismiss("captura-imagem");
     } catch {
-      toast.error(`Não consegui ler "${file.name}".`);
+      toast.error(`Não consegui ler "${file.name}".`, { id: "captura-imagem" });
     }
   };
 
@@ -142,6 +149,7 @@ export default function CaptureBar({
     if (!text.trim() && !image) return;
     stopMic();
     markSeen("hoje-captura"); // usou a função: a dica não é mais necessária
+    setErroAnalise(null);
     setLoading(true);
     setLearned(null);
     setCommentary(null);
@@ -192,7 +200,7 @@ export default function CaptureBar({
       // por padrão, não).
       setChecked(events.map((ev) => proposedEventChecked(profile, ev.kind)));
     } catch {
-      toast.error("Não consegui interpretar agora. Verifique sua conexão e tente de novo.");
+      setErroAnalise("Não consegui interpretar agora. Verifique sua conexão e tente de novo — o seu texto continua aqui.");
     } finally {
       setLoading(false);
     }
@@ -221,7 +229,9 @@ export default function CaptureBar({
          um lançamento que o banco pôs em 2024. Agora, se nada entrou, a
          pessoa recebe o MOTIVO e nenhum XP é anunciado. */
       if (!savedEvents.length) {
-        toast.error(warnings[0] ?? "Não consegui salvar. Tente de novo.");
+        // `id` estável: a mensagem aqui varia (o aviso vem da gravação), e é
+        // pelo id que o sucesso da próxima tentativa dispensa este erro.
+        toast.error(warnings[0] ?? "Não consegui salvar. Tente de novo.", { id: "captura-salvar" });
         for (const w of warnings.slice(1)) toast.warning(w);
         return;
       }
@@ -237,6 +247,7 @@ export default function CaptureBar({
          "não registrei as calorias"). Com qualquer recusa no lote, o sucesso
          vira a forma contada, que é verdadeira sem repetir o número errado. */
       const plural = savedEvents.length === 1 ? "registro feito" : "registros feitos";
+      toast.dismiss("captura-salvar");
       toast.success(
         (savedEvents.length === 1 && !warnings.length
           ? `${savedEvents[0].summary} · +${gained} XP`
@@ -253,7 +264,7 @@ export default function CaptureBar({
       invalidateKeys(qc, [...LIFE_DATA_KEYS, "entitlements"]);
       onConfirmed?.(savedEvents.length);
     } catch {
-      toast.error("Não consegui salvar. Tente de novo.");
+      toast.error("Não consegui salvar. Tente de novo.", { id: "captura-salvar" });
     } finally {
       setSaving(false);
     }
@@ -283,7 +294,9 @@ export default function CaptureBar({
           <FirstTimeTip id="hoje-captura" />
           <Textarea
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => { setText(e.target.value); setErroAnalise(null); }}
+            aria-invalid={!!erroAnalise || undefined}
+            aria-describedby={erroAnalise ? "erro-captura" : undefined}
             placeholder={(() => {
               if (listening) return "Ouvindo… conte como foi o seu dia";
               if (image) return "Quer acrescentar algo sobre a imagem? (opcional)";
@@ -293,10 +306,19 @@ export default function CaptureBar({
             rows={2}
             maxLength={2000}
             className="resize-none"
+            /* O campo mais importante do app só tinha placeholder — que some
+               na primeira letra e que o leitor de tela não trata como nome. E
+               o Enter ENVIA: o teclado do iPhone precisa dizer "enviar", não
+               "retorno", senão a tecla mente sobre o que faz. */
+            aria-label="O que aconteceu"
+            enterKeyHint="send"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); analyze(); }
             }}
           />
+          {erroAnalise && (
+            <p id="erro-captura" role="alert" className="text-footnote text-destructive">{erroAnalise}</p>
+          )}
           {image && (
             <div className="flex items-center gap-2 text-xs rounded-full border bg-card px-2.5 py-1 w-fit max-w-full">
               <ImageIcon className="w-3 h-3 shrink-0" />
@@ -325,8 +347,8 @@ export default function CaptureBar({
             >
               {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </Button>
-            <Button onClick={analyze} disabled={loading || (!text.trim() && !image)}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Registrar"}
+            <Button onClick={analyze} disabled={loading || (!text.trim() && !image)} loading={loading}>
+              Registrar
             </Button>
           </div>
         </>
@@ -353,19 +375,19 @@ export default function CaptureBar({
                 <span className="text-sm flex-1 min-w-0 break-words">
                   {ev.summary}
                   {trackerOff && (
-                    <span className="block text-[11px] text-muted-foreground">
+                    <span className="block text-caption2 text-muted-foreground">
                       Você não acompanha {trackerForEventKind(ev.kind)?.label.toLowerCase() ?? "isso"} — marque se quiser registrar mesmo assim
                     </span>
                   )}
                 </span>
-                <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">{meta?.name ?? ev.pillar}</span>
+                <span className="text-caption2 text-muted-foreground shrink-0 whitespace-nowrap">{meta?.name ?? ev.pillar}</span>
               </label>
             );
           })}
           {/* Aderência ao plano ativo: o plano deixa de ser documento parado e
               comenta o dia. Lida ANTES de confirmar, de propósito. */}
           {commentary && (
-            <p className="flex items-start gap-2 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-[13px] leading-snug text-muted-foreground">
+            <p className="flex items-start gap-2 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-footnote leading-snug text-muted-foreground">
               <ClipboardCheck className="w-3.5 h-3.5 mt-0.5 shrink-0 text-gold" aria-hidden />
               <span className="min-w-0 break-words">{commentary}</span>
             </p>
@@ -374,10 +396,8 @@ export default function CaptureBar({
             <Button variant="ghost" onClick={() => { setProposed(null); setCommentary(null); }} disabled={saving}>
               <X className="w-4 h-4 mr-1" /> Cancelar
             </Button>
-            <Button onClick={confirm} disabled={saving}>
-              {saving
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : (<><Check className="w-4 h-4 mr-1" /> {selectedCount === 1 ? "Registrar 1 item" : `Registrar ${selectedCount} itens`}</>)}
+            <Button onClick={confirm} disabled={saving} loading={saving}>
+              <Check className="w-4 h-4 mr-1" /> {selectedCount === 1 ? "Registrar 1 item" : `Registrar ${selectedCount} itens`}
             </Button>
           </div>
         </div>

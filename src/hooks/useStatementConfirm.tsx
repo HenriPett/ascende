@@ -100,7 +100,7 @@ export function useStatementConfirm() {
         });
       } catch (e) {
         console.error("fonte da fatura", e);
-        toast.error("Não consegui abrir a trilha deste arquivo, então não gravei nada. Tente de novo.");
+        toast.error("Não consegui abrir a trilha deste arquivo, então não gravei nada. Tente de novo.", { id: "fatura-gravar" });
         return null;
       }
 
@@ -202,11 +202,13 @@ export function useStatementConfirm() {
           ? "Esses lançamentos já estavam registrados. Nada foi duplicado."
           : "Nada novo para registrar.");
       }
+      // Gravou: o erro de uma tentativa anterior (trilha ou linhas) não vale mais.
+      toast.dismiss("fatura-gravar");
       qc.invalidateQueries();
       return { accepted, duplicates, source, awarded };
     } catch (e) {
       console.error("confirmar lançamentos", e);
-      toast.error("Não consegui gravar os lançamentos. Tente de novo.");
+      toast.error("Não consegui gravar os lançamentos. Tente de novo.", { id: "fatura-gravar" });
       return null;
     } finally {
       setSaving(false);

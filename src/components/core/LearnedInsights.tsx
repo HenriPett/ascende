@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useReducer, useRef } from "react";
+import { prefersReducedMotion } from "@/hooks/useReducedMotion";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Brain, X, Pencil, ThumbsDown, Check, Loader2, Undo2 } from "lucide-react";
@@ -142,7 +143,7 @@ function Bloco({
     <div className="rounded-xl border border-primary/25 bg-primary/5 p-3 space-y-2 animate-fade-up">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium flex items-center gap-1.5">
-          <Brain className="w-4 h-4 text-primary" />
+          <Brain className="w-4 h-4 text-gold-ink" />
           Aprendi sobre você
         </p>
         {/* Dispensar é sempre saída: este X não consulta `blocoCongelado`. Ele
@@ -187,10 +188,10 @@ function Bloco({
           que o bloco agora poupa. Com as ações aqui dentro, ele passa a dizer
           o que dá para fazer NESTA tela, e Ajustes vira o que de fato é: o
           histórico completo, para a revisão fria. */}
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-caption2 text-muted-foreground">
         Vou lembrar disso nas próximas conversas. Toque em qualquer linha para corrigir ou
         tirar do seu retrato.{" "}
-        <Link to="/app/ajustes" className="underline underline-offset-2 hover:text-foreground">
+        <Link to="/app/ajustes?secao=conselheiro" className="underline underline-offset-2 hover:text-foreground">
           Tudo o que sei sobre você fica em Ajustes.
         </Link>
       </p>
@@ -200,7 +201,7 @@ function Bloco({
 
 /** O erro fica na linha, em 11px, e some quando a pessoa mexe de novo. */
 function ErroInline({ children }: { children: React.ReactNode }) {
-  return <p className="text-[11px] text-destructive" role="alert">{children}</p>;
+  return <p className="text-caption2 text-destructive" role="alert">{children}</p>;
 }
 
 /** Teto da caixa de correção, como o `COMPOSER_MAX_H` do Conselheiro: passou
@@ -265,7 +266,7 @@ function CampoCorrecao({
   // Na montagem e sempre que um erro entra (o erro cresce a caixa e pode
   // empurrar o Salvar para debaixo da nav de novo).
   useEffect(() => {
-    caixa.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    caixa.current?.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
   }, [row.error]);
 
   return (
@@ -274,7 +275,7 @@ function CampoCorrecao({
     <li ref={caixa} className="space-y-2 px-1.5 -mx-1.5 py-1 scroll-mb-32">
       <label
         htmlFor={`aprendizado-${row.id}`}
-        className="text-[11px] font-medium text-muted-foreground"
+        className="text-caption2 font-medium text-muted-foreground"
       >
         Como isso deveria estar escrito?
       </label>
@@ -292,7 +293,7 @@ function CampoCorrecao({
       />
       {row.error && <ErroInline>{row.error}</ErroInline>}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-caption2 text-muted-foreground">
           {row.draft.trim().length}/{MEMORY_CONTENT_MAX}
         </span>
         {/* `h-11` por cima do `size="sm"`: o `sm` é h-9 = 36px MEDIDOS, e ao
@@ -302,10 +303,8 @@ function CampoCorrecao({
           <Button variant="ghost" size="sm" className="h-11" onClick={onCancelar} disabled={salvando}>
             Cancelar
           </Button>
-          <Button size="sm" className="h-11" onClick={onSalvar} disabled={salvando || !row.draft.trim()}>
-            {salvando
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : (<><Check className="w-4 h-4 mr-1" /> Salvar</>)}
+          <Button size="sm" className="h-11" onClick={onSalvar} disabled={salvando || !row.draft.trim()} loading={salvando}>
+            <Check className="w-4 h-4 mr-1" /> Salvar
           </Button>
         </div>
       </div>
@@ -373,7 +372,10 @@ function Linha({
           type="button"
           onClick={onDesfazer}
           disabled={desfazendo}
-          className="shrink-0 inline-flex items-center gap-1.5 min-h-11 px-3 -mr-1 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          // O rótulo "Desfazer" fica na tela durante a espera; só o ícone vira
+          // spinner. `aria-busy` diz ao leitor de tela que ele está trabalhando.
+          aria-busy={desfazendo || undefined}
+          className="shrink-0 inline-flex items-center gap-1.5 min-h-11 px-3 -mr-1 rounded-lg text-sm font-medium text-gold-ink hover:bg-primary/10 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {desfazendo
             ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -408,6 +410,7 @@ function Linha({
           <button
             type="button"
             disabled={recusando || !rowAceitaMenu(row)}
+            aria-busy={recusando || undefined}
             aria-label={`Corrigir ou recusar: ${row.content}`}
             className="w-full flex items-start gap-2 min-h-11 px-1.5 py-2 rounded-lg text-left text-sm hover:bg-primary/10 data-[state=open]:bg-primary/10 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
@@ -419,7 +422,7 @@ function Linha({
               {/* `whitespace-nowrap`: sem isto o "·" (1,4px de largura) sobrava
                   sozinho no fim da linha e a categoria descia para a seguinte —
                   um separador separando nada. Agora os dois quebram juntos. */}
-              <span className="ml-1.5 text-[11px] text-muted-foreground whitespace-nowrap">
+              <span className="ml-1.5 text-caption2 text-muted-foreground whitespace-nowrap">
                 · {categoria}
               </span>
               {/* A linha passa a dizer de quem é a frase. A AUTORIA da memória
@@ -427,7 +430,7 @@ function Linha({
                   deduzido, e o banco congela `created_by` por gatilho. Isto
                   aqui é sobre o TEXTO, que agora é dela. */}
               {outcome === "corrigida" && (
-                <span className="block text-[11px] text-muted-foreground">Corrigido por você</span>
+                <span className="block text-caption2 text-muted-foreground">Corrigido por você</span>
               )}
             </span>
           </button>

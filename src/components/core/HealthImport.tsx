@@ -415,6 +415,7 @@ export default function HealthImport() {
         toast.error(
           "Não consegui abrir a trilha deste arquivo, então NÃO gravei nada. "
           + "Tente de novo — reenviar o mesmo arquivo é seguro.",
+          { id: "saude-gravar" },
         );
         return;
       }
@@ -566,6 +567,8 @@ export default function HealthImport() {
       setResult(null);
       setChecked([]);
       setDup([]);
+      // Gravou: o erro de uma tentativa anterior (trilha ou gravação) não vale mais.
+      toast.dismiss("saude-gravar");
       qc.invalidateQueries();
     } catch {
       // A fonte fica marcada como falha: sem isso ela apareceria em Fontes
@@ -573,7 +576,7 @@ export default function HealthImport() {
       if (source) {
         try { await markSourceFailed(source.id); } catch { /* nada mais a fazer */ }
       }
-      toast.error("Não consegui gravar tudo. Nada foi perdido — tente de novo.");
+      toast.error("Não consegui gravar tudo. Nada foi perdido — tente de novo.", { id: "saude-gravar" });
     } finally {
       setSaving(false);
     }
@@ -604,7 +607,7 @@ export default function HealthImport() {
       {!result && !unknownFile && !emptyExport && !nothingNew && !imported
         && !readFailure && !reading && (
         <>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-subhead text-muted-foreground">
             Traga o histórico que já existe nos seus outros aplicativos. O arquivo é lido{" "}
             <strong>aqui no seu aparelho</strong>, sem passar por IA — nada é interpretado ou
             resumido, e cada registro entra com a data original.
@@ -623,7 +626,7 @@ export default function HealthImport() {
               <code className="rounded bg-muted px-1">.zip</code> para cá — ele vem com sono,
               treino, peso e hidratação juntos.
             </p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-caption2 text-muted-foreground">
               O arquivo costuma passar de 500 MB. Ele é lido no aparelho, em partes, e nunca
               é enviado para nenhum servidor.
             </p>
@@ -634,7 +637,9 @@ export default function HealthImport() {
               é longa, e a promessa honesta é a FORMA das colunas, não a marca —
               por isso "e outros". */}
           <details className="rounded-xl border p-3">
-            <summary className="text-sm font-medium cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            {/* 44 pt de alvo por PADDING, não por `flex`: `display: flex` num <summary>
+                tira o triângulo de abrir/fechar, que é o que diz que ele abre. */}
+            <summary className="min-h-11 py-3 text-sm font-medium cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
               Ou um CSV de um app específico
             </summary>
             <div className="mt-2 space-y-2">
@@ -644,12 +649,12 @@ export default function HealthImport() {
                     <Check className="w-3 h-3 shrink-0" style={{ color: "hsl(var(--success))" }} />
                     {grupo.brings}
                   </p>
-                  <p className="text-[11px] text-muted-foreground pl-4">
+                  <p className="text-caption2 text-muted-foreground pl-4">
                     {grupo.app} e outros
                   </p>
                 </div>
               ))}
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-caption2 text-muted-foreground">
                 O que vale é o formato das colunas, não a marca do app: um export não citado
                 funciona se tiver as mesmas colunas.
               </p>
@@ -666,8 +671,12 @@ export default function HealthImport() {
           O export de 876 MB leva ~10 s no desktop e bem mais no celular. Sem
           barra e sem cancelar, a tela parece travada e a única saída seria
           fechar o app. */}
+      {/* `role="status"`: a leitura leva segundos, e quem usa leitor de tela
+          não vê o spinner nem a barra — sem isto, a tela simplesmente parece
+          não ter respondido ao toque. O texto já diz o que está acontecendo;
+          o papel faz ele ser anunciado. */}
       {reading && (
-        <div className="rounded-xl border p-3.5 space-y-2">
+        <div className="rounded-xl border p-3.5 space-y-2" role="status">
           <p className="text-sm font-medium flex items-center gap-1.5">
             <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
             {readProgress ? "Lendo o export do App Saúde..." : "Lendo o arquivo..."}
@@ -681,7 +690,7 @@ export default function HealthImport() {
                   <> · {mb(readProgress.xmlBytes)} de dados já lidos</>
                 )}
               </p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-caption2 text-muted-foreground">
                 Arquivo grande demora — ele está sendo lido em partes, aqui no seu aparelho.
               </p>
               <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={cancelarLeitura}>
@@ -699,7 +708,7 @@ export default function HealthImport() {
             <Check className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--success))" }} />
             {imported.label} no seu histórico
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-subhead text-muted-foreground">
             {imported.duplicates > 0 && (
               <>
                 <strong>{imported.duplicates.toLocaleString("pt-BR")}</strong>{" "}
@@ -731,7 +740,7 @@ export default function HealthImport() {
             <Check className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--success))" }} />
             Nada novo entrou — e está tudo certo
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-subhead text-muted-foreground">
             {nothingNew.fromThisFile > 0 && (
               <>
                 <strong>{nothingNew.fromThisFile.toLocaleString("pt-BR")}</strong>{" "}
@@ -770,12 +779,12 @@ export default function HealthImport() {
             <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--warning))" }} />
             "{emptyExport}" é um export do App Saúde, mas veio vazio
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-subhead text-muted-foreground">
             Abri o arquivo e ele está no formato certo — só não tem nenhum registro dentro.
             Isso costuma acontecer quando a exportação é interrompida no iPhone antes de
             terminar. <strong>Não importei nada</strong>.
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-subhead text-muted-foreground">
             Refaça a exportação (Ajustes do app Saúde → sua foto de perfil →{" "}
             <strong>Exportar todos os dados de saúde</strong>) e espere o iPhone avisar que
             terminou antes de compartilhar o arquivo.
@@ -794,12 +803,12 @@ export default function HealthImport() {
             <FileQuestion className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--warning))" }} />
             Não reconheci o formato de "{unknownFile}"
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-subhead text-muted-foreground">
             Eu leio o <strong>.zip do App Saúde do iPhone</strong> e CSV de apps de sono, treino
             e peso — o que vale é o formato das colunas. Este arquivo não tem nenhum desses
             formatos, então <strong>não importei nada</strong>, em vez de adivinhar números.
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-subhead text-muted-foreground">
             Se for um documento em texto (um exame, um plano, um relatório), leve ao Conselheiro:
             lá o conteúdo é interpretado de verdade.
           </p>
@@ -842,7 +851,7 @@ export default function HealthImport() {
                 CSV, confira se o arquivo abre numa planilha.</>
             )}
           </p>
-          <p className="text-[11px] text-muted-foreground">Nada foi importado.</p>
+          <p className="text-caption2 text-muted-foreground">Nada foi importado.</p>
           <Button variant="outline" size="sm" onClick={() => { reset(); fileRef.current?.click(); }}>
             <Upload className="w-3.5 h-3.5 mr-1.5" /> Tentar outro arquivo
           </Button>
@@ -893,7 +902,7 @@ export default function HealthImport() {
                       return (
                         <span
                           key={kind}
-                          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
+                          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-caption2"
                           style={{ color: cor, borderColor: `hsl(var(${meta.colorVar}) / 0.35)` }}
                         >
                           <meta.icon className="w-3 h-3 shrink-0" />
@@ -910,14 +919,14 @@ export default function HealthImport() {
                     De {longDate(result.range.from)} a {longDate(result.range.to)}.
                   </p>
                 )}
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-caption2 text-muted-foreground">
                   {result.stats.rows.toLocaleString("pt-BR")} linhas lidas
                   {result.format === "workout" && ` · agrupadas em ${result.events.length} sessões`}
                   {result.stats.duplicates > 0 && ` · ${result.stats.duplicates} do mesmo dia foram unidas`}
                   {result.stats.skipped > 0 && ` · ${result.stats.skipped} sem dado aproveitável`}
                 </p>
                 {result.stats.truncated > 0 && (
-                  <p className="text-xs rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5">
+                  <p className="text-xs rounded-md border border-warning/40 bg-warning/5 p-2.5">
                     {truncationMessage(result.stats)}
                   </p>
                 )}
@@ -936,7 +945,7 @@ export default function HealthImport() {
               )}
 
               {!dupCheckOk && (
-                <p className="text-xs rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5">
+                <p className="text-xs rounded-md border border-warning/40 bg-warning/5 p-2.5">
                   Não consegui conferir o que já está no seu histórico agora — então
                   <strong> tudo veio marcado</strong>. Isso é diferente de "não há repetido":
                   se você já importou este período, revise a lista antes de confirmar.
@@ -961,7 +970,7 @@ export default function HealthImport() {
             </div>
           ) : null}
           footer={
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-caption2 text-muted-foreground">
               Os registros entram com a <strong>data original</strong>, não com a de hoje — o
               histórico fica no lugar certo nos Indicadores e no Conselheiro. O arquivo não sai
               do seu aparelho.
@@ -988,7 +997,7 @@ export default function HealthImport() {
                   <p className="text-xs text-muted-foreground">{longDate(ev.day)}</p>
                 </div>
                 {!!ev.muscles?.length && (
-                  <span className="text-[11px] text-muted-foreground shrink-0 hidden sm:inline">
+                  <span className="text-caption2 text-muted-foreground shrink-0 hidden sm:inline">
                     {ev.muscles.join(", ")}
                   </span>
                 )}

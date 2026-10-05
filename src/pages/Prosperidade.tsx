@@ -6,6 +6,7 @@
 // Estimativa aparece sempre como estimativa: hachurada no gráfico e declarada
 // como premissa na boca do Conselheiro. A honestidade da faixa é a marca.
 import { useEffect, useMemo, useState } from "react";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { spParts } from "@/lib/dates";
@@ -34,7 +35,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
-  Trash2, Plus, Loader2, LineChart as LineChartIcon, Compass, Repeat,
+  Trash2, Plus, LineChart as LineChartIcon, Compass, Repeat,
   ArrowRight, ArrowLeft, SlidersHorizontal, Pause, Play, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { brl, todayISO } from "@/lib/format";
@@ -113,6 +114,7 @@ function RaioX({ initialIncome, onDone, onSkip }: {
       toast.error("Preencha ao menos a renda ou uma estimativa — pode ser um chute honesto.");
       return;
     }
+    toast.dismiss("Preencha ao menos a renda ou uma estimativa — pode ser um chute honesto.");
     setSaving(true);
     try {
       if (incomeV > 0) {
@@ -174,6 +176,7 @@ function RaioX({ initialIncome, onDone, onSkip }: {
 
       toast.success("Mês mapeado! O Conselheiro já enxerga seu orçamento — refine registrando o dia a dia.");
       refreshProfile();
+      toast.dismiss("Não consegui salvar o Raio-X. Tente de novo.");
       qc.invalidateQueries();
       onDone();
     } catch {
@@ -194,9 +197,14 @@ function RaioX({ initialIncome, onDone, onSkip }: {
           Você já tinha contado — deixamos preenchido. Ajuste se mudou.
         </p>
       )}
-      <Input inputMode="decimal" placeholder="Ex.: 4500" value={income}
+      {/* `min-w-0`: sem ele o campo entra na conta de largura mínima com o
+          tamanho intrínseco de um <input> (~20 caracteres), que a 40 pt é
+          mais largo que a tela. */}
+      <Input className="min-w-0" inputMode="decimal" placeholder="Ex.: 4500" value={income}
         onChange={(e) => setIncome(e.target.value)} aria-label="Renda mensal aproximada (R$)" />
-      <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+      {/* A caixa tem 17 pt; o alvo é a linha inteira (o <label>), que agora
+          garante 44 pt de altura — antes eram 33 (Lince B7). */}
+      <label className="flex items-center gap-2 min-h-11 py-1 text-xs text-muted-foreground cursor-pointer">
         <Checkbox checked={salaryAsRecurring} onCheckedChange={(v) => setSalaryAsRecurring(Boolean(v))} />
         Lançar como entrada fixa todo mês (Salário) — desmarque se sua renda variar muito
       </label>
@@ -214,11 +222,16 @@ function RaioX({ initialIncome, onDone, onSkip }: {
       <p className="text-xs text-muted-foreground -mt-1.5">
         Preencha só os que existem para você. Viram <strong>recorrentes</strong>: cadastra uma vez, nunca mais digita.
       </p>
+      {/* Linhas que QUEBRAM com Texto Maior: o campo tem largura fixa em
+          rem (cresce junto com a fonte), então rótulo e campo lado a lado
+          passavam da tela. No tamanho padrão continuam numa linha só; quando
+          não cabem, o campo desce, alinhado à direita, e o rótulo quebra em
+          vez de cortar. */}
       <div className="space-y-2">
         {FIXED_SUGGESTIONS.map((s, i) => (
-          <div key={s.label} className="flex items-center gap-2">
-            <span className="text-sm flex-1 min-w-0 truncate">{s.label}</span>
-            <Input className="w-28" inputMode="decimal" placeholder="R$"
+          <div key={s.label} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-sm flex-1 min-w-[min(6rem,100%)] hyphens-auto [overflow-wrap:break-word]">{s.label}</span>
+            <Input className="w-28 max-w-full min-w-0 ml-auto" inputMode="decimal" placeholder="R$"
               value={fixed[i] ?? ""} aria-label={`Valor mensal: ${s.label}`}
               onChange={(e) => setFixed((f) => ({ ...f, [i]: e.target.value }))} />
           </div>
@@ -241,9 +254,9 @@ function RaioX({ initialIncome, onDone, onSkip }: {
       </p>
       <div className="space-y-2">
         {VARIABLE_CATEGORIES.map((c) => (
-          <div key={c} className="flex items-center gap-2">
-            <span className="text-sm flex-1">{c}</span>
-            <Input className="w-28" inputMode="decimal" placeholder="R$"
+          <div key={c} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-sm flex-1 min-w-[min(6rem,100%)] hyphens-auto [overflow-wrap:break-word]">{c}</span>
+            <Input className="w-28 max-w-full min-w-0 ml-auto" inputMode="decimal" placeholder="R$"
               value={variable[c] ?? ""} aria-label={`Estimativa mensal: ${c}`}
               onChange={(e) => setVariable((v) => ({ ...v, [c]: e.target.value }))} />
           </div>
@@ -251,8 +264,8 @@ function RaioX({ initialIncome, onDone, onSkip }: {
       </div>
       <div className="flex gap-2">
         <Button variant="ghost" onClick={() => setStep(1)}><ArrowLeft className="w-4 h-4" /></Button>
-        <Button className="flex-1" onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Mapear meu mês"}
+        <Button className="flex-1" onClick={save} loading={saving}>
+          Mapear meu mês
         </Button>
       </div>
     </div>,
@@ -265,7 +278,7 @@ function RaioX({ initialIncome, onDone, onSkip }: {
           style={{ background: "hsl(var(--prosperidade) / 0.12)" }}>
           <Compass className="w-5 h-5" style={{ color: "hsl(var(--prosperidade))" }} />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0 break-words">
           <h2 className="font-display font-semibold">Raio-X de 60 segundos</h2>
           <p className="text-xs text-muted-foreground">
             3 perguntas e o seu mês nasce mapeado — sem registrar um gasto sequer.
@@ -279,7 +292,8 @@ function RaioX({ initialIncome, onDone, onSkip }: {
         ))}
       </div>
       {steps[step]}
-      <button className="w-full text-xs text-muted-foreground underline" onClick={onSkip} disabled={saving}>
+      {/* Saída do fluxo com alvo de 44 pt — o texto não muda de tamanho. */}
+      <button className="w-full min-h-11 inline-flex items-center justify-center text-xs text-muted-foreground underline" onClick={onSkip} disabled={saving}>
         Prefiro registrar do meu jeito, sem o Raio-X
       </button>
     </Card>
@@ -287,6 +301,9 @@ function RaioX({ initialIncome, onDone, onSkip }: {
 }
 
 export default function Prosperidade() {
+  /* O Recharts anima em JS, fora do `prefers-reduced-motion` do CSS: com
+     movimento reduzido os gráficos nascem prontos, sem crescer do zero. */
+  const reduzMovimento = useReducedMotion();
   const { user } = useAuth();
   const { profile, refresh: refreshProfile } = useProfile();
   const qc = useQueryClient();
@@ -585,7 +602,8 @@ export default function Prosperidade() {
       .upsert([{ user_id: user.id, category: categoryName, amount: newAmount, updated_at: new Date().toISOString() }],
         { onConflict: "user_id,category" });
     if (error) { toast.error("Não consegui ajustar a estimativa. Tente de novo."); return; }
-    toast.success(`Estimativa de ${categoryName} ajustada para ${brl(newAmount)}.`);
+    toast.dismiss("Não consegui ajustar a estimativa. Tente de novo.");
+    // Sem toast: o novo valor aparece na própria linha da estimativa.
     qc.invalidateQueries({ queryKey: ["category-estimates"] });
   };
 
@@ -619,6 +637,7 @@ export default function Prosperidade() {
         occurred_at: cycleOccurrenceISO(todayISO(), cycleDay, sal.day_of_month),
         source: "recurring", recurring_id: sal.id,
       });
+      toast.dismiss("Não consegui criar a entrada fixa. Tente de novo.");
       toast.success("Salário lançado como entrada fixa — cai todo mês, sozinho.");
       qc.invalidateQueries();
     } catch {
@@ -632,8 +651,10 @@ export default function Prosperidade() {
     if (!user) return;
     const v = Number(raw.replace(",", "."));
     if (!v || v <= 0) { toast.error("Informe um valor válido em reais, como 80."); return; }
+    toast.dismiss("Informe um valor válido em reais, como 80.");
     const { error } = await supabase.from("profiles").update({ daily_spend_limit: v }).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar. Tente de novo.");
     toast.success("Teto de gasto diário salvo. Acompanhe na tela Hoje.");
     refreshProfile();
   };
@@ -653,9 +674,11 @@ export default function Prosperidade() {
     if (!user) return;
     const v = Number(raw.replace(",", "."));
     if (!v || v <= 0) { toast.error("Informe um valor válido em reais, como 2500."); return; }
+    toast.dismiss("Informe um valor válido em reais, como 2500.");
     const { error } = await supabase.from("profiles").update({ monthly_budget: v }).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar. Tente de novo."); return; }
-    toast.success("Orçamento do mês salvo.");
+    toast.dismiss("Não consegui salvar. Tente de novo.");
+    // Sem toast: o orçamento novo aparece no campo e no saldo do mês.
     refreshProfile();
   };
 
@@ -678,6 +701,7 @@ export default function Prosperidade() {
     e.preventDefault();
     const v = Number(amount.replace(",", "."));
     if (!user || !v || v <= 0) { toast.error("Informe um valor válido em reais."); return; }
+    toast.dismiss("Informe um valor válido em reais.");
 
     // Parcelada: N linhas de uma vez, ligadas por um group_id. Uma linha por
     // ciclo, cada uma com a data real da parcela — é assim que ela entra no
@@ -692,6 +716,8 @@ export default function Prosperidade() {
         toast.error("Esse valor não dá para dividir nesse número de parcelas.");
         return;
       }
+      toast.dismiss(`Informe o número de parcelas, de ${MIN_INSTALLMENTS} a ${MAX_INSTALLMENTS}.`);
+      toast.dismiss("Esse valor não dá para dividir nesse número de parcelas.");
       const groupId = newInstallmentGroupId();
       setSaving(true);
       const { error } = await supabase.from("transactions").insert(
@@ -703,6 +729,7 @@ export default function Prosperidade() {
       );
       setSaving(false);
       if (error) { toast.error("Não consegui salvar as parcelas. Tente de novo."); return; }
+      toast.dismiss("Não consegui salvar as parcelas. Tente de novo.");
       toast.success(`Compra registrada em ${installmentPlan.count} parcelas, uma por mês. +XP`);
       setAmount(""); setDescription(""); setParcelas(""); setParcelado(false); setValorMode("total");
       qc.invalidateQueries();
@@ -716,15 +743,20 @@ export default function Prosperidade() {
     });
     setSaving(false);
     if (error) { toast.error("Não consegui salvar. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar. Tente de novo.");
     toast.success(kind === "expense" ? "Gasto registrado. +XP" : "Entrada registrada. +XP");
     setAmount(""); setDescription("");
     qc.invalidateQueries();
   };
 
+  /* Sem toast de sucesso: a linha some da lista, que é a confirmação. Mas o
+     erro passou a ser checado — antes a falha era engolida e o toast dizia
+     "removido" mesmo quando nada tinha sido apagado. */
   const remove = async (id: string) => {
-    await supabase.from("transactions").delete().eq("id", id);
+    const { error } = await supabase.from("transactions").delete().eq("id", id);
+    if (error) { toast.error("Não consegui remover o lançamento. Tente de novo."); return; }
+    toast.dismiss("Não consegui remover o lançamento. Tente de novo.");
     qc.invalidateQueries();
-    toast.success("Lançamento removido.");
   };
 
   /** Toque em apagar. Linha avulsa some direto, como sempre. Parcela de uma
@@ -750,6 +782,7 @@ export default function Prosperidade() {
     const { error } = await supabase.from("transactions").delete().eq("group_id", groupDel.groupId);
     setGroupDel(null);
     if (error) { toast.error("Não consegui apagar a compra. Tente de novo."); return; }
+    toast.dismiss("Não consegui apagar a compra. Tente de novo.");
     qc.invalidateQueries();
     toast.success(`Compra apagada — ${count} lançamentos.`);
   };
@@ -759,6 +792,7 @@ export default function Prosperidade() {
     const v = Number(recAmount.replace(/\./g, "").replace(",", "."));
     const day = Math.min(28, Math.max(1, Number(recDay) || 5));
     if (!v || v <= 0) { toast.error("Informe o valor do recorrente."); return; }
+    toast.dismiss("Informe o valor do recorrente.");
     setRecSaving(true);
     try {
       const { data: created, error } = await supabase.from("recurring_transactions")
@@ -779,6 +813,7 @@ export default function Prosperidade() {
         ? "Entrada fixa criada — cai todo mês, sozinha."
         : "Recorrente criado — se repete todo mês, sozinho.");
       setRecDesc(""); setRecAmount("");
+      toast.dismiss("Não consegui criar o recorrente. Tente de novo.");
       qc.invalidateQueries();
     } catch {
       toast.error("Não consegui criar o recorrente. Tente de novo.");
@@ -791,6 +826,7 @@ export default function Prosperidade() {
     const { error } = await supabase.from("recurring_transactions")
       .update({ active: !r.active }).eq("id", r.id);
     if (error) { toast.error("Não consegui atualizar o recorrente. Tente de novo."); return; }
+    toast.dismiss("Não consegui atualizar o recorrente. Tente de novo.");
     toast.success(r.active ? "Recorrente pausado (não entra nos próximos meses)." : "Recorrente reativado.");
     qc.invalidateQueries({ queryKey: ["recurring-transactions"] });
   };
@@ -798,6 +834,7 @@ export default function Prosperidade() {
   const removeRecurring = async (r: RecurringTx) => {
     const { error } = await supabase.from("recurring_transactions").delete().eq("id", r.id);
     if (error) { toast.error("Não consegui excluir o recorrente. Tente de novo."); return; }
+    toast.dismiss("Não consegui excluir o recorrente. Tente de novo.");
     toast.success("Recorrente excluído. Lançamentos já feitos permanecem.");
     qc.invalidateQueries();
   };
@@ -806,13 +843,21 @@ export default function Prosperidade() {
   const pct = (v: number) => `${Math.max(0, Math.min(100, (v / mapTotal) * 100))}%`;
 
   return (
-    <div className="max-w-2xl lg:max-w-5xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl lg:max-w-5xl mx-auto space-y-4 animate-fade-up [&_:is(h1,h2,h3)]:hyphens-auto [&_:is(h1,h2,h3)]:[overflow-wrap:break-word]">
+      {/* Títulos podem quebrar no meio da palavra, e só quando a palavra
+        não cabe: com Texto Maior a 40 pt, "Prosperidade" ou "Conselheiro"
+        num `text-2xl` passam da largura da tela sozinhos. Hifeniza em
+        pt-BR onde o dicionário deixa; senão, quebra onde precisar. No
+        tamanho padrão nenhum título chega na borda, então nada muda. */}
       {/* No celular o botão de ação desce para a própria linha, em largura
           total: dividindo a linha com o cabeçalho, sobravam 176px para o h1 e
           a descrição (4 linhas), com espaço morto embaixo do botão. */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="font-display text-2xl font-semibold" style={{ color: "hsl(var(--prosperidade))" }}>
+          {/* A cor que IDENTIFICA o pilar não é a que carrega tinta: o
+              `--prosperidade` puro dava 2,65:1 sobre o marfim. `text-gold-ink`
+              é o mesmo ouro, escurecido até passar (5,09:1). */}
+          <h1 className="font-display text-2xl font-semibold text-gold-ink">
             Prosperidade
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -855,7 +900,7 @@ export default function Prosperidade() {
         >
           <Card className="p-3 flex items-center gap-2.5 hover:bg-muted/40 transition-colors">
             <Compass className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--prosperidade))" }} />
-            <p className="text-sm">
+            <p className="text-subhead">
               {monthlyIncome > 0
                 ? (<>Falta o outro lado: <strong>Raio-X de 60 segundos</strong> para mapear o que sai todo mês</>)
                 : (<>Fazer o <strong>Raio-X de 60 segundos</strong> e mapear o mês sem registrar nada</>)}
@@ -870,23 +915,23 @@ export default function Prosperidade() {
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-display font-semibold">Mapa do mês</h2>
             {monthMap.hasEstimates && (
-              <Badge variant="secondary" className="text-[10px]">contém estimativas</Badge>
+              <Badge variant="secondary" className="text-caption2">contém estimativas</Badge>
             )}
           </div>
           <div className="grid grid-cols-3 gap-2.5">
             <div className="min-w-0">
-              <p className="text-[11px] text-muted-foreground">Entra</p>
-              <p className="font-semibold text-success text-[13px] sm:text-base tracking-tight">{brl(monthMap.incomeExpected)}</p>
+              <p className="text-caption2 text-muted-foreground">Entra</p>
+              <p className="font-semibold text-success text-footnote sm:text-base tracking-tight">{brl(monthMap.incomeExpected)}</p>
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] text-muted-foreground">Comprometido e variáveis</p>
-              <p className="font-semibold text-[13px] sm:text-base tracking-tight">{brl(monthMap.committed + monthMap.variableExpected)}</p>
+              <p className="text-caption2 text-muted-foreground">Comprometido e variáveis</p>
+              <p className="font-semibold text-footnote sm:text-base tracking-tight">{brl(monthMap.committed + monthMap.variableExpected)}</p>
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] text-muted-foreground">Sobra para viver</p>
+              <p className="text-caption2 text-muted-foreground">Sobra para viver</p>
               <p className={monthMap.leftover >= 0
-                ? "font-semibold text-[13px] sm:text-base tracking-tight"
-                : "font-semibold text-destructive text-[13px] sm:text-base tracking-tight"}>
+                ? "font-semibold text-footnote sm:text-base tracking-tight"
+                : "font-semibold text-destructive text-footnote sm:text-base tracking-tight"}>
                 {brl(monthMap.leftover)}
               </p>
             </div>
@@ -909,15 +954,22 @@ export default function Prosperidade() {
       {/* ── Self-heal: renda declarada sem entrada fixa ────────── */}
       {needsSalaryFix && (
         <Card className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-          <p className="text-sm flex-1">
+          <p className="text-subhead flex-1">
             Sua renda de <strong>{brl(monthlyIncome)}</strong> está mapeada, mas ainda não entra
             nas <strong>Entradas</strong> do mês — por isso o saldo aparece negativo.
           </p>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button size="sm" onClick={adoptSalaryRecurring} disabled={salaryFixSaving}>
-              {salaryFixSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Lançar como entrada fixa"}
+          {/* No celular esta linha é uma fila de dois controles, e os dois eram
+              `shrink-0`/`nowrap`: com o Texto Maior (raiz 23 pt e 40 pt) o botão
+              sozinho passava da largura da tela e a página rolava de lado —
+              a mesma classe do achado A1 do Lince no Hoje. Agora a fila
+              quebra, e o rótulo do botão quebra dentro dele, com piso de 44 pt.
+              No desktop (sm:) continua uma linha só ao lado do texto. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:shrink-0">
+            <Button size="sm" onClick={adoptSalaryRecurring} loading={salaryFixSaving}
+              className="h-auto coarse:h-auto min-h-9 coarse:min-h-11 whitespace-normal text-left py-2">
+              Lançar como entrada fixa
             </Button>
-            <button className="text-xs text-muted-foreground underline"
+            <button className="min-h-11 text-xs text-muted-foreground underline"
               onClick={() => { lsSet("prosperidade-salary-fix-dismiss", "1"); setSalaryFixDismissed(true); }}>
               Minha renda varia
             </button>
@@ -962,7 +1014,7 @@ export default function Prosperidade() {
         {/* `min-w-0` + `px-2`: a linha tem 390px num celular e três ocupantes.
             O rótulo encolhe em vez de empurrar, e as duas folgas de 8px
             garantem que o texto nunca encoste no alvo de toque das setas. */}
-        <button className="text-sm font-medium disabled:cursor-default min-w-0 px-2 truncate"
+        <button className="text-sm font-medium disabled:cursor-default min-w-0 min-h-11 px-2 truncate"
           disabled={viewMonth === nowKey}
           onClick={() => setViewMonth(nowKey)}
           title={viewMonth !== nowKey ? "Voltar ao mês atual" : undefined}>
@@ -989,28 +1041,28 @@ export default function Prosperidade() {
           Legenda por número diria a mesma coisa três vezes e ainda deixaria a
           dúvida de qual deles é previsão — são todos. */}
       {viewTotals.projected && (
-        <p className="flex items-center justify-center gap-1.5 flex-wrap text-[11px] text-muted-foreground -mt-1">
-          <Badge variant="secondary" className="text-[10px] font-normal">Previsão</Badge>
+        <p className="flex items-center justify-center gap-1.5 flex-wrap text-caption2 text-muted-foreground -mt-1">
+          <Badge variant="secondary" className="text-caption2 font-normal">Previsão</Badge>
           inclui salário e fixos que ainda não caíram
         </p>
       )}
       {beyondProjection && (
-        <p className="text-[11px] text-muted-foreground text-center -mt-1">
+        <p className="text-caption2 text-muted-foreground text-center -mt-1">
           Sem previsão de renda daqui em diante — este ciclo mostra só o que já está assumido.
         </p>
       )}
       <div className="grid grid-cols-3 gap-2.5">
         <Card className="p-3 min-w-0 overflow-hidden">
-          <p className="text-[11px] text-muted-foreground">Entradas</p>
-          <p className="font-semibold text-success text-[13px] sm:text-base tracking-tight">{brl(viewTotals.income)}</p>
+          <p className="text-caption2 text-muted-foreground">Entradas</p>
+          <p className="font-semibold text-success text-footnote sm:text-base tracking-tight">{brl(viewTotals.income)}</p>
         </Card>
         <Card className="p-3 min-w-0 overflow-hidden">
-          <p className="text-[11px] text-muted-foreground">Saídas</p>
-          <p className="font-semibold text-destructive text-[13px] sm:text-base tracking-tight">{brl(viewTotals.expense)}</p>
+          <p className="text-caption2 text-muted-foreground">Saídas</p>
+          <p className="font-semibold text-destructive text-footnote sm:text-base tracking-tight">{brl(viewTotals.expense)}</p>
         </Card>
         <Card className="p-3 min-w-0 overflow-hidden">
-          <p className="text-[11px] text-muted-foreground">Saldo do mês</p>
-          <p className="font-semibold text-[13px] sm:text-base tracking-tight">{brl(viewTotals.net)}</p>
+          <p className="text-caption2 text-muted-foreground">Saldo do mês</p>
+          <p className="font-semibold text-footnote sm:text-base tracking-tight">{brl(viewTotals.net)}</p>
         </Card>
       </div>
 
@@ -1049,8 +1101,8 @@ export default function Prosperidade() {
         />
       </Card>
 
-      <p className="text-[11px] text-right -mt-2 px-1">
-        <Link className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+      <p className="text-caption2 text-right -mt-2 px-1">
+        <Link className="inline-flex items-center min-h-11 text-muted-foreground underline underline-offset-2 hover:text-foreground"
           to={`/app/conselheiro?q=${encodeURIComponent("Analisa meus gastos recentes: onde estou gastando mais e o que dá para ajustar?")}`}>
           Perguntar ao Conselheiro sobre meus gastos
         </Link>
@@ -1129,12 +1181,12 @@ export default function Prosperidade() {
                       <ComposedChart data={evolution} margin={{ top: 4, right: 8, left: -14, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                         <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                        <YAxis tickFormatter={brlShort} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <YAxis tickFormatter={brlShort} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
                         <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => brl(v)} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                        <Area type="monotone" dataKey="Entradas" stroke="hsl(var(--success))" fill="hsl(var(--success) / 0.2)" strokeWidth={2} />
-                        <Area type="monotone" dataKey="Saídas" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive) / 0.15)" strokeWidth={2} />
-                        <Line type="monotone" dataKey="Saldo" stroke="hsl(var(--prosperidade))" strokeWidth={2} dot={false} />
+                        <Area isAnimationActive={!reduzMovimento} type="monotone" dataKey="Entradas" stroke="hsl(var(--success))" fill="hsl(var(--success) / 0.2)" strokeWidth={2} />
+                        <Area isAnimationActive={!reduzMovimento} type="monotone" dataKey="Saídas" stroke="hsl(var(--destructive))" fill="hsl(var(--destructive) / 0.15)" strokeWidth={2} />
+                        <Line isAnimationActive={!reduzMovimento} type="monotone" dataKey="Saldo" stroke="hsl(var(--prosperidade))" strokeWidth={2} dot={false} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
@@ -1150,12 +1202,12 @@ export default function Prosperidade() {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={catCompare} margin={{ top: 4, right: 8, left: -14, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                        <XAxis dataKey="categoria" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} interval={0} angle={-18} height={44} textAnchor="end" />
-                        <YAxis tickFormatter={brlShort} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <XAxis dataKey="categoria" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} interval={0} angle={-18} height={44} textAnchor="end" />
+                        <YAxis tickFormatter={brlShort} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
                         <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => brl(v)} cursor={{ fill: "hsl(var(--muted) / 0.5)" }} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                        <Bar dataKey="Mês anterior" fill="hsl(var(--muted-foreground) / 0.45)" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Este mês" fill="hsl(var(--prosperidade))" radius={[4, 4, 0, 0]} />
+                        <Bar isAnimationActive={!reduzMovimento} dataKey="Mês anterior" fill="hsl(var(--muted-foreground) / 0.45)" radius={[4, 4, 0, 0]} />
+                        <Bar isAnimationActive={!reduzMovimento} dataKey="Este mês" fill="hsl(var(--prosperidade))" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -1173,12 +1225,12 @@ export default function Prosperidade() {
                           </pattern>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                        <XAxis dataKey="categoria" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} interval={0} angle={-18} height={44} textAnchor="end" />
-                        <YAxis tickFormatter={brlShort} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <XAxis dataKey="categoria" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} interval={0} angle={-18} height={44} textAnchor="end" />
+                        <YAxis tickFormatter={brlShort} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
                         <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => brl(v)} cursor={{ fill: "hsl(var(--muted) / 0.5)" }} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                        <Bar dataKey="Real" stackId="mes" fill="hsl(var(--prosperidade))" />
-                        <Bar dataKey="Estimado" stackId="mes" fill="url(#estimadoHatch)" radius={[4, 4, 0, 0]} />
+                        <Bar isAnimationActive={!reduzMovimento} dataKey="Real" stackId="mes" fill="hsl(var(--prosperidade))" />
+                        <Bar isAnimationActive={!reduzMovimento} dataKey="Estimado" stackId="mes" fill="url(#estimadoHatch)" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -1207,11 +1259,11 @@ export default function Prosperidade() {
                       <LineChart data={projection} margin={{ top: 4, right: 8, left: -14, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                         <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                        <YAxis tickFormatter={brlShort} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <YAxis tickFormatter={brlShort} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
                         <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => brl(v)} />
                         <ReferenceLine y={0} stroke="hsl(var(--border))" />
-                        <Line type="monotone" dataKey="Histórico" stroke="hsl(var(--prosperidade))" strokeWidth={2} dot={false} connectNulls={false} />
-                        <Line type="monotone" dataKey="Projeção" stroke="hsl(var(--prosperidade))" strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} />
+                        <Line isAnimationActive={!reduzMovimento} type="monotone" dataKey="Histórico" stroke="hsl(var(--prosperidade))" strokeWidth={2} dot={false} connectNulls={false} />
+                        <Line isAnimationActive={!reduzMovimento} type="monotone" dataKey="Projeção" stroke="hsl(var(--prosperidade))" strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -1234,7 +1286,7 @@ export default function Prosperidade() {
           <h2 className="font-display font-semibold">Fixos do mês (recorrentes)</h2>
         </div>
         {(recurrings ?? []).length === 0 && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-subhead text-muted-foreground">
             Salário, aluguel, contas, assinaturas: cadastre uma vez e o Ascende lança todo mês
             sozinho. É o que mais economiza registro manual.
           </p>
@@ -1294,13 +1346,13 @@ export default function Prosperidade() {
             <Input className="w-16" placeholder="Dia" inputMode="numeric" value={recDay}
               onChange={(e) => setRecDay(e.target.value.replace(/\D/g, "").slice(0, 2))}
               aria-label="Dia do mês em que repete" />
-            <Button className="flex-1" onClick={addRecurring} disabled={recSaving}
+            <Button className="flex-1" onClick={addRecurring} loading={recSaving}
               aria-label="Adicionar lançamento recorrente">
-              {recSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              <Plus className="w-4 h-4" aria-hidden />
             </Button>
           </div>
         </div>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-caption2 text-muted-foreground">
           O número à esquerda do <span aria-hidden>+</span> é o dia do mês em que o
           lançamento repete (1 a 28).
         </p>
@@ -1398,11 +1450,9 @@ export default function Prosperidade() {
 
           {/* O botão renomeado é o aviso — por isso não há modal de
               confirmação: avisar sem cobrar um toque a mais. */}
-          <Button type="submit" className="w-full" disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-              <><Plus className="w-4 h-4 mr-1" />
-                {installmentPlan ? `Registrar ${installmentPlan.count} parcelas` : "Registrar"}</>
-            )}
+          <Button type="submit" className="w-full" loading={saving}>
+            <Plus className="w-4 h-4 mr-1" aria-hidden />
+            {installmentPlan ? `Registrar ${installmentPlan.count} parcelas` : "Registrar"}
           </Button>
         </form>
       </Card>
@@ -1410,9 +1460,9 @@ export default function Prosperidade() {
       {/* Lista do mês */}
       <Card className="p-4">
         <h2 className="font-display font-semibold mb-3">Lançamentos · {viewMonthLabel}</h2>
-        {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
+        {isLoading && <p role="status" className="text-sm text-muted-foreground">Carregando…</p>}
         {!isLoading && !monthTxs.length && !projectedRows.length && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-subhead text-muted-foreground">
             {/* Um mês passado vazio deixava a pessoa com duas perguntas sem
                 resposta ("quebrou?" e "dá para trazer de algum lugar?"). A
                 segunda o app já sabe responder: a importação de fatura entra
@@ -1428,7 +1478,7 @@ export default function Prosperidade() {
             projeção (ciclo corrente, passado, ou além dos 12 ciclos) a lista é
             a de sempre, sem subtítulo nenhum a explicar. */}
         {!!projectedRows.length && !!monthTxs.length && (
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+          <p className="text-caption2 font-medium text-muted-foreground uppercase tracking-wide mb-1">
             Já assumido
           </p>
         )}
@@ -1446,7 +1496,7 @@ export default function Prosperidade() {
                 <p className="text-sm font-medium truncate">
                   {t.description || t.category}
                   {SOURCE_BADGE[t.source] && (
-                    <Badge variant="secondary" className="text-[10px] ml-1.5 align-middle">{SOURCE_BADGE[t.source]}</Badge>
+                    <Badge variant="secondary" className="text-caption2 ml-1.5 align-middle">{SOURCE_BADGE[t.source]}</Badge>
                   )}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -1472,7 +1522,7 @@ export default function Prosperidade() {
             Para mudar uma destas linhas, muda-se o recorrente logo acima. */}
         {!!projectedRows.length && (
           <>
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mt-3 mb-1">
+            <p className="text-caption2 font-medium text-muted-foreground uppercase tracking-wide mt-3 mb-1">
               Previsto · ainda não caiu
             </p>
             {/* A barra tracejada e a tinta mais fria são o sinal — SEM opacity

@@ -9,8 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody, DrawerTrigger,
+} from "@/components/ui/drawer";
 import { toast } from "sonner";
-import { Swords, Plus, Loader2, LifeBuoy, Archive, ArchiveRestore, MessageCircle, UtensilsCrossed } from "lucide-react";
+import { Swords, Plus, LifeBuoy, Archive, ArchiveRestore, MessageCircle, UtensilsCrossed } from "lucide-react";
 import {
   type Battle, type BattleCheckin as Checkin,
   BATTLE_TEMPLATES, COMMON_TRIGGERS, MILESTONES,
@@ -35,6 +38,8 @@ function CreateBattle({
   const { user } = useAuth();
   const setOpen = onOpenChange;
   const [name, setName] = useState("");
+  // O erro do nome fica embaixo do campo, não num toast que some.
+  const [erroNome, setErroNome] = useState(false);
   const [discreet, setDiscreet] = useState("");
   const [triggers, setTriggers] = useState<string[]>([]);
   const [customTrigger, setCustomTrigger] = useState("");
@@ -47,7 +52,7 @@ function CreateBattle({
   const betsBattle = /apost|\bbets?\b|raspadinha|tigrinho/i.test(name);
 
   const applyTemplate = (t: (typeof BATTLE_TEMPLATES)[number]) => {
-    setName(t.name);
+    setName(t.name); setErroNome(false);
     setTriggers(t.triggers);
   };
 
@@ -61,13 +66,22 @@ function CreateBattle({
   };
 
   const create = async () => {
-    if (!user || !name.trim()) { toast.error("Dê um nome à batalha."); return; }
+    if (!user) return;
+    if (!name.trim()) {
+      setErroNome(true);
+      // O botão fica no FIM de uma folha que rola, e o campo no topo: sem o
+      // foco, o aviso nascia fora da vista e o toque parecia não fazer nada.
+      // Focar rola o DrawerBody até o campo e põe o cursor onde se corrige.
+      document.getElementById("bname")?.focus();
+      return;
+    }
     if (foodWarning) return; // o aviso na tela já redireciona
     const emergency = plan.map((p) => p.trim()).filter(Boolean);
     if (!emergency.length) {
       toast.error("Defina pelo menos 1 ação para o plano de emergência — é ele que te segura na hora da vontade.");
       return;
     }
+    toast.dismiss("Defina pelo menos 1 ação para o plano de emergência — é ele que te segura na hora da vontade.");
     setSaving(true);
     const { error } = await supabase.from("battles").insert({
       user_id: user.id,
@@ -79,26 +93,31 @@ function CreateBattle({
     });
     setSaving(false);
     if (error) { toast.error("Não consegui criar a batalha. Tente de novo."); return; }
-    toast.success("Batalha criada. O primeiro check-in é hoje à noite — um dia de cada vez.");
+    toast.dismiss("Não consegui criar a batalha. Tente de novo.");
+    // A folha fecha e a batalha aparece na lista: o resultado é visível, e um
+    // toast em cima dele seria só ruído.
     setOpen(false);
     setName(""); setDiscreet(""); setTriggers([]); setPlan(["", "", ""]); setVisibleToAi(true);
     onCreated();
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    /* Formulário longo (modelo, nome, gatilhos, plano de três passos) é
+       FOLHA, não diálogo: no iPhone ela sobe de baixo, tem puxador, fecha
+       arrastando e o teclado não esmaga um quadro centralizado. */
+    <Drawer open={open} onOpenChange={setOpen}>
+      <DrawerTrigger asChild>
         <Button className="shrink-0"><Plus className="w-4 h-4 mr-1.5" /> Nova batalha</Button>
-      </DialogTrigger>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="font-display">Nova batalha</DialogTitle>
-          <DialogDescription>
+      </DrawerTrigger>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle className="font-display">Nova batalha</DrawerTitle>
+          <DrawerDescription>
             Uma luta pessoal que você escolheu enfrentar. Aqui vale honestidade, não perfeição.
-          </DialogDescription>
-        </DialogHeader>
+          </DrawerDescription>
+        </DrawerHeader>
 
-        <div className="space-y-4">
+        <DrawerBody className="space-y-4">
           {/* Templates */}
           <div className="flex flex-wrap gap-1.5">
             {BATTLE_TEMPLATES.map((t) => (
@@ -118,8 +137,10 @@ function CreateBattle({
 
           <div className="space-y-1.5">
             <Label htmlFor="bname">Contra o que você está lutando?</Label>
-            <Input id="bname" maxLength={60} value={name} onChange={(e) => setName(e.target.value)}
+            <Input id="bname" maxLength={60} value={name} onChange={(e) => { setName(e.target.value); setErroNome(false); }}
+              aria-invalid={erroNome} aria-describedby={erroNome ? "bname-erro" : undefined}
               placeholder="Escolha acima ou escreva a sua" />
+            {erroNome && <p id="bname-erro" role="alert" className="text-caption text-destructive">Dê um nome à batalha.</p>}
           </div>
 
           {foodWarning && (
@@ -212,14 +233,14 @@ function CreateBattle({
                 <Switch checked={visibleToAi} onCheckedChange={setVisibleToAi} aria-label="Visível para o Conselheiro" />
               </div>
 
-              <Button className="w-full" onClick={create} disabled={saving}>
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Começar a batalha"}
+              <Button className="w-full" onClick={create} loading={saving}>
+                Começar a batalha
               </Button>
             </>
           )}
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 }
 
@@ -298,14 +319,19 @@ export default function Batalhas() {
 
   const restore = async (b: Battle) => {
     await supabase.from("battles").update({ active: true }).eq("id", b.id);
-    toast.success(`"${battleLabel(b)}" reativada. Todo o histórico e os dias limpos continuam valendo.`);
+    // Ela volta para a lista de ativas com os dias limpos à vista — sem toast.
     qc.invalidateQueries();
   };
 
   const today = todayISO();
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up [&_:is(h1,h2,h3)]:hyphens-auto [&_:is(h1,h2,h3)]:[overflow-wrap:break-word]">
+      {/* Títulos podem quebrar no meio da palavra, e só quando a palavra
+        não cabe: com Texto Maior a 40 pt, "Prosperidade" ou "Conselheiro"
+        num `text-2xl` passam da largura da tela sozinhos. Hifeniza em
+        pt-BR onde o dicionário deixa; senão, quebra onde precisar. No
+        tamanho padrão nenhum título chega na borda, então nada muda. */}
       {/* Mesmo padrão da Prosperidade: no celular a ação desce para a própria
           linha, em largura total, em vez de espremer o cabeçalho. */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -350,7 +376,7 @@ export default function Batalhas() {
               oferecer um. O rótulo condicional ("se fizer sentido") preserva o
               tom, e a linha do nome discreto responde o medo real desta tela. */}
           <p className="font-display font-semibold">Aqui é onde as suas ficam</p>
-          <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
+          <p className="text-subhead text-muted-foreground mt-1 max-w-sm mx-auto">
             Redes sociais, pornografia, cigarro, apostas, compras por impulso. Se existe algo
             que você enfrenta em silêncio, este é o lugar para enfrentar com método — e sem
             julgamento. O nome pode ser discreto: só você sabe o que ele quer dizer.
@@ -367,25 +393,29 @@ export default function Batalhas() {
         return (
           <Card key={b.id} className="p-5 space-y-4">
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="min-w-0 break-words">
                 <h2 className="font-display text-lg font-semibold">{battleLabel(b)}</h2>
                 {b.discreet_name && <p className="text-xs text-muted-foreground">({b.name})</p>}
               </div>
-              <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground"
+              <Button variant="ghost" size="icon" className="w-8 h-8 shrink-0 text-muted-foreground"
                 onClick={() => archive(b)} aria-label="Arquivar batalha" title="Arquivar batalha">
                 <Archive className="w-4 h-4" />
               </Button>
             </div>
 
             {/* Os 3 números — o acumulado em primeiro, porque ele nunca zera */}
-            <div className="grid grid-cols-3 gap-2.5 text-center">
+            {/* Três colunas no tamanho padrão; com Texto Maior, "acumulados" não
+                cabia numa coluna de um terço e a grade vazava pela direita. O
+                piso de 5,5rem cresce com a fonte, então as colunas viram duas
+                e depois uma em vez de estourar. */}
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,5.5rem),1fr))] gap-2.5 text-center [&>*]:min-w-0 [&>*]:break-words [&>*]:hyphens-auto">
               <div className="rounded-lg bg-gold/10 border border-gold/20 p-3">
                 <p className="font-display text-2xl font-semibold text-gold-ink">{stats.totalClean}</p>
-                <p className="text-[11px] text-muted-foreground leading-tight">dias limpos acumulados<br />(nunca zera)</p>
+                <p className="text-caption2 text-muted-foreground leading-tight">dias limpos acumulados<br />(nunca zera)</p>
               </div>
               <div className="rounded-lg border p-3">
                 <p className="font-display text-2xl font-semibold">{stats.record}</p>
-                <p className="text-[11px] text-muted-foreground leading-tight">recorde<br />pessoal</p>
+                <p className="text-caption2 text-muted-foreground leading-tight">recorde<br />pessoal</p>
               </div>
               {/* Este quadro mostrava `currentStreak`, que voltava a zero em
                   qualquer dia sem check-in — inclusive sem recaída nenhuma.
@@ -394,7 +424,7 @@ export default function Batalhas() {
                   Ver a nota longa em lib/battles.ts. */}
               <div className="rounded-lg border p-3">
                 <p className="font-display text-2xl font-semibold">{stats.daysSinceRelapse ?? 0}</p>
-                <p className="text-[11px] text-muted-foreground leading-tight">
+                <p className="text-caption2 text-muted-foreground leading-tight">
                   {stats.cleanSince === "relapse"
                     ? (<>dias desde<br />a última recaída</>)
                     : (<>dias desde<br />o começo</>)}
@@ -407,7 +437,7 @@ export default function Batalhas() {
                 linha, o número inflaria em silêncio — e num tema como apostas
                 ou álcool o autoengano é dano real, não gentileza. */}
             {stats.checkinGapDays >= 2 && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-caption2 text-muted-foreground">
                 {stats.checkinGapDays} dias sem check-in. O número acima conta desde a última
                 recaída, não desde o último registro.
               </p>
@@ -454,7 +484,7 @@ export default function Batalhas() {
 
             <div className="flex items-center justify-between gap-2">
               <SosDialog battle={b} />
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-caption2 text-muted-foreground">
                 {b.visible_to_ai ? "Visível para o Conselheiro" : "Invisível para o Conselheiro"}
               </span>
             </div>
@@ -481,7 +511,7 @@ export default function Batalhas() {
                 <div key={b.id} className="flex items-center gap-3 rounded-md border p-3">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{battleLabel(b)}</p>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-caption2 text-muted-foreground">
                       {stats.totalClean} {stats.totalClean === 1 ? "dia limpo acumulado" : "dias limpos acumulados"} · recorde {stats.record}
                     </p>
                   </div>

@@ -25,13 +25,14 @@ export default function MokariInvite() {
         </div>
         <div className="min-w-0">
           <p className="font-display font-semibold">Quer um espelho da sua jornada?</p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-subhead text-muted-foreground">
             O Mokari é um broto que cresce com o que você registra. Ele não cobra nada, não
             notifica, e nunca desfaz o que você já construiu.
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      {/* `flex-wrap`: com Texto Maior o "Agora não" desce em vez de empurrar a Jornada. */}
+      <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={() => setEnabled(true)}>Conhecer o Mokari</Button>
         <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={decline}>
           Agora não

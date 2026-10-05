@@ -85,9 +85,12 @@ export default function CartaoDaPessoa({
         {/* CAMADA 3 — o grupo nota quem VOLTOU. Nunca "sumiu", nunca há
             quantos dias: o número seria o denominador da ausência. */}
         {pessoa.voltouHoje && (
-          <span className="inline-flex items-center gap-1 shrink-0 text-gold-ink">
-            <Sunrise className="w-3.5 h-3.5" aria-hidden />
-            <span className="text-[11px]">voltou hoje</span>
+          // `min-w-0` (era `shrink-0`): no maior tamanho de texto o selo
+          // empurrava o cartão 51 px para fora da tela. Agora ele divide a
+          // largura com o nome e, se precisar, quebra em duas linhas.
+          <span className="inline-flex min-w-0 items-center gap-1 text-gold-ink">
+            <Sunrise className="w-3.5 h-3.5 shrink-0" aria-hidden />
+            <span className="min-w-0 text-caption2">voltou hoje</span>
           </span>
         )}
       </div>

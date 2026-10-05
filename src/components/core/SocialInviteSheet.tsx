@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
-} from "@/components/ui/sheet";
-import { Copy, Share2, Loader2, X, Check } from "lucide-react";
-import { cn } from "@/lib/utils";
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody,
+} from "@/components/ui/drawer";
+import { Copy, Share2, X, Check } from "lucide-react";
 import { toast } from "sonner";
 
 export interface ConviteAberto {
@@ -58,6 +57,7 @@ export default function SocialInviteSheet({
     if (!link) return;
     try {
       await navigator.clipboard.writeText(link);
+      toast.dismiss("Não consegui copiar. Selecione o link acima e copie à mão.");
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2000);
     } catch {
@@ -80,37 +80,19 @@ export default function SocialInviteSheet({
     new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      {/* As duas correções de toque da casa, medidas em QA e já pagas uma vez
-       *  (AppLayout.tsx, achados N5 e N6). Reaproveitadas literalmente aqui:
-       *
-       *  N5 — o "Fechar" do SheetContent é 16x16 (um ícone de 16px num botão
-       *  sem tamanho). Escape resolve no teclado; no celular não existe
-       *  Escape. A caixa vira 44x44 SEM o desenho sair do lugar: o botão é
-       *  `absolute right-4 top-4`, então o ícone estava centrado a 24px de
-       *  cada borda (16 + 16/2); com a caixa em 44px, `right-0.5 top-0.5`
-       *  recoloca esse centro exatamente em 24px (2 + 44/2).
-       *
-       *  N6 — `safe-bottom` sozinho ZERARIA o respiro (num aparelho sem
-       *  recorte ele vale 0 e, sendo mais específico, apaga o `p-6` do
-       *  próprio SheetContent). O `calc` SOMA o recorte ao padding: 24px
-       *  sempre, mais o que o aparelho pedir — senão a última linha termina
-       *  dentro dos ~34px do indicador de home do iPhone, onde o toque vira
-       *  gesto do sistema. */}
-      <SheetContent
-        side="bottom"
-        className={cn(
-          "rounded-t-2xl max-h-[85dvh] overflow-y-auto",
-          "pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
-          "[&>button]:h-11 [&>button]:w-11 [&>button]:grid [&>button]:place-items-center [&>button]:right-0.5 [&>button]:top-0.5",
-        )}
-      >
-        <SheetHeader className="text-left">
-          <SheetTitle>Chamar alguém</SheetTitle>
-          <SheetDescription>
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      {/* A folha de baixo da casa (ui/drawer.tsx): fecha arrastando, tem
+          puxador, e o Fechar de 44 pt e o respiro do indicador de início já vêm
+          do primitivo. As correções N5 e N6, que antes eram repetidas à mão em
+          cada folha, moram lá agora — e por isso não há sobrescrita aqui. */}
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Chamar alguém</DrawerTitle>
+          <DrawerDescription>
             Um link. Você manda por onde já fala com a pessoa — WhatsApp, no olho, o que for.
-          </SheetDescription>
-        </SheetHeader>
+          </DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
 
         <div className="py-4 space-y-3">
           {link ? (
@@ -134,8 +116,8 @@ export default function SocialInviteSheet({
               </p>
             </>
           ) : (
-            <Button className="w-full min-h-11" onClick={onCriar} disabled={criando}>
-              {criando ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar um link de convite"}
+            <Button className="w-full min-h-11" onClick={onCriar} disabled={criando} loading={criando}>
+              Criar um link de convite
             </Button>
           )}
 
@@ -185,7 +167,8 @@ export default function SocialInviteSheet({
                 cobrar. */}
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 }

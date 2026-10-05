@@ -1,8 +1,8 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { BotaoFechar } from "@/components/ui/fechar";
 
 const Dialog = DialogPrimitive.Root;
 
@@ -36,7 +36,13 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        /* No celular o diálogo encostava na borda da tela e perdia os cantos:
+           `w-full` com `sm:rounded-lg` dava, a 390 pt, um retângulo de 384 com
+           3 pt de margem e cantos retos — o único elemento reto de um app todo
+           arredondado. Agora ele tem 16 pt de margem e cantos em qualquer
+           largura (`layout.md`: respeitar margens e áreas seguras).
+           `bg-elevated` pelo mesmo motivo da folha: ver ui/sheet.tsx. */
+        "fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-elevated p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
         // Teto de altura e rolagem por padrão, no primitivo. Antes cada call
         // site precisava lembrar de `max-h-[85dvh]` na mão — e os que
         // esqueciam (Paywall, gasto rápido, ajustes) estouravam a tela num
@@ -49,10 +55,8 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-accent data-[state=open]:text-muted-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-        <X className="h-4 w-4" />
-        <span className="sr-only">Fechar</span>
-      </DialogPrimitive.Close>
+      {/* 44×44 pt — o motivo e a aritmética estão em ui/fechar.tsx. */}
+      <BotaoFechar as={DialogPrimitive.Close} />
     </DialogPrimitive.Content>
   </DialogPortal>
 ));

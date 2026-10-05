@@ -138,13 +138,13 @@ function ReturnRitual({ gapDays, onShowPanel }: { gapDays: number; onShowPanel: 
           <HandHeart className="w-4 h-4 text-gold" />
           Que bom te ver de volta{firstName ? `, ${firstName}` : ""}.
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-subhead text-muted-foreground">
           Você ficou {gapDays} dias sem registrar — e está tudo bem. A vida acontece.
           Conta numa frase o que aconteceu nesse tempo (ou só como está hoje):
           o primeiro registro de volta vale por dez.
         </p>
         <CaptureBar />
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-caption2 text-muted-foreground">
           {standingParts.length
             ? `Nada aqui expirou: ${standingParts.join(" e ")}. `
             : "Nada aqui expirou. "}
@@ -165,7 +165,10 @@ function ReturnRitual({ gapDays, onShowPanel }: { gapDays: number; onShowPanel: 
         <MessageCircle className="w-5 h-5 text-muted-foreground" />
       </Link>
 
-      <button onClick={onShowPanel} className="w-full text-xs text-muted-foreground underline">
+      {/* A SAÍDA deste fluxo tinha 16 pt de altura. Uma saída que o polegar
+          erra é uma saída que não existe (PRINCIPIOS.md, Agência): o texto
+          fica igual, a área de toque ganha os 44 pt do iPhone. */}
+      <button onClick={onShowPanel} className="w-full min-h-11 inline-flex items-center justify-center text-xs text-muted-foreground underline">
         Prefiro ver meu painel normal
       </button>
     </div>
@@ -227,7 +230,9 @@ function ActivePlans() {
                 aria-hidden
               />
               <span className="text-sm flex-1 min-w-0 truncate">{pl.title}</span>
-              <span className="text-[11px] text-muted-foreground shrink-0">{meta?.label ?? "Plano"}</span>
+              {/* Teto em vez de `shrink-0`: com Texto Maior o tipo do plano
+                  quebra linha em vez de empurrar a página para o lado. */}
+              <span className="text-caption2 text-muted-foreground text-right max-w-[40%] break-words">{meta?.label ?? "Plano"}</span>
               <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
             </Link>
           );
@@ -295,7 +300,7 @@ function FirstSteps() {
 
   const steps = data ? [
     { label: "Conte seu dia na captura abaixo", xp: "+XP por registro", done: data.events >= 1, to: null },
-    { label: "Mapeie seu mês em 60 segundos (Raio-X)", xp: "destrava o plano no seu bolso", done: raioxDone, to: "/app/prosperidade" },
+    { label: "Mapeie seu mês em 60 segundos (Raio‑X)", xp: "destrava o plano no seu bolso", done: raioxDone, to: "/app/prosperidade" },
     { label: "Registre uma refeição (vale foto do prato)", xp: "+4 XP", done: data.meals > 0, to: "/app/vitalidade?s=comida" },
     { label: "Peça o plano que cabe no seu bolso", xp: "vira meta viva", done: data.plans > 0, to: `/app/conselheiro?q=${encodeURIComponent(SIGNATURE_QUESTION)}` },
   ] : [];
@@ -360,8 +365,17 @@ function FirstSteps() {
               {st.done
                 ? <CircleCheck className="w-5 h-5 text-success shrink-0" />
                 : <Circle className="w-5 h-5 text-muted-foreground shrink-0" />}
-              <span className={cn("text-sm flex-1", st.done && "line-through text-muted-foreground")}>{st.label}</span>
-              <span className="text-[11px] text-gold-ink shrink-0">{st.xp}</span>
+              <span className={cn("text-sm flex-1 min-w-[min(8rem,50%)] break-words", st.done && "line-through text-muted-foreground")}>{st.label}</span>
+              {/* Era `shrink-0`: com o Texto Maior do iPhone o rótulo de
+                  recompensa ("destrava o plano no seu bolso") não quebrava e
+                  empurrava a página 35 pt para o lado. Agora ele quebra linha
+                  dentro de um teto, alinhado à direita, e encolhe até a sua maior
+                  palavra. O passo tem PISO (8 rem, no máximo metade da linha) em
+                  vez de `min-w-0`: com `min-w-0` o flex o espremia até partir
+                  "segundo / s". Sem `flex-wrap` na linha: ele decidia a quebra
+                  pela largura do conteúdo e jogava a recompensa para baixo já
+                  no tamanho padrão. */}
+              <span className="text-caption2 text-gold-ink text-right max-w-[45%] break-words">{st.xp}</span>
             </>
           );
           return st.to && !st.done ? (
@@ -551,7 +565,7 @@ function DayProgress() {
      que vale aqui: uma cor por DOMÍNIO, e cada cor responde a uma pergunta
      diferente.
        sálvia → kcal, proteína, treinos, sono   (Vitalidade)
-       azul   → água                            (hsl(205 70% 55%), desde antes)
+       azul   → água                            (token `--agua`; era hsl(205 70% 55%) fixo)
        ouro   → teto de gasto                   (Prosperidade)
      Rótulo e ícone distinguem as linhas dentro do domínio, como já distinguiam.
      De quebra, a incoerência velha se conserta sozinha: a barra de proteína era
@@ -595,9 +609,12 @@ function DayProgress() {
 
   return (
     <Card className="p-4 space-y-3.5">
-      <div className="flex items-center justify-between">
+      {/* As linhas de "rótulo · valor" deste cartão são `flex-wrap`: no tamanho
+          padrão cabem numa linha; com Texto Maior o valor desce em vez de
+          empurrar o cartão para fora da tela. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2">
         <h2 className="font-display font-semibold">Seu dia em números</h2>
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-caption2 text-muted-foreground">
           {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" })}
         </span>
       </div>
@@ -619,7 +636,7 @@ function DayProgress() {
       {/* Calorias (tracker Refeições) */}
       {trackers.has("meals") && (
       <div className="space-y-1">
-        <div className="flex items-center justify-between text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 text-sm">
           <span className="flex items-center gap-1.5 font-medium">
             <Flame className="w-4 h-4" style={{ color: "hsl(var(--vitalidade))" }} /> Calorias
           </span>
@@ -634,7 +651,7 @@ function DayProgress() {
         {kcalGoal > 0 ? (
           <>
             <Bar value={kcal} goal={kcalGoal} color="hsl(var(--vitalidade))" celebrating={celebrate === "kcal"} />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-caption2 text-muted-foreground">
               {kcal < kcalGoal
                 ? `Faltam ${fmt(kcalGoal - kcal)} kcal para a meta do dia.`
                 : kcal - kcalGoal <= Math.max(100, kcalGoal * 0.05)
@@ -643,7 +660,7 @@ function DayProgress() {
             </p>
           </>
         ) : (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-caption2 text-muted-foreground">
             Sem meta diária definida.{" "}
             <Link to="/app/vitalidade?s=metas" className="underline text-foreground">Definir meta</Link>
             {" "}ou peça um plano alimentar ao Conselheiro — a meta do plano é aplicada aqui.
@@ -655,7 +672,7 @@ function DayProgress() {
       {/* Proteína (só com meta, tracker Proteína) */}
       {trackers.has("protein") && protGoal > 0 && (
         <div className="space-y-1">
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 text-sm">
             <span className="font-medium">Proteína</span>
             <span className="text-muted-foreground">
               <strong className="text-foreground">{fmt(prot)}</strong> / {fmt(protGoal)} g
@@ -668,24 +685,24 @@ function DayProgress() {
       {/* Água (tracker Água) */}
       {trackers.has("water") && (
       <div className="space-y-1">
-        <div className="flex items-center justify-between text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 text-sm">
           <span className="flex items-center gap-1.5 font-medium">
-            <Droplet className="w-4 h-4" style={{ color: "hsl(205 70% 55%)" }} /> Água
+            <Droplet className="w-4 h-4" style={{ color: "hsl(var(--agua))" }} /> Água
           </span>
           <span className="text-muted-foreground">
             <strong className="text-foreground">{(water / 1000).toFixed(1).replace(".", ",")}</strong> / {(waterGoal / 1000).toFixed(1).replace(".", ",")} L
           </span>
         </div>
-        <Bar value={water} goal={waterGoal} color="hsl(205 70% 55%)" celebrating={celebrate === "water"} />
+        <Bar value={water} goal={waterGoal} color="hsl(var(--agua))" celebrating={celebrate === "water"} />
       </div>
       )}
 
       {/* Gasto do dia (tracker Teto de gasto) */}
       {trackers.has("spend_limit") && spendLimit > 0 && (
         <div className="space-y-1">
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 text-sm">
             <span className="flex items-center gap-1.5 font-medium">
-              <span className="w-4 h-4 grid place-items-center text-[13px]" style={{ color: "hsl(var(--prosperidade))" }} aria-hidden>R$</span>
+              <span className="w-4 h-4 grid place-items-center text-footnote" style={{ color: "hsl(var(--prosperidade))" }} aria-hidden>R$</span>
               Gasto de hoje
             </span>
             <span className="text-muted-foreground">
@@ -693,7 +710,7 @@ function DayProgress() {
             </span>
           </div>
           <Bar value={spentToday} goal={spendLimit} color="hsl(var(--prosperidade))" />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-caption2 text-muted-foreground">
             {spentToday <= spendLimit
               ? `${brlFmt(spendLimit - spentToday)} disponíveis dentro do teto do dia.`
               : (<>
@@ -709,7 +726,7 @@ function DayProgress() {
       {/* Treinos na semana (tracker Treinos) */}
       {trackers.has("workouts") && workoutsGoal > 0 && (
         <div className="space-y-1">
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 text-sm">
             <span className="flex items-center gap-1.5 font-medium">
               <Dumbbell className="w-4 h-4" style={{ color: "hsl(var(--vitalidade))" }} /> Treinos na semana
             </span>
@@ -718,7 +735,7 @@ function DayProgress() {
             </span>
           </div>
           <Bar value={workoutsWeek} goal={workoutsGoal} color="hsl(var(--vitalidade))" celebrating={celebrate === "workouts"} />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-caption2 text-muted-foreground">
             {workoutsWeek >= workoutsGoal
               ? "Meta da semana batida. 💪"
               : `${workoutsGoal - workoutsWeek === 1 ? "Falta 1 treino" : `Faltam ${workoutsGoal - workoutsWeek} treinos`} até domingo.`}
@@ -729,7 +746,7 @@ function DayProgress() {
       {/* Sono (tracker Sono) */}
       {trackers.has("sleep") && sleepGoal > 0 && (
         <div className="space-y-1">
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 text-sm">
             <span className="flex items-center gap-1.5 font-medium">
               <Moon className="w-4 h-4" style={{ color: "hsl(var(--vitalidade))" }} /> Sono da última noite
             </span>
@@ -750,7 +767,7 @@ function DayProgress() {
           <Link
             key={pt.label} to={pt.to}
             className={cn(
-              "flex flex-col items-center gap-1 rounded-lg border py-2 text-[11px] transition-colors",
+              "flex flex-col items-center gap-1 rounded-lg border py-2 text-caption2 transition-colors",
               pt.done ? "border-transparent" : "text-muted-foreground hover:bg-muted/60"
             )}
             style={pt.done ? { background: `hsl(var(${pt.colorVar}) / 0.12)`, color: `hsl(var(${pt.colorVar}))` } : undefined}
@@ -855,9 +872,9 @@ function Briefing() {
         {new Date().getDay() === 0 ? "Retrospectiva da semana" : "Seu briefing de hoje"}
       </div>
       <div className="space-y-2">
-        <p className="text-sm leading-relaxed whitespace-pre-line">{data.briefing}</p>
+        <p className="text-subhead leading-relaxed whitespace-pre-line">{data.briefing}</p>
         {data.courtesy && (
-          <p className="text-[11px] opacity-70">
+          <p className="text-caption2 opacity-70">
             Seus primeiros briefings são por nossa conta ✨ — depois, o briefing chega todo
             dia no Ascende+, e a retrospectiva de domingo continua gratuita para sempre.
           </p>
@@ -887,11 +904,11 @@ function BriefingLocked() {
             Sua bússola: <em>"{profile.goal}"</em>
           </p>
         )}
-        <p className="text-sm leading-relaxed opacity-90">
+        <p className="text-subhead leading-relaxed opacity-90">
           Todas as manhãs, uma leitura do seu dia: o que os seus registros mostram,
           o que merece atenção e o próximo degrau.
         </p>
-        <p className="text-[11px] opacity-70 pt-1">
+        <p className="text-caption2 opacity-70 pt-1">
           {data?.reason ?? "O briefing diário do Conselheiro faz parte do Ascende+."}{" "}
           <Link to={appPath("assinatura")} className="underline underline-offset-2">Conhecer</Link>
         </p>
@@ -987,7 +1004,8 @@ function HabitsToday() {
       .insert({ user_id: user.id, name: novo.trim(), pillar: novoPilar });
     setCriando(false);
     if (error) { toast.error("Não consegui criar o compromisso. Tente de novo."); return; }
-    toast.success("Compromisso criado. Consistência constrói a subida!");
+    toast.dismiss("Não consegui criar o compromisso. Tente de novo.");
+    // O compromisso novo aparece na lista logo acima: ela é a confirmação.
     setNovo("");
     qc.invalidateQueries({ queryKey: ["habits-today"] });
     qc.invalidateQueries({ queryKey: ["jornada-habits"] });
@@ -1020,13 +1038,13 @@ function HabitsToday() {
   const done = data?.logs.length ?? 0;
   return (
     <Card className="p-5">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 mb-3">
         <h2 className="font-display font-semibold">Compromissos de hoje</h2>
         {!vazio && <span className="text-xs text-muted-foreground">{done}/{data!.habits.length}</span>}
       </div>
 
       {vazio && (
-        <p className="text-sm text-muted-foreground mb-3">
+        <p className="text-subhead text-muted-foreground mb-3">
           Comece com um só, e pequeno o bastante para você cumprir num dia ruim:
           "beber água ao acordar", "10 flexões", "anotar o gasto do dia". O truque não é
           escolher o compromisso certo — é escolher um que não dê para falhar.
@@ -1055,7 +1073,7 @@ function HabitsToday() {
                   : <Circle className="w-5 h-5 text-muted-foreground shrink-0" />}
                 <span className={cn("text-sm flex-1 min-w-0", isDone && "line-through text-muted-foreground")}>{h.name}</span>
                 {(data?.streaks?.[h.id] ?? 0) >= 2 && (
-                  <span className="text-[11px] font-semibold text-gold-ink flex items-center gap-0.5 shrink-0" title={`${data!.streaks[h.id]} dias seguidos`}>
+                  <span className="text-caption2 font-semibold text-gold-ink flex items-center gap-0.5 shrink-0" title={`${data!.streaks[h.id]} dias seguidos`}>
                     <Flame className="w-3 h-3" /> {data!.streaks[h.id]}
                   </span>
                 )}
@@ -1330,7 +1348,12 @@ export default function Hoje() {
   }
 
   return (
-    <div className="max-w-2xl lg:max-w-4xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl lg:max-w-4xl mx-auto space-y-4 animate-fade-up [&_:is(h1,h2,h3)]:hyphens-auto [&_:is(h1,h2,h3)]:[overflow-wrap:break-word]">
+      {/* Títulos podem quebrar no meio da palavra, e só quando a palavra
+        não cabe: com Texto Maior a 40 pt, "Prosperidade" ou "Conselheiro"
+        num `text-2xl` passam da largura da tela sozinhos. Hifeniza em
+        pt-BR onde o dicionário deixa; senão, quebra onde precisar. No
+        tamanho padrão nenhum título chega na borda, então nada muda. */}
       {/* CABEÇALHO — fixo, fora do teto de 5.
           Saiu daqui o chip de nível: ele vive no avatar da barra agora, e
           repetir nível na Hoje era a duplicação que esta fase corta. Entrou a
@@ -1352,10 +1375,10 @@ export default function Hoje() {
               uma ausência. Acima de 6 entra o ritual inteiro, que substitui a
               tela e já existe. */}
           {returnNudge && (
-            <p className="text-[11px] text-gold-ink mt-0.5">{returnNudge}</p>
+            <p className="text-caption2 text-gold-ink mt-0.5">{returnNudge}</p>
           )}
           {streak === 2 && (
-            <p className="text-[11px] text-gold-ink mt-0.5">
+            <p className="text-caption2 text-gold-ink mt-0.5">
               Sua primeira sequência começou — e um dia de descanso por semana não a quebra.
             </p>
           )}

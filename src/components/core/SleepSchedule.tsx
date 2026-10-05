@@ -14,7 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Moon, Sun, Loader2, BedDouble } from "lucide-react";
+import { Moon, Sun, BedDouble } from "lucide-react";
 import {
   parseTimeToMinutes, minutesToTime, sleepWindowHours, formatWindowHours,
   timeForInput, timePoint, sleepArcPath, pointToMinutes,
@@ -24,6 +24,12 @@ const SIZE = 240;
 const CX = SIZE / 2, CY = SIZE / 2;
 const R = 96;            // raio da trilha
 const HANDLE_R = 15;     // raio dos marcadores
+/* Raio do ALVO de toque, invisível, maior que o desenho. O marcador de 15
+   (30 de diâmetro no viewBox) sai com 28 pt no celular, onde o SVG mede 220
+   para 240 de viewBox. 24 de raio dá 48 × 220/240 = 44 pt — o mínimo do iOS —
+   sem mudar o desenho. 96 + 24 = 120 = metade do SIZE: no limite, o alvo
+   encosta na borda do SVG e não é cortado. */
+const HIT_R = 24;
 
 function Dial({
   bedMin, wakeMin, onChange,
@@ -87,7 +93,7 @@ function Dial({
         const p = timePoint(h * 60, CX, CY, R - 32);
         return (
           <text key={h} x={p.x} y={p.y + 3} textAnchor="middle"
-            fontSize="9" fill="hsl(var(--muted-foreground))">{String(h).padStart(2, "0")}</text>
+            fontSize="11" fill="hsl(var(--muted-foreground))">{String(h).padStart(2, "0")}</text>
         );
       })}
       {/* Arco da janela de sono */}
@@ -97,7 +103,7 @@ function Dial({
         fill="hsl(var(--foreground))" className="font-display">
         {hours !== null ? formatWindowHours(hours) : "—"}
       </text>
-      <text x={CX} y={CY + 14} textAnchor="middle" fontSize="9" fill="hsl(var(--muted-foreground))">
+      <text x={CX} y={CY + 14} textAnchor="middle" fontSize="11" fill="hsl(var(--muted-foreground))">
         de janela de sono
       </text>
       {/* Marcador: dormir (lua) */}
@@ -108,6 +114,7 @@ function Dial({
           if (e.key === "ArrowLeft" || e.key === "ArrowDown") onChange("bed", (bedMin - 15 + 1440) % 1440);
           if (e.key === "ArrowRight" || e.key === "ArrowUp") onChange("bed", (bedMin + 15) % 1440);
         }}>
+        <circle cx={bed.x} cy={bed.y} r={HIT_R} fill="transparent" />
         <circle cx={bed.x} cy={bed.y} r={HANDLE_R} fill="hsl(var(--card))"
           stroke="hsl(var(--gold))" strokeWidth="2.5" />
         <Moon x={bed.x - 7} y={bed.y - 7} width={14} height={14}
@@ -121,6 +128,7 @@ function Dial({
           if (e.key === "ArrowLeft" || e.key === "ArrowDown") onChange("wake", (wakeMin - 15 + 1440) % 1440);
           if (e.key === "ArrowRight" || e.key === "ArrowUp") onChange("wake", (wakeMin + 15) % 1440);
         }}>
+        <circle cx={wake.x} cy={wake.y} r={HIT_R} fill="transparent" />
         <circle cx={wake.x} cy={wake.y} r={HANDLE_R} fill="hsl(var(--card))"
           stroke="hsl(var(--gold))" strokeWidth="2.5" />
         <Sun x={wake.x - 7} y={wake.y - 7} width={14} height={14}
@@ -159,6 +167,7 @@ export default function SleepSchedule({
       toast.error("Defina os dois horários (dormir e acordar).");
       return;
     }
+    toast.dismiss("Defina os dois horários (dormir e acordar).");
     setSaving(true);
     const { error } = await supabase.from("profiles").update({
       sleep_bedtime: minutesToTime(bedMin),
@@ -167,6 +176,7 @@ export default function SleepSchedule({
     }).eq("user_id", user.id);
     setSaving(false);
     if (error) { toast.error("Não consegui salvar a rotina de sono."); return; }
+    toast.dismiss("Não consegui salvar a rotina de sono.");
     toast.success(
       `Rotina salva: dormir às ${minutesToTime(bedMin)}, acordar às ${minutesToTime(wakeMin)} ` +
       `(${formatWindowHours(hours)}). De manhã, um toque confirma a noite.`
@@ -215,14 +225,18 @@ export default function SleepSchedule({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-muted-foreground">
+      {/* `flex-wrap` com o texto a partir de 10 rem e o botão sem encolher: no
+          tamanho padrão cabem na mesma linha; com texto grande, os 10 rem já não
+          cabem ao lado do botão e ele desce inteiro, em vez de ser espremido
+          até virar "Salvar / rotina". */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="min-w-0 grow basis-40 text-caption2 text-muted-foreground">
           {hours !== null
             ? `${formatWindowHours(hours)} por noite — vira sua meta de sono.`
             : "Defina os dois horários."}
         </p>
-        <Button size="sm" onClick={save} disabled={saving || !dirty || hours === null}>
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : hasSaved ? "Atualizar rotina" : "Salvar rotina"}
+        <Button size="sm" className="shrink-0" onClick={save} disabled={saving || !dirty || hours === null} loading={saving}>
+          {hasSaved ? "Atualizar rotina" : "Salvar rotina"}
         </Button>
       </div>
     </div>
