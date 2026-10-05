@@ -92,7 +92,7 @@ export default function ListaDeGrupos({
               crescimento, não de serviço), nenhuma prévia de feed alheio para
               dar vontade, e nenhum "3 amigos seus já estão aqui" — isso é
               pressão social disfarçada de informação. */}
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+          <p className="text-subhead text-muted-foreground max-w-sm mx-auto">
             Um grupo pequeno — você e duas, três pessoas — que se acompanham por um tempo
             combinado. Não tem feed público, não tem desconhecido, não tem placar de quem
             treina mais.
@@ -105,7 +105,7 @@ export default function ListaDeGrupos({
               variant="ghost" className="w-full min-h-11 text-muted-foreground"
               onClick={() => setEntrarAberto(true)}
             >
-              Tenho um link de convite →
+              Tenho um link de convite <span aria-hidden>→</span>
             </Button>
           </div>
         </Card>
@@ -143,7 +143,7 @@ export default function ListaDeGrupos({
               Criar um grupo
             </Button>
             <Button variant="ghost" className="min-h-11 text-muted-foreground" onClick={() => setEntrarAberto(true)}>
-              Tenho um link de convite →
+              Tenho um link de convite <span aria-hidden>→</span>
             </Button>
           </div>
         </>
@@ -155,7 +155,7 @@ export default function ListaDeGrupos({
         <p className="text-sm font-medium flex items-center gap-1.5">
           <Lock className="w-4 h-4 shrink-0" /> Nasce fechado
         </p>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-subhead text-muted-foreground">
           Nada seu é compartilhado até você escolher, item por item. Dinheiro nunca entra —
           nem se você quiser. Peso, humor, diário e batalhas também não.
         </p>

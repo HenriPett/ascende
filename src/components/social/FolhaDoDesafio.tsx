@@ -1,9 +1,8 @@
 import { useMemo } from "react";
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
-} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import {
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody,
+} from "@/components/ui/drawer";
 import {
   weekScoreboard, fullDayThreshold, FULL_DAY_SIGNALS, type MemberTotals,
 } from "@/lib/socialChallenge";
@@ -96,18 +95,19 @@ export default function FolhaDoDesafio({
   const titulo = d?.nome ?? futuro?.nome ?? dados.encerrado?.nome ?? "Combinado";
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[92vh] overflow-y-auto">
-        <SheetHeader className="text-left">
-          <SheetTitle>{titulo}</SheetTitle>
-          <SheetDescription>
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>{titulo}</DrawerTitle>
+          <DrawerDescription>
             {d
               ? `Termina ${dataLonga(d.terminaEm)}. Ele acaba sozinho — sem prêmio, e sem cobrança.`
               : futuro
                 ? `Começa ${dataLonga(futuro.comecaEm)} e termina ${dataLonga(futuro.terminaEm)}.`
                 : `Terminou ${dataLonga(dados.encerrado?.terminaEm ?? "")}.`}
-          </SheetDescription>
-        </SheetHeader>
+          </DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
 
         <div className="py-4 space-y-4">
           {/* ── O combinado que ainda não começou ── */}
@@ -135,7 +135,7 @@ export default function FolhaDoDesafio({
                    terceiro por subtração — inclusive quem escolheu não
                    aparecer. A tela DIZ o motivo em vez de só omitir: omissão
                    sem explicação é a pessoa achando que é bug. */
-                <p className="text-sm text-muted-foreground">
+                <p className="text-subhead text-muted-foreground">
                   O total do grupo aparece quando pelo menos quatro pessoas estiverem
                   compartilhando este sinal. Com menos gente, somar entregaria quem
                   não quis aparecer.
@@ -174,7 +174,7 @@ export default function FolhaDoDesafio({
                         {l.isViewer ? "Você" : l.name}
                       </span>
                       <span
-                        className="text-[13px] text-foreground whitespace-nowrap shrink-0"
+                        className="text-footnote text-foreground whitespace-nowrap shrink-0"
                         style={{ fontVariantNumeric: "proportional-nums" }}
                       >
                         {linha.tipo === "contagem"
@@ -192,8 +192,9 @@ export default function FolhaDoDesafio({
                 <Button
                   variant="outline" className="min-h-11 w-full"
                   onClick={() => onParticipar(d.id)} disabled={entrando}
+                  loading={entrando}
                 >
-                  {entrando ? <Loader2 className="w-4 h-4 animate-spin" /> : "Entrar neste combinado"}
+                  Entrar neste combinado
                 </Button>
               )}
 
@@ -229,8 +230,9 @@ export default function FolhaDoDesafio({
             </>
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 }
 

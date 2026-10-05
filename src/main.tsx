@@ -1,5 +1,10 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
+/* Sora auto-hospedada: os arquivos saem em /assets/* com hash, e o sw.js já
+   os guarda em cache-first — o PWA abre com a fonte certa mesmo sem rede, e
+   nenhuma tela (finanças, saúde, diário) faz requisição ao Google. Antes do
+   index.css para que o @font-face exista quando o CSS do app pedir a família. */
+import "@fontsource-variable/sora";
 import "./index.css";
 import { initTheme } from "@/hooks/useTheme";
 import ErrorBoundary from "@/components/core/ErrorBoundary";

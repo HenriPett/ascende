@@ -44,8 +44,14 @@ export default function ProfileCompleteness() {
           </div>
           <div className="flex flex-wrap gap-1.5">
             {items.filter((i) => !i.done).map((i) => (
-              <Link key={i.label} to="/app/ajustes"
-                className="text-[11px] rounded-full border px-2.5 py-1 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
+              /* Leva direto à subseção do perfil, e o chip tem alvo de
+                 toque de verdade: eram 26 pt, agora 32 no mouse e 44 no dedo.
+                 `max-w-full` + `text-left` + `break-words`: com Texto Maior no
+                 último degrau, "+ Ano de nascimento" passava da largura e a
+                 Conta rolava 9 pt de lado. Agora o chip quebra linha dentro do
+                 cartão. */
+              <Link key={i.label} to="/app/ajustes?secao=perfil"
+                className="text-caption2 rounded-full border px-2.5 py-1 min-h-8 coarse:min-h-11 inline-flex items-center max-w-full text-left break-words text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
                 + {i.label}
               </Link>
             ))}

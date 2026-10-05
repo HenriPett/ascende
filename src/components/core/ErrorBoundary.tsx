@@ -43,7 +43,7 @@ export default class ErrorBoundary extends Component<Props, State> {
       <div className="min-h-dvh grid place-items-center bg-background px-4 py-8">
         <div className="w-full max-w-md space-y-4 text-center">
           <p className="font-display text-xl font-semibold">Alguma coisa quebrou aqui.</p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-subhead text-muted-foreground">
             A falha é nossa, não sua — e nada do que você registrou se perdeu.
             Recarregar a tela costuma resolver.
           </p>
@@ -69,7 +69,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             <summary className="text-xs text-muted-foreground cursor-pointer select-none rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
               Detalhes técnicos
             </summary>
-            <pre className="mt-2 max-h-40 overflow-auto rounded-md border bg-muted/50 p-2 text-[11px] whitespace-pre-wrap break-words">
+            <pre className="mt-2 max-h-40 overflow-auto rounded-md border bg-muted/50 p-2 text-caption2 whitespace-pre-wrap break-words">
               {error.message || String(error)}
             </pre>
           </details>

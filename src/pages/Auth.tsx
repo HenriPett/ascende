@@ -11,8 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { LEGAL_VERSION } from "@/lib/legal";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog";
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody,
+} from "@/components/ui/drawer";
 import { toast } from "sonner";
 import { Loader2, MailCheck, Sparkles, Check, KeyRound } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -62,6 +62,10 @@ export default function Auth() {
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
   const [newPassword, setNewPassword] = useState("");
+  /* Erro de UM campo mora embaixo DELE, não num toast que some: a pessoa
+     corrige olhando para onde o problema está. */
+  const [erroSenhaNova, setErroSenhaNova] = useState<string | null>(null);
+  const [erroSenha, setErroSenha] = useState<string | null>(null);
   const [savingPassword, setSavingPassword] = useState(false);
 
   useEffect(() => {
@@ -74,6 +78,7 @@ export default function Auth() {
     if (!pendingEmail || resendIn > 0) return;
     const { error } = await supabase.auth.resend({ type: "signup", email: pendingEmail });
     if (error) { toast.error("Não consegui reenviar agora. Tente em instantes."); return; }
+    toast.dismiss("Não consegui reenviar agora. Tente em instantes.");
     toast.success("Link reenviado! Confira também a caixa de spam.");
     setResendIn(30);
   };
@@ -150,6 +155,7 @@ export default function Auth() {
               toast.error("Não consegui entrar com o Google. Tente de novo.");
               return;
             }
+            toast.dismiss("Não consegui entrar com o Google. Tente de novo.");
             // Sessão criada NESTA janela: o callback decide gate de
             // consentimento → onboarding → app.
             navigate("/auth/callback", { replace: true });
@@ -199,7 +205,9 @@ export default function Auth() {
     if (error) {
       setOauthLoading(null);
       toast.error("Não consegui abrir o login agora. Tente de novo.");
+      return;
     }
+    toast.dismiss("Não consegui abrir o login agora. Tente de novo.");
     // Sucesso: o navegador navega para o provedor — não resetar o loading.
   };
 
@@ -258,7 +266,7 @@ export default function Auth() {
   // Sessão de recuperação já ativa: só falta gravar a senha nova.
   const submitNewPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 8) { toast.error("A senha precisa ter pelo menos 8 caracteres."); return; }
+    if (newPassword.length < 8) { setErroSenhaNova("A senha precisa ter pelo menos 8 caracteres."); return; }
     setSavingPassword(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     setSavingPassword(false);
@@ -266,6 +274,7 @@ export default function Auth() {
       toast.error("Não consegui salvar a senha nova. Peça um link novo e tente de novo.");
       return;
     }
+    toast.dismiss("Não consegui salvar a senha nova. Peça um link novo e tente de novo.");
     toast.success("Senha atualizada!");
     // Sessão válida em mãos: o callback aplica o gate de consentimento e
     // decide onboarding × app, igual a qualquer outra entrada.
@@ -282,23 +291,28 @@ export default function Auth() {
         setPendingEmail(email);
         return;
       }
+      // `id` estável: a mensagem varia com o motivo, e a próxima tentativa que
+      // entrar dispensa o erro desta.
       toast.error(
         error.message.includes("Invalid login")
           ? "E-mail ou senha incorretos."
-          : "Não foi possível entrar. Tente de novo."
+          : "Não foi possível entrar. Tente de novo.",
+        { id: "auth-entrar" },
       );
       return;
     }
+    toast.dismiss("auth-entrar");
     navigate("/auth/callback", { replace: true });
   };
 
   const signUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 8) { toast.error("A senha precisa ter pelo menos 8 caracteres."); return; }
+    if (password.length < 8) { setErroSenha("A senha precisa ter pelo menos 8 caracteres."); return; }
     if (!acceptedTerms) {
       toast.error("Para criar a conta, é preciso ler e aceitar os Termos, a Política de Privacidade e o Aviso Legal.");
       return;
     }
+    toast.dismiss("Para criar a conta, é preciso ler e aceitar os Termos, a Política de Privacidade e o Aviso Legal.");
     setLoading(true);
     const { error, data } = await supabase.auth.signUp({
       email, password,
@@ -316,10 +330,12 @@ export default function Auth() {
       toast.error(
         error.message.includes("already registered")
           ? "Este e-mail já tem conta. Use a aba Entrar."
-          : "Não foi possível criar a conta. Tente de novo."
+          : "Não foi possível criar a conta. Tente de novo.",
+        { id: "auth-criar" },
       );
       return;
     }
+    toast.dismiss("auth-criar");
     if (data.session) {
       navigate("/onboarding", { replace: true });
     } else {
@@ -330,19 +346,22 @@ export default function Auth() {
 
   // Diálogo do "esqueci minha senha" — usado na aba Entrar e também na tela
   // de link expirado, onde pedir outro é a única saída útil.
+  // É um formulário (um campo e um botão), então é FOLHA de baixo: o
+  // teclado sobe junto e o campo não fica preso atrás dele.
   const forgotDialog = (
-    <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="font-display">
+    <Drawer open={forgotOpen} onOpenChange={setForgotOpen}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle className="font-display">
             {forgotSent ? "Link a caminho" : "Esqueceu a senha?"}
-          </DialogTitle>
-          <DialogDescription>
+          </DrawerTitle>
+          <DrawerDescription>
             {forgotSent
               ? "Se existir uma conta com esse e-mail, o link de redefinição chega em instantes. Confira também a caixa de spam."
               : "Diga o e-mail da conta e enviamos um link para você criar uma senha nova."}
-          </DialogDescription>
-        </DialogHeader>
+          </DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
         {forgotSent ? (
           <Button className="w-full" onClick={() => setForgotOpen(false)}>Entendi</Button>
         ) : (
@@ -352,13 +371,14 @@ export default function Auth() {
               <Input id="email-reset" type="email" required autoComplete="email"
                 value={forgotEmail} onChange={(ev) => setForgotEmail(ev.target.value)} />
             </div>
-            <Button type="submit" className="w-full" disabled={forgotLoading}>
-              {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Enviar link"}
+            <Button type="submit" className="w-full" loading={forgotLoading}>
+              Enviar link
             </Button>
           </form>
         )}
-      </DialogContent>
-    </Dialog>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 
   // ── Redefinição de senha (voltou do link do e-mail) ──
@@ -368,7 +388,10 @@ export default function Auth() {
         <div className="min-h-dvh grid place-items-center bg-background">
           <div className="flex flex-col items-center gap-4">
             <Logo size="lg" />
-            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            <span role="status" className="contents">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" aria-hidden />
+              <span className="sr-only">Carregando…</span>
+            </span>
           </div>
         </div>
       );
@@ -385,7 +408,7 @@ export default function Auth() {
               <>
                 <div className="text-center">
                   <h1 className="font-display text-xl font-semibold">Crie uma senha nova</h1>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <p className="text-subhead text-muted-foreground mt-1">
                     Depois de salvar, você já entra direto — sem precisar digitar de novo.
                   </p>
                 </div>
@@ -393,10 +416,12 @@ export default function Auth() {
                   <div className="space-y-1.5">
                     <Label htmlFor="pass-new">Nova senha (mínimo 8 caracteres)</Label>
                     <Input id="pass-new" type="password" required autoComplete="new-password"
-                      value={newPassword} onChange={(ev) => setNewPassword(ev.target.value)} />
+                      aria-invalid={!!erroSenhaNova} aria-describedby={erroSenhaNova ? "pass-new-erro" : undefined}
+                      value={newPassword} onChange={(ev) => { setNewPassword(ev.target.value); setErroSenhaNova(null); }} />
+                    {erroSenhaNova && <p id="pass-new-erro" role="alert" className="text-caption text-destructive">{erroSenhaNova}</p>}
                   </div>
-                  <Button type="submit" className="w-full" disabled={savingPassword}>
-                    {savingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar e entrar"}
+                  <Button type="submit" className="w-full" loading={savingPassword}>
+                    Salvar e entrar
                   </Button>
                 </form>
               </>
@@ -404,7 +429,7 @@ export default function Auth() {
               <>
                 <div className="text-center">
                   <h1 className="font-display text-xl font-semibold">Este link não vale mais</h1>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <p className="text-subhead text-muted-foreground mt-1">
                     Links de redefinição expiram e só funcionam uma vez. Peça outro — leva 10 segundos.
                   </p>
                 </div>
@@ -434,7 +459,7 @@ export default function Auth() {
             </div>
             <div>
               <h1 className="font-display text-xl font-semibold">Confirme seu e-mail</h1>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-subhead text-muted-foreground mt-1">
                 Enviamos um link para <strong className="text-foreground">{pendingEmail}</strong>.
                 Toque nele e volte aqui — sua conta já está reservada.
               </p>
@@ -492,8 +517,9 @@ export default function Auth() {
             <div className="mb-3 flex justify-center min-h-10 relative">
               <div ref={gisButtonRef} className="w-full flex justify-center" />
               {oauthLoading === "google" && (
-                <div className="absolute inset-0 grid place-items-center bg-background/70 rounded-md">
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                <div className="absolute inset-0 grid place-items-center bg-background/70 rounded-md" role="status">
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
+                  <span className="sr-only">Entrando com o Google…</span>
                 </div>
               )}
             </div>
@@ -505,11 +531,9 @@ export default function Auth() {
             className="w-full mb-3"
             onClick={() => signInWithProvider("google")}
             disabled={oauthLoading !== null}
+            loading={oauthLoading === "google"}
           >
-            {oauthLoading === "google" ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <>
+            <>
                 <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" aria-hidden="true">
                   <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47a5.57 5.57 0 0 1-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z" />
                   <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09A11.99 11.99 0 0 0 12 24z" />
@@ -517,15 +541,14 @@ export default function Auth() {
                   <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0A11.99 11.99 0 0 0 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z" />
                 </svg>
                 Continuar com Google
-              </>
-            )}
+            </>
           </Button>
           )}
           {/* Fase 2 (Apple): mesmo fluxo — signInWithProvider("apple") — ligar
               quando o Services ID estiver configurado no Supabase. */}
           <div className="flex items-center gap-3 mb-4" aria-hidden>
             <div className="h-px flex-1 bg-border" />
-            <span className="text-[11px] text-muted-foreground">ou com e-mail</span>
+            <span className="text-caption2 text-muted-foreground">ou com e-mail</span>
             <div className="h-px flex-1 bg-border" />
           </div>
 
@@ -547,13 +570,13 @@ export default function Auth() {
                   <Input id="pass-in" type="password" required autoComplete="current-password"
                     value={password} onChange={(e) => setPassword(e.target.value)} />
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Entrar"}
+                <Button type="submit" className="w-full" loading={loading}>
+                  Entrar
                 </Button>
                 <button
                   type="button"
                   onClick={openForgot}
-                  className="w-full text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  className="w-full min-h-11 inline-flex items-center justify-center text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
                 >
                   Esqueci minha senha
                 </button>
@@ -564,7 +587,7 @@ export default function Auth() {
               <form onSubmit={signUp} className="space-y-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="name-up">Como podemos te chamar?</Label>
-                  <Input id="name-up" required maxLength={60}
+                  <Input id="name-up" required maxLength={60} autoComplete="given-name"
                     value={name} onChange={(e) => setName(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
@@ -575,7 +598,9 @@ export default function Auth() {
                 <div className="space-y-1.5">
                   <Label htmlFor="pass-up">Senha (mínimo 8 caracteres)</Label>
                   <Input id="pass-up" type="password" required autoComplete="new-password"
-                    value={password} onChange={(e) => setPassword(e.target.value)} />
+                    aria-invalid={!!erroSenha} aria-describedby={erroSenha ? "pass-up-erro" : undefined}
+                    value={password} onChange={(e) => { setPassword(e.target.value); setErroSenha(null); }} />
+                  {erroSenha && <p id="pass-up-erro" role="alert" className="text-caption text-destructive">{erroSenha}</p>}
                 </div>
                 <label className="flex items-start gap-2.5 rounded-lg border p-3 cursor-pointer">
                   <Checkbox
@@ -593,8 +618,8 @@ export default function Auth() {
                     para personalizar minha experiência.
                   </span>
                 </label>
-                <Button type="submit" className="w-full" disabled={loading || !acceptedTerms}>
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar conta grátis"}
+                <Button type="submit" className="w-full" disabled={!acceptedTerms} loading={loading}>
+                  Criar conta grátis
                 </Button>
               </form>
             </TabsContent>

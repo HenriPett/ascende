@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
-} from "@/components/ui/sheet";
-import { Lock, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody,
+} from "@/components/ui/drawer";
+import { Switch } from "@/components/ui/switch";
+import { Lock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { FRASE_DE, NUNCA_COMPARTILHAVEL } from "@/components/core/socialPhrases";
 import { isShareable, type SocialMetricKey } from "@/lib/socialMetrics";
@@ -162,38 +161,20 @@ export default function SocialConsentSheet({
   const visiveis = linhas.filter((l) => isShareable(l.key));
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      {/* As duas correções de toque da casa, medidas em QA e já pagas uma vez
-       *  (AppLayout.tsx, achados N5 e N6). Reaproveitadas literalmente aqui:
-       *
-       *  N5 — o "Fechar" do SheetContent é 16x16 (um ícone de 16px num botão
-       *  sem tamanho). Escape resolve no teclado; no celular não existe
-       *  Escape. A caixa vira 44x44 SEM o desenho sair do lugar: o botão é
-       *  `absolute right-4 top-4`, então o ícone estava centrado a 24px de
-       *  cada borda (16 + 16/2); com a caixa em 44px, `right-0.5 top-0.5`
-       *  recoloca esse centro exatamente em 24px (2 + 44/2).
-       *
-       *  N6 — `safe-bottom` sozinho ZERARIA o respiro (num aparelho sem
-       *  recorte ele vale 0 e, sendo mais específico, apaga o `p-6` do
-       *  próprio SheetContent). O `calc` SOMA o recorte ao padding: 24px
-       *  sempre, mais o que o aparelho pedir — senão a última linha termina
-       *  dentro dos ~34px do indicador de home do iPhone, onde o toque vira
-       *  gesto do sistema. */}
-      <SheetContent
-        side="bottom"
-        className={cn(
-          "rounded-t-2xl max-h-[85dvh] overflow-y-auto",
-          "pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
-          "[&>button]:h-11 [&>button]:w-11 [&>button]:grid [&>button]:place-items-center [&>button]:right-0.5 [&>button]:top-0.5",
-        )}
-      >
-        <SheetHeader className="text-left">
-          <SheetTitle>O que este grupo vê de você</SheetTitle>
-          <SheetDescription>
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      {/* A folha de baixo da casa (ui/drawer.tsx): fecha arrastando, tem
+          puxador, e o Fechar de 44 pt e o respiro do indicador de início já vêm
+          do primitivo. As correções N5 e N6, que antes eram repetidas à mão em
+          cada folha, moram lá agora — e por isso não há sobrescrita aqui. */}
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>O que este grupo vê de você</DrawerTitle>
+          <DrawerDescription>
             {grupoNome} · Tudo começa desligado. Ligue só o que você quer que eles vejam — e
             sempre como "feito", nunca com número.
-          </SheetDescription>
-        </SheetHeader>
+          </DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
 
         <div className="py-4 space-y-1">
           {visiveis.map((l) => {
@@ -211,11 +192,14 @@ export default function SocialConsentSheet({
                     {/* A frase literal, entre aspas, com a tinta do texto comum:
                         ela não é legenda do controle — ela É o que se decide. */}
                     <span className="block text-sm text-muted-foreground">"{m.frase}"</span>
-                    <span className="block text-xs text-muted-foreground/80">{m.semOQue}</span>
+                    {/* Sem a opacidade de 80%: ela levava esta linha a 3,40:1, e é
+                        a que diz o que NÃO sai daqui — o consentimento informado
+                        em si. A hierarquia vem do tamanho, não da transparência. */}
+                    <span className="block text-xs text-muted-foreground">{m.semOQue}</span>
                     {/* O preview honesto: não "o que eles poderiam ver", e sim
                         o que este grupo JÁ pode somar de você. */}
                     {l.diasPublicados > 0 && (
-                      <span className="block text-xs text-muted-foreground/80">
+                      <span className="block text-xs text-muted-foreground">
                         Este grupo já pode somar {l.diasPublicados}{" "}
                         {l.diasPublicados === 1 ? "dia seu" : "dias seus"} deste tipo.
                       </span>
@@ -280,10 +264,9 @@ export default function SocialConsentSheet({
             onClick={() => salvar([...sel].map(([key, meta]) => ({
               key, meta: metaDoTexto(rascunho.get(key) ?? "") ?? meta,
             })))}
+            loading={salvando}
           >
-            {salvando
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : modo === "entrar" ? "Entrar no grupo"
+            {modo === "entrar" ? "Entrar no grupo"
                 : modo === "criar" ? "Começar assim" : "Salvar"}
           </Button>
 
@@ -293,12 +276,15 @@ export default function SocialConsentSheet({
             variant="ghost" className="w-full min-h-11 text-muted-foreground"
             disabled={salvando} onClick={() => salvar([])}
           >
-            {modo === "entrar" ? "Entrar sem compartilhar nada ainda →"
-              : modo === "criar" ? "Começar sem compartilhar nada →"
+            {/* A seta é desenho, não palavra: o VoiceOver a leria como
+                "seta para a direita" no meio do rótulo. */}
+            {modo === "entrar" ? <>Entrar sem compartilhar nada ainda <span aria-hidden>→</span></>
+              : modo === "criar" ? <>Começar sem compartilhar nada <span aria-hidden>→</span></>
                 : "Desligar tudo"}
           </Button>
         </div>
-      </SheetContent>
-    </Sheet>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 }

@@ -120,7 +120,7 @@ export default function AuthCallback() {
           <Card className="p-6 space-y-3">
             <CheckCircle2 className="w-10 h-10 text-success mx-auto" />
             <h1 className="font-display text-xl font-semibold">Login concluído!</h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-subhead text-muted-foreground">
               Agora é só <strong className="text-foreground">voltar para o app Ascende</strong> —
               você já vai estar dentro. Pode fechar esta aba.
             </p>
@@ -145,7 +145,7 @@ export default function AuthCallback() {
           <Card className="p-6 space-y-4">
             <div>
               <h1 className="font-display text-xl font-semibold">Quase lá — só falta o seu aceite</h1>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-subhead text-muted-foreground mt-1">
                 Sua conta Google foi conectada. Como o Ascende guarda coisas íntimas
                 (dinheiro, corpo, fé, emoções), a lei pede — e a gente faz questão — de
                 um consentimento explícito seu antes de começar.
@@ -167,8 +167,8 @@ export default function AuthCallback() {
                 para personalizar minha experiência.
               </span>
             </label>
-            <Button className="w-full" onClick={confirmConsent} disabled={!accepted || saving}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Concluir e começar"}
+            <Button className="w-full" onClick={confirmConsent} disabled={!accepted} loading={saving}>
+              Concluir e começar
             </Button>
             <button className="w-full text-xs text-muted-foreground underline" onClick={declineAndExit}>
               Não aceito — sair sem criar nada
@@ -187,7 +187,10 @@ export default function AuthCallback() {
     <div className="min-h-dvh grid place-items-center bg-background">
       <div className="flex flex-col items-center gap-4">
         <Logo size="lg" />
-        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        <span role="status" className="contents">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" aria-hidden />
+          <span className="sr-only">Entrando…</span>
+        </span>
         <p className="text-sm text-muted-foreground">Concluindo seu login...</p>
       </div>
     </div>

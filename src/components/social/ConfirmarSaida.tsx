@@ -2,7 +2,6 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2 } from "lucide-react";
 
 /**
  * SAIR DO GRUPO — confirmação de ATO DESTRUTIVO. Não é retenção.
@@ -63,8 +62,13 @@ export default function ConfirmarSaida({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={saindo}>Continuar no grupo</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirmar} disabled={saindo}>
-            {saindo ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sair e apagar"}
+          {/* `destrutiva`: vermelho, e sem o papel de destaque — o dourado é a
+              cor da recompensa nesta casa (ver ui/alert-dialog.tsx).
+              Sem spinner aqui de propósito: a ação do Radix FECHA o alerta no
+              toque, então o spinner nunca chegava a aparecer. A espera é
+              mostrada no `⋯` do cabeçalho (MenuDoGrupo), que continua na tela. */}
+          <AlertDialogAction destrutiva onClick={onConfirmar} disabled={saindo}>
+            Sair e apagar
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

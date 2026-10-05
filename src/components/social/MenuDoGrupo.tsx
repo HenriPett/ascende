@@ -2,7 +2,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, MoreHorizontal, UserPlus, Flag } from "lucide-react";
+import { LogOut, MoreHorizontal, UserPlus, Flag } from "lucide-react";
 
 /**
  * AS AÇÕES, fora do corpo da tela.
@@ -35,8 +35,9 @@ export default function MenuDoGrupo({
         <Button
           variant="ghost" size="icon" className="w-11 h-11 shrink-0"
           aria-label="Mais ações deste grupo"
+          loading={saindo}
         >
-          {saindo ? <Loader2 className="w-5 h-5 animate-spin" /> : <MoreHorizontal className="w-5 h-5" />}
+          <MoreHorizontal className="w-5 h-5" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { prefersReducedMotion, useReducedMotion } from "@/hooks/useReducedMotion";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,11 +16,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody,
+} from "@/components/ui/drawer";
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
-} from "@/components/ui/sheet";
+  Folha, FolhaContent, FolhaHeader, FolhaTitle, FolhaDescription, FolhaBody, FolhaFooter,
+} from "@/components/ui/folha";
 import GoalInput from "@/components/core/GoalInput";
 import QueryError from "@/components/core/QueryError";
 import SleepSchedule from "@/components/core/SleepSchedule";
@@ -236,7 +237,7 @@ function NotaDeReorientacao({ onIrParaCorpo }: { onIrParaCorpo: () => void }) {
             empurrar a linha do parágrafo — o mesmo truque do FirstTimeTip,
             adaptado a um link que vive dentro do texto. */}
         <button type="button" className="underline text-foreground py-3.5" onClick={onIrParaCorpo}>
-          Procurando peso e composição corporal? Está em Meu corpo →
+          Procurando peso e composição corporal? Está em Meu corpo <span aria-hidden>→</span>
         </button>
       </p>
       <div className="flex justify-end pt-0.5">
@@ -278,10 +279,12 @@ function RaioXVitalidade({ onPronto }: { onPronto: () => void }) {
       toast.error("Preencha pelo menos um dos dois campos. Ex.: 3 treinos, 6,5 horas.");
       return;
     }
+    toast.dismiss("Preencha pelo menos um dos dois campos. Ex.: 3 treinos, 6,5 horas.");
     setSaving(true);
     const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
     setSaving(false);
     if (error) { toast.error("Não consegui salvar o Raio-X. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar o Raio-X. Tente de novo.");
     toast.success("Retrato de Vitalidade pronto. O Conselheiro e o briefing já cruzam isso com os outros pilares.");
     setWorkoutsWeek("");
     setSleepAvg("");
@@ -350,6 +353,10 @@ function RetratoEstimado() {
 }
 
 export default function Vitalidade() {
+  /* O Recharts anima com requestAnimationFrame, fora do alcance do
+     `prefers-reduced-motion` do CSS: com movimento reduzido, as barras e a
+     linha aparecem já no lugar, em vez de crescerem do zero. */
+  const reduzMovimento = useReducedMotion();
   const { user } = useAuth();
   const { profile, refresh: refreshProfile } = useProfile();
   /* Modularidade total: sono, sonecas, treinos, água, refeições, proteína e
@@ -417,11 +424,9 @@ export default function Vitalidade() {
     const el = document.getElementById(`v-${foco}`);
     if (el) {
       // `behavior` em JS não obedece ao @media de movimento reduzido do CSS —
-      // aqui a preferência é lida à mão, senão a rolagem animada volta para
+      // a preferência vem do hook único, senão a rolagem animada volta para
       // quem pediu para não ter animação.
-      const reduzido = typeof window !== "undefined"
-        && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      el.scrollIntoView({ behavior: reduzido ? "auto" : "smooth", block: "start" });
+      el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
       el.querySelector<HTMLElement>("[data-registro]")?.focus({ preventScroll: true });
     }
     setFoco(null);
@@ -467,6 +472,7 @@ export default function Vitalidade() {
     if (!user) return;
     const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar. Tente de novo.");
     refreshProfile();
   };
 
@@ -476,6 +482,7 @@ export default function Vitalidade() {
     const c = value.trim().slice(0, 80);
     if (!c) return;
     if (list.length >= 20) { toast.error("Máximo de 20 itens. Remova algum para adicionar outro."); return; }
+    toast.dismiss("Máximo de 20 itens. Remova algum para adicionar outro.");
     if (list.some((x) => x.toLowerCase() === c.toLowerCase())) { toast.info("Isso já está na sua lista."); return; }
     await saveHealth({ [key]: [...list, c] });
     clear();
@@ -553,11 +560,14 @@ export default function Vitalidade() {
       toast.error(isNap ? "Quanto durou a soneca? Ex.: 1 ou 0,5" : "Quantas horas você dormiu? Ex.: 7,5");
       return;
     }
+    toast.dismiss("Quanto durou a soneca? Ex.: 1 ou 0,5");
+    toast.dismiss("Quantas horas você dormiu? Ex.: 7,5");
     const { error } = await supabase.from("life_events").insert({
       user_id: user.id, pillar: "vitalidade", kind: isNap ? "nap" : "sleep",
       payload: { hours: h, summary: isNap ? `Soneca: ${h}h` : `Sono: ${h}h` }, source: "form",
     });
     if (error) { toast.error("Não consegui salvar o sono. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar o sono. Tente de novo.");
     toast.success(isNap ? "Soneca registrada. +2 XP" : "Sono registrado. +5 XP");
     setSleepHours("");
     setSleepType(null);
@@ -573,6 +583,7 @@ export default function Vitalidade() {
       toast.error("Descreva o treino ou marque os grupos trabalhados.");
       return;
     }
+    toast.dismiss("Descreva o treino ou marque os grupos trabalhados.");
     const desc = workout.trim() || muscles.join(", ");
     const { error } = await supabase.from("life_events").insert({
       user_id: user.id, pillar: "vitalidade", kind: "workout",
@@ -584,6 +595,7 @@ export default function Vitalidade() {
       source: "form",
     });
     if (error) { toast.error("Não consegui salvar o treino. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar o treino. Tente de novo.");
     toast.success("Treino registrado. +8 XP");
     setWorkout("");
     setMuscles([]);
@@ -613,6 +625,7 @@ export default function Vitalidade() {
         return;
       }
       setEstimate(res.estimate as Estimate);
+      toast.dismiss("Não consegui analisar agora. Verifique sua conexão e tente de novo.");
     } catch {
       toast.error("Não consegui analisar agora. Verifique sua conexão e tente de novo.");
     } finally {
@@ -627,6 +640,7 @@ export default function Vitalidade() {
     try {
       const photo = await fileToResizedBase64(file);
       setPhotoData(photo);
+      toast.dismiss("Não consegui abrir essa imagem. Tente outra foto.");
       setEstimate(null); // foto nova invalida estimativa anterior
     } catch {
       toast.error("Não consegui abrir essa imagem. Tente outra foto.");
@@ -667,6 +681,7 @@ export default function Vitalidade() {
     });
     setSavingPhoto(false);
     if (error) { toast.error("Não consegui salvar a refeição. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar a refeição. Tente de novo.");
     toast.success("Refeição registrada. +4 XP");
     resetPhoto();
     invalidate();
@@ -683,7 +698,8 @@ export default function Vitalidade() {
     payload.summary = calories > 0 ? `Refeição (~${calories} kcal): ${desc}` : `Refeição: ${desc}`;
     const { error } = await supabase.from("life_events").update({ payload }).eq("id", meal.id);
     if (error) { toast.error("Não consegui atualizar as calorias. Tente de novo."); return; }
-    toast.success("Calorias atualizadas.");
+    toast.dismiss("Não consegui atualizar as calorias. Tente de novo.");
+    // Sem toast: a folha fecha e o número novo já aparece na refeição.
     setEditingMeal(null);
     invalidate();
   };
@@ -700,6 +716,7 @@ export default function Vitalidade() {
       payload: { ml, summary: `Água: ${ml} ml` }, source: "form",
     });
     if (error) { toast.error("Não consegui registrar a água. Tente de novo."); return; }
+    toast.dismiss("Não consegui registrar a água. Tente de novo.");
     invalidate();
   };
 
@@ -714,6 +731,7 @@ export default function Vitalidade() {
   const logWeight = async () => {
     const kg = Number(weightInput.replace(",", "."));
     if (!user || !kg || kg < 20 || kg > 400) { toast.error("Informe um peso válido em kg, como 78,5."); return; }
+    toast.dismiss("Informe um peso válido em kg, como 78,5.");
     setSavingWeight(true);
     const { error } = await supabase.from("life_events").insert({
       user_id: user.id, pillar: "vitalidade", kind: "weight",
@@ -721,6 +739,7 @@ export default function Vitalidade() {
     });
     setSavingWeight(false);
     if (error) { toast.error("Não consegui salvar o peso. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar o peso. Tente de novo.");
     toast.success("Peso registrado. +3 XP");
     setWeightInput("");
     invalidate();
@@ -854,7 +873,12 @@ export default function Vitalidade() {
   ] as const).filter((c) => c.ativo);
 
   return (
-    <div className="max-w-2xl lg:max-w-4xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl lg:max-w-4xl mx-auto space-y-4 animate-fade-up [&_:is(h1,h2,h3)]:hyphens-auto [&_:is(h1,h2,h3)]:[overflow-wrap:break-word]">
+      {/* Títulos podem quebrar no meio da palavra, e só quando a palavra
+        não cabe: com Texto Maior a 40 pt, "Prosperidade" ou "Conselheiro"
+        num `text-2xl` passam da largura da tela sozinhos. Hifeniza em
+        pt-BR onde o dicionário deixa; senão, quebra onde precisar. No
+        tamanho padrão nenhum título chega na borda, então nada muda. */}
       {/* ── A DOBRA. Fora das abas, e sem barra de progresso nenhuma: a tela
              Hoje já é o painel do dia, e dois painéis do mesmo dia é a fusão
              dobrando a complexidade enquanto reduz um pilar. ────────────── */}
@@ -862,7 +886,7 @@ export default function Vitalidade() {
         <h1 className="font-display text-2xl font-semibold text-vitalidade-ink">
           Vitalidade
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-subhead text-muted-foreground">
           Corpo, sono, treino e o que você come — num lugar só. Usa Strava, balança ou app de
           dieta? Continue: aqui basta contar, e nós cruzamos com o resto da sua vida.
         </p>
@@ -941,7 +965,7 @@ export default function Vitalidade() {
                   className="resize-none text-sm"
                   disabled={analyzing}
                 />
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-caption2 text-muted-foreground">
                   {photoData
                     ? "Detalhes deixam a estimativa mais certeira e ficam salvos com a refeição."
                     : "Dá para estimar só pela descrição, mas a foto melhora a precisão."}
@@ -957,7 +981,7 @@ export default function Vitalidade() {
                 <Button className="flex-1 min-w-0 min-h-11" onClick={analyzeMeal}
                   disabled={analyzing || (!photoData && !photoNote.trim())}>
                   {analyzing
-                    ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" /> Analisando...</>)
+                    ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" aria-hidden /> Analisando...</>)
                     : (<><Sparkles className="w-4 h-4 mr-2 shrink-0" /> {estimate ? "Reanalisar" : "Analisar"}</>)}
                 </Button>
               </div>
@@ -978,7 +1002,10 @@ export default function Vitalidade() {
                           <p className="text-xs text-muted-foreground mt-0.5">{estimate.items.join(" · ")}</p>
                         )}
                       </div>
-                      <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap rounded-full bg-muted px-2 py-0.5">
+                      {/* Sem `shrink-0`/`nowrap`: com o Texto Maior o selo crescia
+                          e empurrava a linha para fora da tela (Lince A1). Com teto
+                          de 45% ele quebra linha e a descrição fica com o resto. */}
+                      <span className="text-caption2 text-muted-foreground text-right max-w-[45%] rounded-full bg-muted px-2 py-0.5">
                         {confidenceLabel[estimate.confidence]}
                       </span>
                     </div>
@@ -1010,8 +1037,8 @@ export default function Vitalidade() {
                     <Button variant="ghost" onClick={resetPhoto} disabled={savingPhoto || analyzing}>
                       <X className="w-4 h-4 mr-1" /> Descartar
                     </Button>
-                    <Button onClick={confirmPhoto} disabled={savingPhoto || analyzing}>
-                      {savingPhoto ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Registrar</>)}
+                    <Button onClick={confirmPhoto} loading={savingPhoto} disabled={analyzing}>
+                      <Check className="w-4 h-4 mr-1" aria-hidden /> Registrar
                     </Button>
                   </div>
                 </div>
@@ -1022,7 +1049,10 @@ export default function Vitalidade() {
                   orçamento real de quem come. */}
               <p className="text-xs text-muted-foreground border-t pt-2.5">
                 O Conselheiro conhece o seu orçamento, o seu gasto com comida e o seu objetivo.{" "}
-                <Link className="underline text-foreground" to="/app/conselheiro">
+                {/* `inline-flex min-h-11`: link no meio do parágrafo tinha o alvo
+                    da linha de texto, 32 pt (Lince B7). Assim a linha dele cresce
+                    a 44 pt e o texto em volta continua corrido. */}
+                <Link className="inline-flex items-center min-h-11 underline text-foreground" to="/app/conselheiro">
                   Peça o plano alimentar que cabe no seu bolso
                 </Link>{" "}
                 — a meta do plano cai direto na sua tela Hoje.
@@ -1034,9 +1064,11 @@ export default function Vitalidade() {
           {/* Água */}
           {trackers.has("water") && (
             <Card id="v-agua" className="p-4 space-y-3 scroll-mt-20">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Droplet className="w-4 h-4" style={{ color: "hsl(205 70% 55%)" }} />
+              {/* `flex-wrap`: com Texto Maior "Minhas garrafas" desce para baixo
+                  do título em vez de empurrar o cartão para fora da tela. */}
+              <div className="flex flex-wrap items-center justify-between gap-x-2">
+                <div className="flex items-center gap-2 text-sm font-medium min-w-0">
+                  <Droplet className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--agua))" }} />
                   Hidratação de hoje
                 </div>
                 <Button variant="ghost" size="sm" className="min-h-11 text-muted-foreground"
@@ -1074,7 +1106,15 @@ export default function Vitalidade() {
                     variant="secondary" size="sm" className="gap-1.5 min-h-11"
                     onClick={() => addWater(b.ml)}>
                     <Plus className="w-3.5 h-3.5" />
-                    {b.label} <span className="text-muted-foreground">· {b.ml >= 1000 ? `${(b.ml / 1000).toString().replace(".", ",")}L` : `${b.ml}ml`}</span>
+                    {/* Rótulo e volume num ÚNICO bloco de texto: como dois itens
+                        flex separados, cada um tinha o próprio piso ("Garrafa",
+                        "500ml") e o chip não conseguia quebrar entre eles — a 40
+                        pt passava 8 pt da tela. Juntos, quebram como frase. Sem
+                        `min-w-0`: ele deixava o chip ser espremido até partir
+                        "Garra / fa"; o piso natural é a maior palavra. */}
+                    <span>
+                      {b.label} <span className="text-muted-foreground">· {b.ml >= 1000 ? `${(b.ml / 1000).toString().replace(".", ",")}L` : `${b.ml}ml`}</span>
+                    </span>
                   </Button>
                 ))}
               </div>
@@ -1119,7 +1159,9 @@ export default function Vitalidade() {
             {(trackers.has("sleep") || trackers.has("naps")) && (
               <Card id="v-sono" className="p-4 space-y-2 scroll-mt-20">
                 <p className="text-sm font-medium flex items-center gap-1.5"><Moon className="w-4 h-4" /> Sono</p>
-                <div className="flex gap-1.5">
+                {/* `flex-wrap`: os dois chips cabem lado a lado no tamanho
+                    padrão; com Texto Maior "Soneca" desce em vez de vazar. */}
+                <div className="flex flex-wrap gap-1.5">
                   {([["sleep", "Noite"], ["nap", "Soneca"]] as const)
                     .filter(([t]) => (t === "sleep" ? trackers.has("sleep") : trackers.has("naps")))
                     .map(([t, label]) => (
@@ -1140,7 +1182,7 @@ export default function Vitalidade() {
                     ))}
                 </div>
                 {dormiuHoje && effectiveSleepType === "nap" && sleepType === null && (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-caption2 text-muted-foreground">
                     Sono da noite já registrado hoje, então sugeri soneca. Pode trocar acima.
                   </p>
                 )}
@@ -1179,7 +1221,7 @@ export default function Vitalidade() {
           </div>
 
           {!chips.length && (
-            <p className="text-sm text-muted-foreground rounded-md border p-3">
+            <p className="text-subhead text-muted-foreground rounded-md border p-3">
               Você desligou os indicadores de comida, água, treino e sono — nada aqui te cobra
               isso. Se mudar de ideia, reative em Ajustes, na seção "O que você acompanha".
             </p>
@@ -1191,7 +1233,7 @@ export default function Vitalidade() {
         {/* ══ ABA 2 — MEU CORPO: dado do corpo, não do dia ═════════════ */}
         <TabsContent value="corpo" className="space-y-4 mt-0">
           {!trackers.has("weight") && (
-            <p className="text-sm text-muted-foreground rounded-md border p-3">
+            <p className="text-subhead text-muted-foreground rounded-md border p-3">
               Você escolheu não acompanhar peso e corpo — nada aqui te cobra isso.
               Se mudar de ideia, reative em Ajustes, na seção "O que você acompanha".
             </p>
@@ -1212,8 +1254,8 @@ export default function Vitalidade() {
               <div className="flex gap-2">
                 <Input data-registro inputMode="decimal" placeholder="Peso de hoje (kg)" value={weightInput}
                   onChange={(e) => setWeightInput(e.target.value)} />
-                <Button variant="secondary" className="min-h-11" onClick={logWeight} disabled={savingWeight}>
-                  {savingWeight ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
+                <Button variant="secondary" className="min-h-11" onClick={logWeight} loading={savingWeight}>
+                  Salvar
                 </Button>
               </div>
 
@@ -1223,8 +1265,8 @@ export default function Vitalidade() {
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={weightSeries} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                        <XAxis dataKey="dia" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                        <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <XAxis dataKey="dia" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
                         <Tooltip
                           contentStyle={{
                             background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
@@ -1234,9 +1276,9 @@ export default function Vitalidade() {
                         />
                         {weightGoal && (
                           <ReferenceLine y={weightGoal} stroke="hsl(var(--gold))" strokeDasharray="5 4"
-                            label={{ value: "meta", fontSize: 10, fill: "hsl(var(--gold))", position: "insideTopRight" }} />
+                            label={{ value: "meta", fontSize: 11, fill: "hsl(var(--gold))", position: "insideTopRight" }} />
                         )}
-                        <Line type="monotone" dataKey="kg" stroke="hsl(var(--vitalidade))" strokeWidth={2}
+                        <Line isAnimationActive={!reduzMovimento} type="monotone" dataKey="kg" stroke="hsl(var(--vitalidade))" strokeWidth={2}
                           dot={{ r: 2.5, fill: "hsl(var(--vitalidade))" }} />
                       </LineChart>
                     </ResponsiveContainer>
@@ -1268,7 +1310,7 @@ export default function Vitalidade() {
                 </p>
               )}
 
-              <p className="text-[11px] text-right -mt-2">
+              <p className="text-caption2 text-right -mt-2">
                 <Link className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
                   to={`/app/conselheiro?q=${encodeURIComponent("Analisa a tendência do meu peso nos últimos meses e me diz o que ela sugere.")}`}>
                   Perguntar ao Conselheiro sobre essa tendência
@@ -1281,8 +1323,8 @@ export default function Vitalidade() {
                   <div className="h-32">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={caloriesByDay} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
-                        <XAxis dataKey="dia" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <XAxis dataKey="dia" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
                         <Tooltip
                           cursor={{ fill: "hsl(var(--muted) / 0.5)" }}
                           contentStyle={{
@@ -1291,11 +1333,11 @@ export default function Vitalidade() {
                           }}
                           formatter={(v: number) => [`${v} kcal`, "Total"]}
                         />
-                        <Bar dataKey="kcal" fill="hsl(var(--vitalidade) / 0.7)" radius={[4, 4, 0, 0]} />
+                        <Bar isAnimationActive={!reduzMovimento} dataKey="kcal" fill="hsl(var(--vitalidade) / 0.7)" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-1">
+                  <p className="text-caption2 text-muted-foreground mt-1">
                     Soma das estimativas por foto — dias sem registro não aparecem.
                   </p>
                 </div>
@@ -1332,8 +1374,8 @@ export default function Vitalidade() {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={barData} margin={{ top: 4, right: 8, left: -22, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                        <XAxis dataKey="muscle" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                        <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <XAxis dataKey="muscle" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
                         <Tooltip
                           cursor={{ fill: "hsl(var(--muted) / 0.5)" }}
                           contentStyle={{
@@ -1341,7 +1383,7 @@ export default function Vitalidade() {
                             borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
                           }}
                         />
-                        <Bar dataKey="treinos" radius={[5, 5, 0, 0]}>
+                        <Bar isAnimationActive={!reduzMovimento} dataKey="treinos" radius={[5, 5, 0, 0]}>
                           {barData.map((d, i) => (
                             <Cell key={i} fill={`hsl(var(--vitalidade) / ${0.35 + (d.treinos / maxCount) * 0.65})`} />
                           ))}
@@ -1434,7 +1476,7 @@ export default function Vitalidade() {
               </form>
             </div>
 
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-caption2 text-muted-foreground">
               Isso adapta as sugestões, mas não substitui acompanhamento médico — decisões clínicas
               ficam sempre com o seu profissional de saúde.
             </p>
@@ -1448,12 +1490,12 @@ export default function Vitalidade() {
           <Card id="v-historico" className="p-4 scroll-mt-20">
             <h2 className="font-display font-semibold mb-3">Últimos {JANELA_DIAS} dias</h2>
 
-            {isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+            {isLoading && <p role="status" className="text-sm text-muted-foreground">Carregando…</p>}
 
             {!isLoading && !isError && !eventos.length && (
               <div className="text-center py-6">
                 <UtensilsCrossed className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">
+                <p className="text-subhead text-muted-foreground">
                   Nada registrado ainda.<br />
                   Registre acima — ou conte na tela Hoje: "almocei frango com arroz e treinei pernas".
                 </p>
@@ -1565,7 +1607,7 @@ function BotaoMetas({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="w-full min-h-11 text-sm text-muted-foreground hover:text-foreground underline underline-offset-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
-      Minhas metas →
+      Minhas metas <span aria-hidden>→</span>
     </button>
   );
 }
@@ -1596,6 +1638,7 @@ function MinhasMetas({
     if (!user) return;
     const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
     if (error) { toast.error("Não consegui salvar a meta. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar a meta. Tente de novo.");
     toast.success(ok);
     refresh();
   };
@@ -1606,36 +1649,42 @@ function MinhasMetas({
       toast.error("Para montar seu plano com segurança, eu trabalho entre 800 e 8000 kcal por dia. Qual número, dentro disso, é o seu?");
       return;
     }
+    toast.dismiss("Para montar seu plano com segurança, eu trabalho entre 800 e 8000 kcal por dia. Qual número, dentro disso, é o seu?");
     salvar({ calorie_goal_kcal: kcal }, "Meta calórica diária salva. Acompanhe na tela Hoje.");
   };
 
   const saveProtein = (raw: string) => {
     const g = Math.round(Number(String(raw).replace(",", ".").replace(/[^\d.]/g, "")));
     if (!g || g < 20 || g > 400) { toast.error("Trabalho com metas de proteína entre 20 e 400 g por dia. Quanto você quer?"); return; }
+    toast.dismiss("Trabalho com metas de proteína entre 20 e 400 g por dia. Quanto você quer?");
     salvar({ protein_goal_g: g }, "Meta de proteína salva. Acompanhe na tela Hoje.");
   };
 
   const saveWater = (raw: string) => {
     const ml = Math.round(Number(raw.replace(",", ".")) * 1000);
     if (!ml || ml < 500 || ml > 8000) { toast.error("Defina uma meta de água entre 0,5 L e 8 L."); return; }
+    toast.dismiss("Defina uma meta de água entre 0,5 L e 8 L.");
     salvar({ water_goal_ml: ml }, "Meta de água salva. Acompanhe na tela Hoje.");
   };
 
   const saveSleep = (raw: string) => {
     const h = Number(raw.replace(",", "."));
     if (!h || h < 4 || h > 12) { toast.error("Trabalho com metas de sono entre 4 e 12 horas por noite. Quantas horas você quer dormir?"); return; }
+    toast.dismiss("Trabalho com metas de sono entre 4 e 12 horas por noite. Quantas horas você quer dormir?");
     salvar({ sleep_goal_h: h }, "Meta de sono salva. Acompanhe na tela Hoje.");
   };
 
   const saveWorkouts = (raw: string) => {
     const n = Math.round(Number(raw));
     if (!n || n < 1 || n > 14) { toast.error("Trabalho com até 14 treinos por semana. Quantos cabem na sua rotina?"); return; }
+    toast.dismiss("Trabalho com até 14 treinos por semana. Quantos cabem na sua rotina?");
     salvar({ weekly_workouts_goal: n }, "Meta de treinos salva. Acompanhe na tela Hoje.");
   };
 
   const saveWeight = (raw: string) => {
     const kg = Number(raw.replace(",", "."));
     if (!kg || kg < 20 || kg > 400) { toast.error("Só consigo guardar metas de peso entre 20 e 400 kg. Escreva assim: 75 ou 78,5."); return; }
+    toast.dismiss("Só consigo guardar metas de peso entre 20 e 400 kg. Escreva assim: 75 ou 78,5.");
     salvar({ weight_goal_kg: kg }, "Meta de peso salva.");
   };
 
@@ -1680,19 +1729,19 @@ function MinhasMetas({
   ].filter((l) => l.mostrar);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
-        <SheetHeader className="text-left">
-          <SheetTitle className="flex items-center gap-1.5">
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle className="flex items-center gap-1.5">
             <Target className="w-4 h-4" style={{ color: "hsl(var(--vitalidade))" }} /> Minhas metas
-          </SheetTitle>
-          <SheetDescription>
+          </DrawerTitle>
+          <DrawerDescription>
             Você acompanha todas elas na tela Hoje. Só aparecem aqui as que você escolheu
             acompanhar — o resto está desligado em Ajustes, e o histórico continua seu.
-          </SheetDescription>
-        </SheetHeader>
+          </DrawerDescription>
+        </DrawerHeader>
 
-        <div className="space-y-4 py-4">
+        <DrawerBody className="space-y-4">
           {linhas.map((l) => (
             <div key={l.titulo} className="space-y-1.5">
               <p className="text-sm font-medium">{l.titulo}</p>
@@ -1701,7 +1750,7 @@ function MinhasMetas({
           ))}
 
           {!linhas.length && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-subhead text-muted-foreground">
               Você desligou todos os indicadores desta área. Reative em Ajustes, na seção
               "O que você acompanha".
             </p>
@@ -1711,23 +1760,23 @@ function MinhasMetas({
             {trackers.has("water") && (
               <button type="button" onClick={onAbrirGarrafas}
                 className="block w-full text-left min-h-11 text-sm text-muted-foreground hover:text-foreground underline underline-offset-2">
-                Tamanho das minhas garrafas e copos →
+                Tamanho das minhas garrafas e copos <span aria-hidden>→</span>
               </button>
             )}
             {podeRefazerRaiox && (
               <button type="button" onClick={onRefazerRaiox}
                 className="block w-full text-left min-h-11 text-sm text-muted-foreground hover:text-foreground underline underline-offset-2">
-                Refazer o Raio-X de Vitalidade →
+                Refazer o Raio-X de Vitalidade <span aria-hidden>→</span>
               </button>
             )}
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-caption2 text-muted-foreground">
               Sem ideia de número? Peça ao Conselheiro: ele parte do seu objetivo, do seu
               orçamento e do que você já registrou.
             </p>
           </div>
-        </div>
-      </SheetContent>
-    </Sheet>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 }
 
@@ -1755,34 +1804,32 @@ function CalorieEditDialog({
   };
 
   return (
-    <Dialog open={!!meal} onOpenChange={(v) => { if (!v) { setValue(""); onClose(); } }}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Editar calorias</DialogTitle>
-          <DialogDescription className="break-words">
+    <Folha open={!!meal} onOpenChange={(v) => { if (!v) { setValue(""); onClose(); } }}>
+      <FolhaContent className="max-w-sm">
+        <FolhaHeader>
+          <FolhaTitle>Editar calorias</FolhaTitle>
+          <FolhaDescription className="break-words">
             {meal?.payload?.description ?? "Refeição"}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex items-center gap-2">
+          </FolhaDescription>
+        </FolhaHeader>
+        <FolhaBody className="flex items-center gap-2">
           <Flame className="w-4 h-4 shrink-0" style={{ color: "hsl(var(--vitalidade))" }} />
           <Input
             inputMode="numeric" autoFocus
-            className="h-9 w-28 text-base font-semibold"
+            className="w-28 text-base font-semibold"
             placeholder={current || "0"}
             value={value} onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") save(); }}
             aria-label="Calorias"
           />
           <span className="text-sm text-muted-foreground">kcal</span>
-        </div>
-        <DialogFooter>
+        </FolhaBody>
+        <FolhaFooter>
           <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button onClick={save} disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <Button onClick={save} loading={saving}>Salvar</Button>
+        </FolhaFooter>
+      </FolhaContent>
+    </Folha>
   );
 }
 
@@ -1795,7 +1842,7 @@ function WaterRing({ pct }: { pct: number }) {
     <svg width="68" height="68" viewBox="0 0 68 68" className="shrink-0" aria-hidden>
       <circle cx="34" cy="34" r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth="7" />
       <circle
-        cx="34" cy="34" r={r} fill="none" stroke="hsl(205 70% 55%)" strokeWidth="7"
+        cx="34" cy="34" r={r} fill="none" stroke="hsl(var(--agua))" strokeWidth="7"
         strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct)}
         transform="rotate(-90 34 34)" style={{ transition: "stroke-dashoffset .4s ease" }}
       />
@@ -1835,27 +1882,29 @@ function GarrafasDialog({
       .map((r) => ({ label: r.label.trim(), ml: Math.round(Number(String(r.ml).replace(",", "."))) }))
       .filter((r) => r.label && r.ml > 0 && r.ml <= 5000);
     if (!clean.length) { toast.error("Deixe pelo menos uma garrafa válida (nome e volume)."); return; }
+    toast.dismiss("Deixe pelo menos uma garrafa válida (nome e volume).");
     setSaving(true);
     const { error } = await supabase.from("profiles").update({ water_bottles: clean }).eq("user_id", user.id);
     setSaving(false);
     if (error) { toast.error("Não consegui salvar. Tente de novo."); return; }
+    toast.dismiss("Não consegui salvar. Tente de novo.");
     toast.success("Garrafas salvas.");
     onSaved();
     onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (v) reset(); onOpenChange(v); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Minhas garrafas e copos</DialogTitle>
-          <DialogDescription>
+    <Folha open={open} onOpenChange={(v) => { if (v) reset(); onOpenChange(v); }}>
+      <FolhaContent>
+        <FolhaHeader>
+          <FolhaTitle>Minhas garrafas e copos</FolhaTitle>
+          <FolhaDescription>
             Cadastre o que você usa de verdade. Assim, registrar água passa a ser um toque só.
             A meta do dia fica em Minhas metas.
-          </DialogDescription>
-        </DialogHeader>
+          </FolhaDescription>
+        </FolhaHeader>
 
-        <div className="space-y-2">
+        <FolhaBody className="space-y-2">
           <Label>Garrafas / copos</Label>
           {rows.map((r, i) => (
             <div key={i} className="flex items-center gap-2">
@@ -1880,15 +1929,13 @@ function GarrafasDialog({
           <Button variant="outline" size="sm" onClick={addRow} className="w-full">
             <Plus className="w-4 h-4 mr-1.5" /> Adicionar garrafa
           </Button>
-        </div>
+        </FolhaBody>
 
-        <DialogFooter>
+        <FolhaFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
-          <Button onClick={save} disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <Button onClick={save} loading={saving}>Salvar</Button>
+        </FolhaFooter>
+      </FolhaContent>
+    </Folha>
   );
 }

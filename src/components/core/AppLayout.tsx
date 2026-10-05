@@ -1,292 +1,232 @@
-import { useCallback, useMemo, useState, useEffect } from "react";
-import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
-import {
-  Sun, Moon, Monitor, MessageCircle, Mountain, Plus, Settings, CreditCard,
-  LogOut, ChevronRight, UserRound, MessageSquarePlus,
-} from "lucide-react";
+import { forwardRef, useCallback, useMemo, useRef, useState, useEffect, type ReactNode } from "react";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { ChevronLeft, MessageCircle, Mountain, Plus, Sun, UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useXp } from "@/hooks/useXp";
-import { useTheme, type Theme } from "@/hooks/useTheme";
-import { useProfile } from "@/hooks/useProfile";
 import { CaptureFocusContext, useCaptureFocus } from "@/hooks/useCaptureFocus";
 import Logo from "@/components/core/Logo";
-import FeedbackDialog from "@/components/core/FeedbackDialog";
 import CaptureBar from "@/components/core/CaptureBar";
 import QuickActions from "@/components/core/QuickActions";
-import ProfileCompleteness from "@/components/core/ProfileCompleteness";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { levelTitle } from "@/lib/xp";
-import { NAV, appPath } from "@/lib/routes";
+import { Drawer, DrawerBody, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { NAV, RAIZ_DA_SECAO, ehRaizDeSecao, secaoDe, type Secao } from "@/lib/routes";
 import { RetomarConvite } from "@/components/social/ConviteEmTransito";
 import { cn } from "@/lib/utils";
+import { dispensarErros } from "@/components/ui/sonner";
 
-/* Navegação da Fase 4:  Hoje · Jornada · [REGISTRAR] · Conselheiro · avatar
- *
- * Os caminhos vêm de NAV (src/lib/routes.ts do Forge) e não escritos à mão —
- * caminho na mão é como uma rota antiga morre sem ninguém ver. REGISTRAR não
- * está em NAV de propósito: é AÇÃO, não rota, e por isso também nunca mostra
- * estado ativo.
- *
- * Pilares, Indicadores, Planos e Batalhas saíram da BARRA e viraram seções do
- * hub /app/jornada — mas continuam com rota própria, abrindo a tela inteira.
- * O hub é uma porta a mais, nunca a única porta. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   A NAVEGAÇÃO — quatro lugares e um gesto, e eles não se misturam mais
+   ═══════════════════════════════════════════════════════════════════════════
+
+     ╭─────────────────────────────────────────╮  ╭────╮
+     │  Hoje    Jornada   Conselheiro   Conta  │  │ ＋ │  ← REGISTRAR
+     ╰─────────────────────────────────────────╯  ╰────╯
+
+   A barra tinha cinco células e duas delas não navegavam: REGISTRAR abria uma
+   folha (ou focava a caixa da Hoje — o mesmo toque fazia coisas diferentes
+   conforme a tela) e "Conta" abria outra folha. A pílula prometia cinco
+   lugares e entregava três lugares e dois gestos, e nas duas células de gesto
+   nada nunca ficava aceso (`tab-bars.md › Best practices`: "Use a tab bar to
+   support navigation, not to provide actions").
+
+   Agora é o padrão do iOS atual: a pílula só com ABAS — os quatro lugares —, e
+   a AÇÃO num círculo próprio ao lado dela, como o botão de busca que se separa
+   da barra. O REGISTRAR continua sendo o que sempre foi nesta casa: o único
+   fundo cheio da barra, o único redondo, o dourado-sol ao alcance do polegar
+   direito. Ele só deixou de fingir que é um lugar.
+
+   Os caminhos vêm de NAV e da seção de cada rota (src/lib/routes.ts), nunca
+   escritos à mão: caminho na mão é como uma rota antiga morre sem ninguém ver.
+   Pilares, Indicadores, Planos, Batalhas e o Social são telas do hub da
+   Jornada — continuam com rota própria, abrindo a tela inteira, e agora
+   acendem a aba Jornada e ganham o VOLTAR do cabeçalho. */
 
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 /* Estado ativo: o preenchimento neutro é o indicador, não a cor.
-   O anterior era `bg-primary/15 text-primary` — dourado de 10px sobre vidro
-   dá ~1,9:1 de contraste, e era o único sinal de "onde estou" no celular.
-   O dourado fica reservado ao REGISTRAR, onde é fundo cheio com texto escuro:
-   um só protagonista, como o index.css declara. */
-const cellBase = "flex flex-col items-center justify-center gap-0.5 text-[10px] rounded-full my-1.5 transition-colors";
+   O anterior era `bg-primary/15 text-primary` — dourado sobre vidro dá ~1,9:1
+   de contraste, e era o único sinal de "onde estou" no celular. O dourado fica
+   reservado ao REGISTRAR, onde é fundo cheio com texto escuro: um só
+   protagonista, como o index.css declara.
+
+   A BARRA NÃO CRESCE COM O TEXTO MAIOR, e é a ÚNICA peça do app em px de
+   propósito. O resto da interface está em rem para acompanhar o Dynamic Type;
+   a barra estava também, e o QA mediu o que isso faz nela: a pílula ia de
+   70 pt para 94 (Texto Maior padrão no último degrau) e 162 (acessibilidade
+   AX3) — 19% da tela —, e os rótulos truncavam todos ("Hoje…", "Conta…"). O
+   HIG é explícito: "when people increase text size to read the content in a
+   tabbed window, they don't expect the tab titles to increase in size"
+   (`typography.md › Conveying hierarchy`). Então rótulos, ícones, altura e
+   espaços da barra ficam em px fixos: quem aumenta o texto quer ler o
+   CONTEÚDO, e a barra continua do mesmo tamanho e no mesmo lugar.
+
+   11 px é o piso do iOS (`accessibility.md › Vision`); os rótulos tinham 10.
+   O rótulo não tem respiro lateral próprio: com os 2 px dele, "Conselheiro"
+   media 70 px numa célula de 69 e truncava SEMPRE, no tamanho padrão. */
+const cellBase = "flex flex-col items-center justify-center gap-[2px] text-[11px] leading-[13px] rounded-full my-[6px] transition-colors";
 const cellActive = "bg-muted text-foreground font-semibold";
 const cellIdle = "text-muted-foreground";
 
-function NavCell({ to, label, icon: Icon, end }: {
-  to: string; label: string; icon: LucideIcon; end?: boolean;
+/** Uma aba. Acende pela SEÇÃO da rota atual, não pelo endereço exato: em
+ *  /app/vitalidade a aba Jornada acende, porque é de lá que a pessoa veio e é
+ *  para lá que o VOLTAR a leva. Tocar na aba já acesa leva à raiz dela — o
+ *  comportamento do iOS para "voltar ao começo desta seção". */
+function Aba({ secao, label, icone, atual, nome }: {
+  secao: Secao; label: string; icone: ReactNode; atual: Secao | null;
+  /** O nome que o leitor de tela lê, quando o rótulo visível não basta. */
+  nome?: string;
 }) {
+  const ativa = atual === secao;
   return (
-    <NavLink
-      to={to} end={end}
-      className={({ isActive }) => cn(cellBase, FOCUS_RING, isActive ? cellActive : cellIdle)}
+    <Link
+      to={RAIZ_DA_SECAO[secao]}
+      aria-current={ativa ? "page" : undefined}
+      aria-label={nome}
+      className={cn(cellBase, FOCUS_RING, ativa ? cellActive : cellIdle)}
     >
-      <Icon className="w-5 h-5" />
-      <span className="max-w-full truncate px-0.5">{label}</span>
-    </NavLink>
+      {icone}
+      <span className="max-w-full truncate">{label}</span>
+    </Link>
+  );
+}
+
+// Em px, como o resto da barra (ver `cellBase`).
+const iconeDe = (Icon: LucideIcon) => <Icon className="w-[20px] h-[20px]" aria-hidden />;
+
+/* ── O ícone da Conta: o anel de XP ───────────────────────────────────────
+   A Conta é a única aba sem um símbolo genérico: o ícone dela é o próprio
+   nível da pessoa, com o anel de progresso em volta. O número passou de 10 px
+   para `text-caption2` (11 pt), o piso do iOS. */
+function IconeDaConta() {
+  const { level, progress } = useXp();
+  return (
+    <span className="relative w-[20px] h-[20px] grid place-items-center" aria-hidden>
+      <svg viewBox="0 0 36 36" className="absolute w-[28px] h-[28px] -rotate-90">
+        <circle cx="18" cy="18" r="15" fill="none" stroke="hsl(var(--muted))" strokeWidth="3" />
+        <circle
+          cx="18" cy="18" r="15" fill="none"
+          stroke="hsl(var(--gold))" strokeWidth="3" strokeLinecap="round"
+          strokeDasharray={`${progress * 94.2} 94.2`}
+        />
+      </svg>
+      <span className="relative text-[11px] leading-none font-bold text-gold-ink">{level}</span>
+    </span>
   );
 }
 
 /* ── REGISTRAR ────────────────────────────────────────────────────────────
-   Dominante SEM ocupar área nova: é a célula central da pílula que já existe,
-   já flutua e cujo espaço o `main` já reserva. O círculo estoura 14px para
-   cima dentro do bloco da barra — não ganha um metro quadrado de tela e não
-   passa a cobrir nada que antes estava visível. A dominância vem de três
-   coisas que não custam área: ser o único fundo cheio, ser redondo entre
-   retângulos, e quebrar a linha da barra.
-
-   O slot de layout tem o MESMO tamanho do ícone das outras células (20px) e o
-   círculo é posicionado sobre ele — assim o rótulo "Registrar" fica na mesma
-   linha de base dos outros quatro. */
-function RegisterCell({ onSheet }: { onSheet: () => void }) {
+   Um círculo dourado de 64 pt — a mesma altura da pílula —, ao lado dela.
+   Não tem rótulo visível porque o "+" é o símbolo universal de criar, e o
+   rótulo por baixo era o que o fazia parecer uma aba; o nome está no
+   `aria-label`, que é o que o leitor de tela lê.
+   Na Hoje ele foca a caixa de captura que já vive na tela; nas outras, abre a
+   folha. A diferença é proposital e está explicada em useCaptureFocus.tsx:
+   duas caixas de captura na mesma tela é um estado proibido. */
+const Registrar = forwardRef<HTMLButtonElement, { onSheet: () => void }>(function Registrar({ onSheet }, ref) {
   const focus = useCaptureFocus();
   return (
     <button
+      ref={ref}
       type="button"
       onClick={() => (focus ? focus() : onSheet())}
       aria-label="Registrar o que aconteceu"
-      className={cn(cellBase, FOCUS_RING, "text-foreground font-semibold")}
+      className={cn(
+        // 64 pt fixos, a altura da pílula: o REGISTRAR é parte da barra e não
+        // cresce com o texto (ver `cellBase`).
+        "grid h-[64px] w-[64px] shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-black/15",
+        "transition-transform active:scale-95",
+        FOCUS_RING,
+      )}
     >
-      <span className="relative w-5 h-5">
-        <span
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -mt-3.5 w-14 h-14 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-lg shadow-black/15"
-          aria-hidden
-        >
-          <Plus className="w-6 h-6" />
-        </span>
-      </span>
-      <span>Registrar</span>
+      <Plus className="w-[28px] h-[28px]" aria-hidden />
     </button>
+  );
+});
+
+/* ── VOLTAR ───────────────────────────────────────────────────────────────
+   Toda tela que não é a raiz de uma aba ganha voltar no cabeçalho.
+
+   POR QUE ISTO NÃO EXISTIA E PRECISA EXISTIR: no navegador, o Safari dá o
+   gesto de borda e a barra com o botão de voltar. Instalado na Tela de Início
+   (`apple-mobile-web-app-capable`), o app perde os dois — o iOS não oferece
+   gesto de voltar a um PWA em modo standalone. Pilares, Vitalidade, Score,
+   Ajustes e as outras telas de segundo nível ficavam sem caminho de volta: a
+   única saída era tocar numa aba e recomeçar, perdendo onde se estava
+   (`designing-for-ios.md`: "it's especially important [to] let people swipe
+   to navigate back").
+
+   Para ONDE ele volta: para a tela anterior, quando ela é do app. O índice do
+   histórico que o React Router guarda (`history.state.idx`) diz se há uma
+   entrada nossa para trás; `window.history.length` não serve, porque conta
+   também o que veio antes do app (o /auth, a página de onde o link foi
+   aberto). Sem entrada nossa — a pessoa abriu um link direto para
+   /app/vitalidade —, ele leva à raiz da aba, em vez de tirá-la do app. */
+function Voltar({ secao }: { secao: Secao | null }) {
+  const navigate = useNavigate();
+  const voltar = () => {
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (idx > 0) navigate(-1);
+    else navigate(secao ? RAIZ_DA_SECAO[secao] : NAV.hoje);
+  };
+  return (
+    <Button
+      variant="ghost" size="icon" className="-ml-2 shrink-0"
+      onClick={voltar} aria-label="Voltar"
+    >
+      <ChevronLeft className="w-6 h-6" />
+    </Button>
   );
 }
 
-/* ── Avatar ───────────────────────────────────────────────────────────────
-   Fica na barra DE BAIXO, não no topo: em 390px com uma mão, o canto superior
-   direito é a pior área de alcance da tela, e mandar Ajustes para lá seria
-   trocar "fora da barra" por "fora do alcance". */
-function AvatarCell({ onOpen }: { onOpen: () => void }) {
-  const { level, progress } = useXp();
+/** A captura fora da Hoje: a MESMA CaptureBar, numa folha que sobe de baixo e
+ *  fecha arrastando (ui/drawer.tsx). Fecha sozinha no `onConfirmed`. */
+function CaptureSheet({ open, onOpenChange, voltarPara }: {
+  open: boolean; onOpenChange: (v: boolean) => void;
+  /** Quem recebe o foco ao fechar. A folha abre por ESTADO, não por um
+   *  `DrawerTrigger`, e no iPhone tocar um botão não o foca — então nem o
+   *  Radix nem o primitivo têm de quem se lembrar. Sem isto o foco caía no
+   *  `<body>`, e o VoiceOver recomeçava do topo da página. */
+  voltarPara?: React.RefObject<HTMLElement>;
+}) {
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label="Sua conta e ajustes"
-      className={cn(cellBase, FOCUS_RING, cellIdle)}
-    >
-      <span className="relative w-5 h-5 grid place-items-center">
-        <svg viewBox="0 0 36 36" className="absolute w-7 h-7 -rotate-90" aria-hidden>
-          <circle cx="18" cy="18" r="15" fill="none" stroke="hsl(var(--muted))" strokeWidth="3" />
-          <circle
-            cx="18" cy="18" r="15" fill="none"
-            stroke="hsl(var(--gold))" strokeWidth="3" strokeLinecap="round"
-            strokeDasharray={`${progress * 94.2} 94.2`}
-          />
-        </svg>
-        <span className="relative text-[10px] font-bold text-gold-ink">{level}</span>
-      </span>
-      <span>Conta</span>
-    </button>
-  );
-}
-
-/* ── A folha da conta ─────────────────────────────────────────────────────
-   Ajustes sair da barra não pode virar Ajustes ficar difícil de achar. "Conta"
-   estava espalhada: tema no header, assinatura dentro de Ajustes, sair no fim
-   de um scroll longo. A folha junta tudo ao alcance do polegar — é isso que
-   justifica a saída da barra. Linhas de 48px. */
-const THEMES: { id: Theme; label: string; icon: LucideIcon }[] = [
-  { id: "light", label: "Claro", icon: Sun },
-  { id: "dark", label: "Escuro", icon: Moon },
-  { id: "system", label: "Sistema", icon: Monitor },
-];
-
-function AccountSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { profile } = useProfile();
-  const { xp, level } = useXp();
-  const { theme, setTheme } = useTheme();
-  const close = () => onOpenChange(false);
-
-  const row = "flex items-center justify-between gap-3 h-12 px-3 rounded-lg hover:bg-muted/60 transition-colors text-sm";
-
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      {/* Duas correções de toque nesta folha, ambas medidas em QA:
-       *
-       * N5 — o "Fechar" do SheetContent é 16x16 (um ícone de 16px num botão
-       * sem tamanho). Escape resolve no teclado; no celular não existe
-       * Escape. Aqui ele vira 44x44 SEM mudar de lugar: o botão é
-       * `absolute right-4 top-4`, então o ícone estava centrado a 24px de
-       * cada borda (16 + 16/2). Com a caixa em 44px, `right-0.5 top-0.5`
-       * recoloca esse centro exatamente em 24px (2 + 44/2) — cresce a área,
-       * o desenho fica onde estava.
-       *
-       * N6 — `safe-bottom` sozinho ZERAVA o respiro: ele declara
-       * `padding-bottom: env(safe-area-inset-bottom)`, que num aparelho sem
-       * recorte vale 0 e, sendo uma utility mais específica, apagava o `p-6`
-       * do próprio SheetContent. A última linha ("Sair da conta", feedback)
-       * terminava colada no rodapé do viewport — em iPhone, dentro dos ~34px
-       * do indicador de home, onde o toque vira gesto do sistema. O `calc`
-       * SOMA o recorte ao padding em vez de substituí-lo: 24px sempre, mais
-       * o que o aparelho pedir. */}
-      <SheetContent
-        side="bottom"
-        className={cn(
-          "rounded-t-2xl max-h-[85dvh] overflow-y-auto",
-          "pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
-          "[&>button]:h-11 [&>button]:w-11 [&>button]:grid [&>button]:place-items-center [&>button]:right-0.5 [&>button]:top-0.5",
-        )}
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent
+        onCloseAutoFocus={(e) => {
+          if (!voltarPara?.current) return;
+          e.preventDefault();
+          voltarPara.current.focus();
+        }}
       >
-        <SheetHeader className="text-left">
-          <SheetTitle className="font-display">
-            {profile?.name ? String(profile.name).split(" ")[0] : "Sua conta"}
-          </SheetTitle>
-        </SheetHeader>
-
-        <Link to={appPath("score")} onClick={close} className={cn(row, "border", FOCUS_RING)}>
-          <span>
-            Nível {level} · {levelTitle(level)}
-            <span className="block text-xs text-muted-foreground">{xp} XP</span>
-          </span>
-          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-        </Link>
-
-        {/* O "Complete seu retrato" saiu da Hoje e mora aqui: é dado de CONTA,
-            não do dia. Ele se esconde sozinho quando o perfil está completo. */}
-        <div className="[&>*]:mt-0">
-          <ProfileCompleteness />
-        </div>
-
-        <div className="space-y-0.5">
-          <Link to={NAV.avatar} onClick={close} className={cn(row, FOCUS_RING)}>
-            <span className="flex items-center gap-2"><Settings className="w-4 h-4" /> Ajustes</span>
-            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-          </Link>
-          <Link to={appPath("assinatura")} onClick={close} className={cn(row, FOCUS_RING)}>
-            <span className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> Assinatura</span>
-            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-          </Link>
-        </div>
-
-        <div className="space-y-1.5">
-          <p className="text-xs text-muted-foreground px-3">Tema</p>
-          <div className="grid grid-cols-3 gap-1.5">
-            {THEMES.map(({ id, label, icon: Icon }) => (
-              <Button
-                key={id}
-                variant={theme === id ? "default" : "outline"}
-                size="sm"
-                onClick={() => setTheme(id)}
-                aria-pressed={theme === id}
-              >
-                <Icon className="w-3.5 h-3.5 mr-1.5" /> {label}
-              </Button>
-            ))}
+        <DrawerHeader>
+          <DrawerTitle className="font-display">Registrar</DrawerTitle>
+        </DrawerHeader>
+        <DrawerBody>
+          <CaptureBar onConfirmed={() => onOpenChange(false)} />
+          {/* O caminho de 1 toque, que antes só existia na tela Hoje.
+              REGISTRAR está em toda tela do app, mas a folha só oferecia a
+              captura por IA: quem estava na Prosperidade e queria marcar um copo
+              de água pagava quatro interações mais uma espera de rede por um
+              copo de água. Os dois chips que navegam (Refeição e Treino) fecham
+              a folha sozinhos — o efeito de rota abaixo já cuida disso. */}
+          <div className="mt-3">
+            <QuickActions />
           </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-2 pt-1">
-          {/* O gatilho padrão do FeedbackDialog é 36x36. Ele aceita um
-              `trigger` próprio, então o alvo cresce aqui — sem tocar no
-              componente, que tem outro dono, e sem inchar o ícone: a caixa vai
-              a 44x44 e o MessageSquarePlus continua com 16px. */}
-          <FeedbackDialog
-            trigger={
-              <button
-                type="button"
-                className={cn(
-                  "w-11 h-11 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
-                  FOCUS_RING,
-                )}
-                aria-label="Enviar feedback sobre a plataforma"
-                title="Enviar feedback"
-              >
-                <MessageSquarePlus className="w-4 h-4" />
-              </button>
-            }
-          />
-          <Button
-            variant="ghost" size="sm" className="text-muted-foreground"
-            onClick={async () => { close(); await supabase.auth.signOut(); }}
-          >
-            <LogOut className="w-4 h-4 mr-1.5" /> Sair da conta
-          </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-/** A captura fora da Hoje: a MESMA CaptureBar, numa folha. Fecha sozinha no
- *  `onConfirmed` — a prop já existia. */
-function CaptureSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      {/* Mesmo alvo de fechar e mesmo respiro de rodapé da folha da conta —
-          o motivo está comentado lá. */}
-      <SheetContent
-        side="bottom"
-        className={cn(
-          "rounded-t-2xl max-h-[85dvh] overflow-y-auto",
-          "pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
-          "[&>button]:h-11 [&>button]:w-11 [&>button]:grid [&>button]:place-items-center [&>button]:right-0.5 [&>button]:top-0.5",
-        )}
-      >
-        <SheetHeader className="text-left">
-          <SheetTitle className="font-display">Registrar</SheetTitle>
-        </SheetHeader>
-        <CaptureBar onConfirmed={() => onOpenChange(false)} />
-        {/* O caminho de 1 toque, que antes só existia na tela Hoje.
-            REGISTRAR está em toda tela do app, mas a folha só oferecia a
-            captura por IA: quem estava na Prosperidade e queria marcar um copo
-            de água pagava quatro interações mais uma espera de rede por um
-            copo de água. Os dois chips que navegam (Refeição e Treino) fecham
-            a folha sozinhos — o efeito de rota acima já cuida disso. */}
-        <div className="mt-3">
-          <QuickActions />
-        </div>
-      </SheetContent>
-    </Sheet>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 }
 
 export default function AppLayout() {
-  const [accountOpen, setAccountOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const registrarRef = useRef<HTMLButtonElement>(null);
+  const { level } = useXp();
   const { pathname } = useLocation();
+  const secao = secaoDe(pathname);
+  const mostraVoltar = secao !== null && !ehRaizDeSecao(pathname);
 
-  /* As folhas fecham na troca de rota.
+  /* A folha fecha na troca de rota.
    *
    * O AppLayout NÃO desmonta quando a rota muda, e nada ligava este estado ao
    * histórico — então a folha atravessava a navegação. Bug encontrado em QA ao
@@ -295,13 +235,15 @@ export default function AppLayout() {
    * caixa de captura que já vive naquela tela. Duas caixas idênticas, na mesma
    * tela — exatamente o que a Fase 4 escreveu que não podia acontecer (ver
    * useCaptureFocus.tsx). E, de quebra, o REGISTRAR parava de focar a caixa de
-   * baixo, mudando de comportamento sem a pessoa ter pedido.
-   *
-   * Vale para a folha da conta pelo mesmo motivo: navegar por um link de
-   * dentro dela deixava o painel aberto sobre a tela nova. */
+   * baixo, mudando de comportamento sem a pessoa ter pedido. */
   useEffect(() => {
     setCaptureOpen(false);
-    setAccountOpen(false);
+    /* E os ERROS persistentes da tela anterior saem junto: eles não somem
+       sozinhos (ui/sonner.tsx), e um "não consegui salvar" de outra tela,
+       parado no topo da tela nova, afirma uma falha sobre algo que a pessoa
+       nem está vendo. Os avisos de sucesso ficam — eles costumam ser
+       justamente sobre a ação que acabou de levar a pessoa até aqui. */
+    dispensarErros();
   }, [pathname]);
 
   // Ponte do REGISTRAR: a tela que embute a captura registra aqui como focá-la.
@@ -311,7 +253,7 @@ export default function AppLayout() {
 
   /* A REGRA, escrita como estado impossível em vez de como lembrete.
    *
-   * O efeito acima fecha as folhas quando a ROTA muda, e isso funciona — o
+   * O efeito acima fecha a folha quando a ROTA muda, e isso funciona — o
    * passo a passo do QA (Jornada → REGISTRAR → voltar) foi remedido e não
    * reproduz mais. Mas "fechar na troca de rota" é um PROXY da regra; a regra
    * mesma, escrita em useCaptureFocus.tsx, é outra: uma ação por tela — a
@@ -347,28 +289,37 @@ export default function AppLayout() {
 
         <header className="sticky top-0 z-30 glass border-x-0 border-t-0 rounded-none safe-top">
           <div className="container flex items-center justify-between h-14">
-            <Link to={NAV.hoje} aria-label="Ascende — início" className={cn("rounded-full", FOCUS_RING)}>
-              <Logo size="sm" />
-            </Link>
+            <div className="flex items-center gap-1 min-w-0">
+              {mostraVoltar && <Voltar secao={secao} />}
+              {/* `min-h-11`: o link do logo tinha 28 pt de altura, exatamente no
+                  mínimo do iOS — e ele é a porta de volta para a Hoje. */}
+              <Link
+                to={NAV.hoje} aria-label="Ascende — início"
+                className={cn("inline-flex min-h-11 items-center rounded-full", FOCUS_RING)}
+              >
+                <Logo size="sm" />
+              </Link>
+            </div>
 
-            {/* Navegação desktop: os mesmos cinco alvos, com Registrar como
-                botão preenchido e o avatar à direita. */}
+            {/* Navegação desktop: os mesmos quatro lugares, com Registrar como
+                botão preenchido à direita. A Conta é o ícone de pessoa. */}
             <nav className="hidden lg:flex items-center gap-1" aria-label="Principal">
-              {[
-                { to: NAV.hoje, label: "Hoje", icon: Sun, end: true },
-                { to: NAV.jornada, label: "Jornada", icon: Mountain },
-                { to: NAV.conselheiro, label: "Conselheiro", icon: MessageCircle },
-              ].map(({ to, label, icon: Icon, end }) => (
-                <NavLink
-                  key={to} to={to} end={end}
-                  className={({ isActive }) => cn(
+              {([
+                { secao: "hoje", label: "Hoje", icon: Sun },
+                { secao: "jornada", label: "Jornada", icon: Mountain },
+                { secao: "conselheiro", label: "Conselheiro", icon: MessageCircle },
+              ] as const).map(({ secao: s, label, icon: Icon }) => (
+                <Link
+                  key={s} to={RAIZ_DA_SECAO[s]}
+                  aria-current={secao === s ? "page" : undefined}
+                  className={cn(
                     "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors",
                     FOCUS_RING,
-                    isActive ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                    secao === s ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
                   )}
                 >
-                  <Icon className="w-4 h-4" /> {label}
-                </NavLink>
+                  <Icon className="w-4 h-4" aria-hidden /> {label}
+                </Link>
               ))}
             </nav>
 
@@ -376,14 +327,18 @@ export default function AppLayout() {
               <div className="hidden lg:block">
                 <RegisterDesktop onSheet={() => setCaptureOpen(true)} />
               </div>
-              <button
-                type="button"
-                onClick={() => setAccountOpen(true)}
+              <Link
+                to={NAV.conta}
                 aria-label="Sua conta e ajustes"
-                className={cn("hidden lg:grid h-11 w-11 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors", FOCUS_RING)}
+                aria-current={secao === "conta" ? "page" : undefined}
+                className={cn(
+                  "hidden lg:grid h-11 w-11 place-items-center rounded-full transition-colors",
+                  secao === "conta" ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  FOCUS_RING,
+                )}
               >
-                <UserRound className="w-5 h-5" />
-              </button>
+                <UserRound className="w-5 h-5" aria-hidden />
+              </Link>
             </div>
           </div>
         </header>
@@ -395,24 +350,30 @@ export default function AppLayout() {
           <Outlet />
         </main>
 
-        {/* A pílula NÃO pode ganhar overflow-hidden: o REGISTRAR estoura a
-            borda de cima de propósito. */}
-        <nav
-          className="lg:hidden fixed bottom-3 inset-x-3 z-30 max-w-md mx-auto rounded-full glass shadow-lg shadow-black/10"
+        {/* A pílula de abas e o REGISTRAR, lado a lado. A margem do indicador
+            de início é SOMADA ao `bottom-3`, não substituída por ele. */}
+        <div
+          className="lg:hidden fixed bottom-[12px] inset-x-[12px] z-30 max-w-md mx-auto flex items-center gap-[8px]"
           style={{ marginBottom: "env(safe-area-inset-bottom)" }}
-          aria-label="Principal"
         >
-          <div className="grid grid-cols-5 h-16 px-1">
-            <NavCell to={NAV.hoje} label="Hoje" icon={Sun} end />
-            <NavCell to={NAV.jornada} label="Jornada" icon={Mountain} />
-            <RegisterCell onSheet={() => setCaptureOpen(true)} />
-            <NavCell to={NAV.conselheiro} label="Conselheiro" icon={MessageCircle} />
-            <AvatarCell onOpen={() => setAccountOpen(true)} />
-          </div>
-        </nav>
+          <nav className="flex-1 min-w-0 rounded-full glass shadow-lg shadow-black/10" aria-label="Principal">
+            <div className="grid grid-cols-4 h-[64px] px-[4px]">
+              <Aba secao="hoje" label="Hoje" icone={iconeDe(Sun)} atual={secao} />
+              <Aba secao="jornada" label="Jornada" icone={iconeDe(Mountain)} atual={secao} />
+              <Aba secao="conselheiro" label="Conselheiro" icone={iconeDe(MessageCircle)} atual={secao} />
+              {/* O número do nível mora DENTRO do link, desenhado no anel, e
+                  a aba se anunciava "1Conta" para quem lê o texto do link. O
+                  `aria-hidden` do anel já devia bastar, mas quem decide o nome
+                  não deveria depender de como cada leitor trata conteúdo
+                  oculto — então o nome é explícito, e diz o nível de propósito,
+                  porque é informação que o anel dá a quem vê. */}
+              <Aba secao="conta" label="Conta" icone={<IconeDaConta />} atual={secao} nome={`Conta, nível ${level}`} />
+            </div>
+          </nav>
+          <Registrar ref={registrarRef} onSheet={() => setCaptureOpen(true)} />
+        </div>
 
-        <AccountSheet open={accountOpen} onOpenChange={setAccountOpen} />
-        <CaptureSheet open={captureSheetOpen} onOpenChange={setCaptureOpen} />
+        <CaptureSheet open={captureSheetOpen} onOpenChange={setCaptureOpen} voltarPara={registrarRef} />
       </div>
     </CaptureFocusContext.Provider>
   );

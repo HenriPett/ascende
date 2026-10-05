@@ -6,9 +6,10 @@ import { usePillarActivityQuery } from "@/hooks/useJornadaData";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { PILLARS, activePillarSet, normalizePillars, type PillarId } from "@/lib/pillars";
-import { ChevronRight, Swords, ClipboardList, Plus, Loader2, Layers, Users } from "lucide-react";
+import { ChevronRight, Swords, ClipboardList, Plus, Layers, Users } from "lucide-react";
 import FirstTimeTip from "@/components/core/FirstTimeTip";
 import QueryError from "@/components/core/QueryError";
 
@@ -42,15 +43,21 @@ export default function Pilares() {
     const { error } = await supabase.from("profiles").update({ pillars: next }).eq("user_id", user.id);
     setActivating(null);
     if (error) { toast.error("Não consegui ativar agora. Tente de novo."); return; }
+    toast.dismiss("Não consegui ativar agora. Tente de novo.");
     toast.success(`Pronto: ${PILLARS.find((p) => p.id === id)?.name} agora faz parte do seu Ascende.`);
     refresh();
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up">
+    <div className="max-w-2xl mx-auto space-y-4 animate-fade-up [&_:is(h1,h2,h3)]:hyphens-auto [&_:is(h1,h2,h3)]:[overflow-wrap:break-word]">
+      {/* Títulos podem quebrar no meio da palavra, e só quando a palavra
+        não cabe: com Texto Maior a 40 pt, "Prosperidade" ou "Conselheiro"
+        num `text-2xl` passam da largura da tela sozinhos. Hifeniza em
+        pt-BR onde o dicionário deixa; senão, quebra onde precisar. No
+        tamanho padrão nenhum título chega na borda, então nada muda. */}
       <div>
         <h1 className="font-display text-2xl font-semibold">Pilares</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-subhead text-muted-foreground">
           O seu Ascende é feito dos pilares que você ativou. Os outros ficam aqui,
           discretos, esperando você — nunca cobrando.
         </p>
@@ -84,7 +91,9 @@ export default function Pilares() {
                   <p.icon className="w-5 h-5" style={{ color: `hsl(var(${p.colorVar}))` }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold">{p.name}</p>
+                  {/* `anywhere`: o nome é uma palavra só, e a 40 pt
+                      "Prosperidade" passa da tela (ver o pilar pausado, abaixo). */}
+                  <p className="font-semibold [overflow-wrap:anywhere]">{p.name}</p>
                   <p className="text-xs text-muted-foreground truncate">
                     {n > 0 ? `${n} ${n === 1 ? "registro" : "registros"} nos últimos 14 dias` : p.desc}
                   </p>
@@ -102,7 +111,10 @@ export default function Pilares() {
         <div className="w-9 h-9 rounded-full grid place-items-center shrink-0 bg-gold/10">
           <Layers className="w-5 h-5 text-gold-ink" />
         </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
+        {/* `min-w-0` + quebra em qualquer ponto: "MyFitnessPal" é nome
+            próprio (o dicionário não hifeniza) e, a 40 pt, sozinho é mais
+            largo que a coluna ao lado do ícone. */}
+        <p className="text-xs text-muted-foreground leading-relaxed min-w-0 [overflow-wrap:break-word]">
           <strong className="text-foreground">Usa Strava, MyFitnessPal ou o app do banco? Ótimo — continue usando.</strong>{" "}
           O Ascende não quer substituí-los: eles vão fundo em uma área, nós cruzamos a
           vida inteira. Conte numa frase na captura ("treinei pernas", "gastei 47 no
@@ -120,28 +132,46 @@ export default function Pilares() {
               const n = counts?.[p.id] ?? 0;
               return (
                 <Card key={p.id} className="border-dashed">
-                  <div className="flex items-center gap-4 p-4">
+                  {/* `flex-wrap` com piso de largura no texto: no tamanho padrão
+                      tudo cabe numa linha, como antes; com Texto Maior o
+                      "Ativar" (que não pode encolher) desce para a linha de
+                      baixo, alinhado à direita, em vez de empurrar a página. */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
                     <div
                       className="w-11 h-11 rounded-md grid place-items-center shrink-0 opacity-60"
                       style={{ background: `hsl(var(${p.colorVar}) / 0.12)` }}
                     >
                       <p.icon className="w-5 h-5" style={{ color: `hsl(var(${p.colorVar}))` }} />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-muted-foreground">{p.name}</p>
+                    {/* Piso de 8rem COM TETO de 100%: a 40 pt, 8rem são 320 px —
+                        mais que a linha inteira —, e o piso sozinho empurrava a
+                        página. `min(8rem,100%)` vale 8rem no padrão e nunca
+                        passa da linha.
+                        No nome, `anywhere` (e não `break-word`) de propósito: é UMA
+                        palavra, e a 40 pt "Prosperidade" sozinha passa da tela —
+                        `break-word` não a quebra porque mantém a palavra como
+                        largura mínima. Aqui é seguro: o piso de 8rem do bloco
+                        impede o flex de espremê-lo, e no tamanho padrão o nome
+                        cabe inteiro, então nada se parte. */}
+                    <div className="flex-1 min-w-[min(8rem,100%)]">
+                      <p className="font-semibold text-muted-foreground hyphens-auto [overflow-wrap:anywhere]">{p.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
                         {n > 0 ? `${n} ${n === 1 ? "registro" : "registros"} nos últimos 14 dias — parece que já é seu` : p.desc}
                       </p>
                     </div>
-                    <button
+                    {/* Era um <button> cru que trocava "Ativar" pelo spinner — o
+                        nome sumia no toque e a pílula encolhia. O Button da casa
+                        segura o rótulo (invisível) e dá o alvo de 44 pt. */}
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => activatePillar(p.id)}
+                      loading={activating === p.id}
                       disabled={!!activating}
-                      className="shrink-0 flex items-center gap-1 text-xs font-medium rounded-full border px-3 py-1.5 hover:bg-muted/60 transition-colors disabled:opacity-60"
+                      className="shrink-0 ml-auto gap-1 rounded-full text-xs px-3"
                     >
-                      {activating === p.id
-                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        : <><Plus className="w-3.5 h-3.5" /> Ativar</>}
-                    </button>
+                      <Plus className="w-3.5 h-3.5" aria-hidden /> Ativar
+                    </Button>
                   </div>
                 </Card>
               );
@@ -161,7 +191,7 @@ export default function Pilares() {
               <Swords className="w-5 h-5 text-gold" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold">Batalhas</p>
+              <p className="font-semibold [overflow-wrap:anywhere]">Batalhas</p>
               <p className="text-xs text-muted-foreground truncate">
                 As lutas que você escolheu enfrentar — sem julgamento, com método
               </p>
@@ -182,7 +212,7 @@ export default function Pilares() {
               <Users className="w-5 h-5 text-gold" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold">Social</p>
+              <p className="font-semibold [overflow-wrap:anywhere]">Social</p>
               <p className="text-xs text-muted-foreground truncate">
                 Um grupo pequeno que se acompanha na semana — sem plateia, sem placar
               </p>
@@ -198,7 +228,7 @@ export default function Pilares() {
               <ClipboardList className="w-5 h-5 text-gold" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold">Meus planos</p>
+              <p className="font-semibold [overflow-wrap:anywhere]">Meus planos</p>
               <p className="text-xs text-muted-foreground truncate">
                 Planos alimentares, de treino e financeiros que o Conselheiro montou para você
               </p>

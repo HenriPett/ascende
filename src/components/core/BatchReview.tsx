@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 /* Revisão em lote — o esqueleto compartilhado.
  *
@@ -24,7 +24,7 @@ import { Check, Loader2, X } from "lucide-react";
 
 /** Badge de "já registrado". Idêntico nas duas telas — agora escrito uma vez. */
 export function DuplicateBadge() {
-  return <Badge variant="outline" className="text-[10px] ml-1.5 align-middle">já registrado</Badge>;
+  return <Badge variant="outline" className="text-caption2 ml-1.5 align-middle">já registrado</Badge>;
 }
 
 export default function BatchReview<T>({
@@ -118,10 +118,8 @@ export default function BatchReview<T>({
         <Button variant="ghost" onClick={onCancel} disabled={saving}>
           <X className="w-4 h-4 mr-1" /> {cancelLabel}
         </Button>
-        <Button className="flex-1" onClick={onConfirm} disabled={saving || confirmDisabled}>
-          {saving
-            ? <Loader2 className="w-4 h-4 animate-spin" />
-            : (<><Check className="w-4 h-4 mr-1.5" /> {confirmLabel}</>)}
+        <Button className="flex-1" onClick={onConfirm} disabled={saving || confirmDisabled} loading={saving}>
+          <Check className="w-4 h-4 mr-1.5" /> {confirmLabel}
         </Button>
       </div>
 

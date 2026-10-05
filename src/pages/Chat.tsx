@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { prefersReducedMotion } from "@/hooks/useReducedMotion";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -164,7 +165,9 @@ export default function Chat() {
 
   useEffect(() => {
     if (keepScroll.current) { keepScroll.current = false; return; }
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Rolagem animada só para quem não pediu movimento reduzido: o
+    // `behavior` em JS vence o `scroll-behavior` do CSS.
+    bottomRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth" });
   }, [messages.length, sending, captured, proposedPlan, learned, stItems]);
 
   // ── Anexos ───────────────────────────────────────────────────
@@ -274,12 +277,15 @@ export default function Chat() {
       // Proposta de perfil: NADA é salvo sem a pessoa confirmar (cartão abaixo)
       const suggestion = data?.profile_suggestion as ProfileSuggestion | null | undefined;
       if (suggestion?.labels?.length) setProfileSuggestion(suggestion);
+      // Respondeu: o erro de uma tentativa anterior de envio sai da tela.
+      toast.dismiss("conselheiro-enviar");
       qc.invalidateQueries({ queryKey: ["chat", user?.id] });
     } catch (e) {
       setLocal((l) => l.slice(0, -1));
       const msg = e instanceof Error && e.message !== "erro" ? e.message
         : "O Conselheiro não respondeu agora. Tente de novo em instantes.";
-      toast.error(msg);
+      // `id` estável: a mensagem pode vir do servidor (limite, fora do ar…).
+      toast.error(msg, { id: "conselheiro-enviar" });
       setInput(content);
       setAttachments(sentAttachments);
     } finally {
@@ -311,6 +317,7 @@ export default function Chat() {
       }
       const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
       if (error) throw error;
+      toast.dismiss("Não consegui salvar no perfil. Tente de novo.");
       toast.success(`Guardei no seu perfil: ${profileSuggestion.labels.join(", ")}.`);
       qc.invalidateQueries({ queryKey: ["profile"] });
       setProfileSuggestion(null);
@@ -337,6 +344,7 @@ export default function Chat() {
           ? `Compromisso criado: "${selected[0].name}". Acompanhe na tela Hoje — cada dia feito vale +10 XP.`
           : `${selected.length} compromissos criados. Acompanhe na tela Hoje — cada dia feito vale +10 XP.`
       );
+      toast.dismiss("Não consegui criar os compromissos. Tente de novo.");
       setProposedHabits(null);
       qc.invalidateQueries({ queryKey: ["habits-today"] });
       qc.invalidateQueries({ queryKey: ["first-steps"] });
@@ -384,10 +392,12 @@ export default function Chat() {
       // Nada entrou: não existe "registrei" a dizer. O primeiro aviso já
       // explica o motivo e o caminho de volta.
       if (!savedEvents.length) {
-        toast.error(warnings[0] ?? "Não consegui salvar. Tente de novo.");
+        // `id` estável: a mensagem varia (vem da gravação).
+        toast.error(warnings[0] ?? "Não consegui salvar. Tente de novo.", { id: "conselheiro-registrar" });
         for (const w of warnings.slice(1)) toast.warning(w);
         return;
       }
+      toast.dismiss("conselheiro-registrar");
 
       const gained = savedEvents.reduce((sum, ev) => sum + xpForKind(ev.kind), 0);
       // `summary` é a frase que a IA montou A PARTIR dos números, então ela
@@ -402,7 +412,7 @@ export default function Chat() {
       setCaptured(null);
       qc.invalidateQueries();
     } catch {
-      toast.error("Não consegui salvar. Tente de novo.");
+      toast.error("Não consegui salvar. Tente de novo.", { id: "conselheiro-registrar" });
     } finally {
       setSavingCaptured(false);
     }
@@ -434,6 +444,7 @@ export default function Chat() {
     });
     setSavingPlan(false);
     if (error) { toast.error("Não consegui salvar o plano."); return; }
+    toast.dismiss("Não consegui salvar o plano.");
 
     // Metas definidas pelo plano viram metas vivas do app (espelhadas na tela Hoje)
     const patch: Record<string, number> = {};
@@ -480,12 +491,10 @@ export default function Chat() {
               variant="ghost"
               size="sm"
               className="text-xs text-muted-foreground min-h-11"
-              disabled={historyFetching}
+              loading={historyFetching}
               onClick={() => { keepScroll.current = true; setWindowSize((w) => w + CHAT_WINDOW); }}
             >
-              {historyFetching
-                ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Carregando…</>
-                : "Ver mensagens anteriores"}
+              Ver mensagens anteriores
             </Button>
           </div>
         )}
@@ -530,11 +539,14 @@ export default function Chat() {
           </div>
         )}
 
+        {/* Os balões são o CORPO da conversa — leitura longa, não legenda —,
+            então vão em `text-body` (17 pt, o padrão do iOS) e escalam com o
+            Texto Maior. O Markdown dentro deles é todo em `em`, e acompanha. */}
         {messages.map((m, i) => (
           <div key={m.id ?? `local-${i}`} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
             <div
               className={cn(
-                "max-w-[85%] min-w-0 break-words rounded-2xl px-4 py-2.5 text-sm",
+                "max-w-[85%] min-w-0 break-words rounded-2xl px-4 py-2.5 text-body",
                 m.role === "user"
                   ? "bg-primary text-primary-foreground rounded-br-sm leading-relaxed whitespace-pre-line"
                   : "bg-card border rounded-bl-sm"
@@ -547,8 +559,11 @@ export default function Chat() {
 
         {sending && (
           <div className="flex justify-start">
-            <div className="bg-card border rounded-2xl rounded-bl-sm px-4 py-3">
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            {/* O balão de "pensando" é estado de carregamento: o VoiceOver
+                precisa ouvir que algo está acontecendo, não um ícone mudo. */}
+            <div className="bg-card border rounded-2xl rounded-bl-sm px-4 py-3" role="status">
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" aria-hidden />
+              <span className="sr-only">O Conselheiro está respondendo…</span>
             </div>
           </div>
         )}
@@ -592,8 +607,8 @@ export default function Chat() {
               <Button variant="ghost" size="sm" onClick={() => setProposedHabits(null)} disabled={savingHabits}>
                 <X className="w-4 h-4 mr-1" /> Agora não
               </Button>
-              <Button size="sm" onClick={confirmHabits} disabled={savingHabits}>
-                {savingHabits ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Criar selecionados</>)}
+              <Button size="sm" onClick={confirmHabits} loading={savingHabits}>
+                <Check className="w-4 h-4 mr-1" /> Criar selecionados
               </Button>
             </div>
           </div>
@@ -616,8 +631,8 @@ export default function Chat() {
               <Button variant="outline" size="sm" onClick={() => setPlanOpen(true)} disabled={savingPlan}>
                 <Eye className="w-4 h-4 mr-1" /> Ver plano
               </Button>
-              <Button size="sm" onClick={savePlan} disabled={savingPlan}>
-                {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Salvar plano</>)}
+              <Button size="sm" onClick={savePlan} loading={savingPlan}>
+                <Check className="w-4 h-4 mr-1" /> Salvar plano
               </Button>
             </div>
           </div>
@@ -630,7 +645,7 @@ export default function Chat() {
               <Sparkles className="w-4 h-4 text-gold" />
               Quer salvar isso no seu perfil?
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-subhead text-muted-foreground">
               Entendi na conversa: <strong>{profileSuggestion.labels.join(", ")}</strong>.
               Nada é salvo sem a sua confirmação.
             </p>
@@ -638,8 +653,8 @@ export default function Chat() {
               <Button variant="ghost" size="sm" onClick={() => setProfileSuggestion(null)} disabled={savingProfile}>
                 <X className="w-4 h-4 mr-1" /> Não salvar
               </Button>
-              <Button size="sm" onClick={applyProfileSuggestion} disabled={savingProfile}>
-                {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Salvar no perfil</>)}
+              <Button size="sm" onClick={applyProfileSuggestion} loading={savingProfile}>
+                <Check className="w-4 h-4 mr-1" /> Salvar no perfil
               </Button>
             </div>
           </div>
@@ -691,7 +706,9 @@ export default function Chat() {
                     aria-hidden
                   />
                   <span className="text-sm flex-1 min-w-0 break-words">{ev.summary}</span>
-                  <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">{meta?.name ?? ev.pillar}</span>
+                  {/* Sem `whitespace-nowrap`: "Mente & Espírito" num Texto Maior
+                      precisa poder quebrar, senão a folha rola de lado. */}
+                  <span className="text-caption2 text-muted-foreground text-right max-w-[40%] break-words">{meta?.name ?? ev.pillar}</span>
                 </label>
               );
             })}
@@ -699,8 +716,8 @@ export default function Chat() {
               <Button variant="ghost" size="sm" onClick={() => setCaptured(null)} disabled={savingCaptured}>
                 <X className="w-4 h-4 mr-1" /> Agora não
               </Button>
-              <Button size="sm" onClick={confirmCaptured} disabled={savingCaptured}>
-                {savingCaptured ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Registrar</>)}
+              <Button size="sm" onClick={confirmCaptured} loading={savingCaptured}>
+                <Check className="w-4 h-4 mr-1" /> Registrar
               </Button>
             </div>
           </div>
@@ -751,15 +768,23 @@ export default function Chat() {
           rows={2}
           maxLength={4000}
           className="resize-none min-h-[44px] max-h-40"
+          /* Nome que não some na primeira letra (o placeholder some, e o
+             leitor de tela não o trata como nome). E o Enter ENVIA — Shift+Enter
+             é quem quebra linha —, então a tecla do iPhone diz "enviar", como
+             na captura e no recado do Social. */
+          aria-label="Mensagem para o Conselheiro"
+          enterKeyHint="send"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
           }}
         />
-        <Button size="icon" onClick={() => send()} disabled={sending || (!input.trim() && !attachments.length)} aria-label="Enviar">
+        {/* `shrink-0`: sem ele o Textarea ao lado espremia o Enviar até 26 pt
+            de largura — o botão mais usado da tela, abaixo do mínimo. */}
+        <Button size="icon" className="shrink-0" onClick={() => send()} disabled={sending || (!input.trim() && !attachments.length)} aria-label="Enviar">
           <Send className="w-4 h-4" />
         </Button>
       </div>
-      <p className="text-[11px] text-muted-foreground pt-1.5 pb-2 md:pb-0 shrink-0">
+      <p className="text-caption2 text-muted-foreground pt-1.5 pb-2 md:pb-0 shrink-0">
         O Conselheiro não substitui médicos, psicólogos, nutricionistas ou consultores de investimento.
       </p>
       </div>
@@ -790,8 +815,8 @@ export default function Chat() {
               <Button variant="outline" size="sm" onClick={requestPlanAdjust} disabled={!planComment.trim() || sending}>
                 <Wand2 className="w-4 h-4 mr-1" /> Pedir ajuste
               </Button>
-              <Button size="sm" onClick={savePlan} disabled={savingPlan}>
-                {savingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Check className="w-4 h-4 mr-1" /> Salvar plano</>)}
+              <Button size="sm" onClick={savePlan} loading={savingPlan}>
+                <Check className="w-4 h-4 mr-1" /> Salvar plano
               </Button>
             </div>
           </div>

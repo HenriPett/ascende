@@ -29,21 +29,30 @@ export default function GoalInput({
   };
 
   return (
-    <div className="flex gap-2 items-center">
+    /* `flex-wrap` com piso no campo: no tamanho padrão campo e "Definir
+       meta" dividem a linha, como antes; com Texto Maior o botão desce para
+       baixo do campo em vez de empurrar a página. Sem `shrink-0` no botão:
+       no toque o rótulo do `Button` quebra linha, e `shrink-0` o prenderia à
+       largura de uma linha só — mais larga que a tela no maior tamanho. */
+    <div className="flex flex-wrap gap-2 items-center">
       {/* `min-h-11` no lugar de `h-9` (36px): este é o controle com que a
           pessoa DEFINE as metas do app — teto do dia, orçamento do mês,
           calorias, proteína. Alvo abaixo de 44px num controle de digitação
-          é onde o dedo erra e o número sai trocado. */}
+          é onde o dedo erra e o número sai trocado.
+          `min-w-[min(8rem,100%)]`: o piso de 8 rem impede o campo de virar
+          uma fresta ao lado do botão, mas no maior tamanho de texto 8 rem
+          passava de 320 px e empurrava a linha para fora da tela. O piso
+          continua, com teto na largura disponível. */}
       <Input
         inputMode={inputMode}
-        className="min-h-11 text-sm min-w-0 flex-1"
+        className="min-h-11 text-sm min-w-[min(8rem,100%)] flex-1"
         placeholder={currentLabel || placeholder}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
         aria-label={placeholder}
       />
-      <Button size="sm" variant="outline" className="min-h-11 shrink-0" onClick={submit}>
+      <Button size="sm" variant="outline" className="min-h-11" onClick={submit}>
         <Target className="w-3.5 h-3.5 mr-1.5" /> Definir meta
       </Button>
     </div>

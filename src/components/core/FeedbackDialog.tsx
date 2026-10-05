@@ -5,13 +5,13 @@ import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody, DrawerTrigger,
+} from "@/components/ui/drawer";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, MessageSquarePlus, Send } from "lucide-react";
+import { MessageSquarePlus, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CATEGORIES = [
@@ -34,6 +34,7 @@ export default function FeedbackDialog({ trigger }: { trigger?: React.ReactNode 
       toast.error("Escreva pelo menos algumas palavras.");
       return;
     }
+    toast.dismiss("Escreva pelo menos algumas palavras.");
     setSending(true);
     const { error } = await supabase.from("feedback").insert({
       user_id: user.id,
@@ -46,14 +47,15 @@ export default function FeedbackDialog({ trigger }: { trigger?: React.ReactNode 
       toast.error("Não consegui enviar agora. Tente de novo em instantes.");
       return;
     }
+    toast.dismiss("Não consegui enviar agora. Tente de novo em instantes.");
     toast.success("Feedback enviado. Obrigado por ajudar a construir o Ascende!");
     setMessage("");
     setOpen(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <Drawer open={open} onOpenChange={setOpen}>
+      <DrawerTrigger asChild>
         {trigger ?? (
           <button
             className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -63,24 +65,29 @@ export default function FeedbackDialog({ trigger }: { trigger?: React.ReactNode 
             <MessageSquarePlus className="w-4 h-4" />
           </button>
         )}
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="font-display">Conte para a gente</DialogTitle>
-          <DialogDescription>
+      </DrawerTrigger>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle className="font-display">Conte para a gente</DrawerTitle>
+          <DrawerDescription>
             O Ascende está em fase de consolidação: ideias, problemas e elogios
             enviados aqui vão direto para quem constrói a plataforma.
-          </DialogDescription>
-        </DialogHeader>
+          </DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
 
         <div className="space-y-3">
           <div className="flex flex-wrap gap-1.5">
             {CATEGORIES.map((c) => (
               <button
                 key={c.id}
+                type="button"
                 onClick={() => setCategory(c.id)}
+                // A seleção era só cor de fundo: `aria-pressed` diz o estado ao
+                // leitor de tela, e `min-h-11` dá os 44 pt (tinham 32).
+                aria-pressed={category === c.id}
                 className={cn(
-                  "text-xs rounded-full border px-3 py-1.5 transition-colors",
+                  "text-xs rounded-full border px-3 py-1.5 min-h-11 transition-colors",
                   category === c.id
                     ? "bg-primary text-primary-foreground border-primary"
                     : "hover:bg-muted"
@@ -91,6 +98,7 @@ export default function FeedbackDialog({ trigger }: { trigger?: React.ReactNode 
             ))}
           </div>
           <Textarea
+            aria-label="Sua mensagem"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder={
@@ -103,14 +111,13 @@ export default function FeedbackDialog({ trigger }: { trigger?: React.ReactNode 
             className="resize-none"
           />
           <div className="flex justify-end">
-            <Button onClick={send} disabled={sending || message.trim().length < 3}>
-              {sending
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : (<><Send className="w-4 h-4 mr-1.5" /> Enviar feedback</>)}
+            <Button onClick={send} disabled={sending || message.trim().length < 3} loading={sending}>
+              <Send className="w-4 h-4 mr-1.5" /> Enviar feedback
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 }

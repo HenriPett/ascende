@@ -1,13 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
-import { Loader2 } from "lucide-react";
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerBody,
+} from "@/components/ui/drawer";
+import { Input } from "@/components/ui/input";
 import { codigoDoTexto } from "@/components/social/uteis";
-import { toast } from "sonner";
 
 export default function EntrarComCodigoDialog({
   open, onOpenChange, onEntrou, codigoInicial, nomeSugerido, retomado,
@@ -25,10 +23,18 @@ export default function EntrarComCodigoDialog({
   const [codigo, setCodigo] = useState(codigoInicial ?? "");
   const [comoMeChamo, setComoMeChamo] = useState("");
   const [entrando, setEntrando] = useState(false);
+  /* O ERRO DO CAMPO MORA EMBAIXO DO CAMPO. Ele era um toast: aparecia no topo
+     da tela, longe de onde a pessoa estava olhando, e sumia sozinho. Aqui ele
+     aparece onde o problema está, fica até ela corrigir, e o leitor de tela o
+     anuncia (`role="alert"`) e o associa ao campo (`aria-describedby`). */
+  const [erroCodigo, setErroCodigo] = useState<string | null>(null);
+  // Reabrir a folha é começar de novo: o erro do convite anterior não vale
+  // para o próximo link.
+  useEffect(() => { if (open) setErroCodigo(null); }, [open]);
 
   const entrar = async () => {
     const limpo = codigoDoTexto(codigo);
-    if (!limpo) { toast.error("Cole o link ou o código que te mandaram."); return; }
+    if (!limpo) { setErroCodigo("Cole o link ou o código que te mandaram."); return; }
     setEntrando(true);
     const { data, error } = await supabase.rpc("aceitar_convite", {
       p_codigo: limpo,
@@ -39,7 +45,8 @@ export default function EntrarComCodigoDialog({
       // O banco devolve UMA mensagem para código errado, expirado, revogado e
       // esgotado — distinguir os quatro confirmaria, para quem sonda, que o
       // código existe. A tela repete o mesmo silêncio.
-      toast.error("Esse convite não vale mais. Peça um novo a quem te chamou.");
+      // E ela vai para baixo do CAMPO do código, que é o que está errado.
+      setErroCodigo("Esse convite não vale mais. Peça um novo a quem te chamou.");
       return;
     }
     onOpenChange(false);
@@ -48,24 +55,31 @@ export default function EntrarComCodigoDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>
             {retomado ? "Você tinha um convite esperando" : "Tenho um link de convite"}
-          </DialogTitle>
-          <DialogDescription>
+          </DrawerTitle>
+          <DrawerDescription>
             {retomado
               ? "Você abriu um convite antes de ter conta, e ele ficou guardado aqui. Entrar é escolha sua — e dá para entrar sem compartilhar nada."
               : "Cole o link que te mandaram. Você escolhe o que compartilhar depois de entrar — e dá para entrar sem compartilhar nada."}
-          </DialogDescription>
-        </DialogHeader>
+          </DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
         <div className="space-y-3">
           <Input
             className="min-h-11" autoFocus placeholder="cole aqui o link que te mandaram"
-            value={codigo} onChange={(e) => setCodigo(e.target.value)}
+            value={codigo} onChange={(e) => { setCodigo(e.target.value); setErroCodigo(null); }}
             aria-label="Link ou código do convite"
+            aria-invalid={!!erroCodigo || undefined}
+            aria-describedby={erroCodigo ? "erro-codigo-convite" : undefined}
+            autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next"
           />
+          {erroCodigo && (
+            <p id="erro-codigo-convite" role="alert" className="text-footnote text-destructive">{erroCodigo}</p>
+          )}
           <div className="space-y-1">
             <Input
               className="min-h-11" maxLength={40}
@@ -73,19 +87,27 @@ export default function EntrarComCodigoDialog({
               value={comoMeChamo} onChange={(e) => setComoMeChamo(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") entrar(); }}
               aria-label="Como o grupo te chama"
+              /* O Enter deste campo ENTRA no grupo: a tecla diz "ir". */
+              enterKeyHint="go" autoComplete="given-name"
             />
-            <p className="text-[11px] text-muted-foreground">Só este nome sai para o grupo.</p>
+            <p className="text-caption2 text-muted-foreground">Só este nome sai para o grupo.</p>
           </div>
         </div>
-        <DialogFooter>
+        </DrawerBody>
+        {/* `flex-col-reverse`: no celular os botões empilham, e o Cancelar fica
+            EMBAIXO da pilha, com a ação principal em cima — a mesma ordem do
+            rodapé dos alertas da casa (ui/alert-dialog.tsx), e a que o
+            `alerts.md` pede para uma pilha. No código ele vem primeiro só
+            para a ordem de tabulação continuar Cancelar → ação. */}
+        <DrawerFooter className="flex-col-reverse">
           <Button variant="ghost" className="min-h-11" onClick={() => onOpenChange(false)} disabled={entrando}>
             Cancelar
           </Button>
-          <Button className="min-h-11" onClick={entrar} disabled={entrando}>
-            {entrando ? <Loader2 className="w-4 h-4 animate-spin" /> : "Entrar"}
+          <Button className="min-h-11" onClick={entrar} disabled={entrando} loading={entrando}>
+            Entrar
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   );
 }

@@ -60,7 +60,7 @@ export default function StatementReview({
         </>
       }
       footer={
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-caption2 text-muted-foreground">
           Importação não gera XP por item — só o marco "mês mapeado" (+15 XP, uma vez por mês).
           XP é por ação na vida real, não por volume. A imagem foi processada e descartada.
         </p>
@@ -70,8 +70,8 @@ export default function StatementReview({
           <div className="flex-1 min-w-0">
             <p className="text-sm truncate">
               {it.description}
-              {it.origin === "past" && <Badge variant="secondary" className="text-[10px] ml-1.5 align-middle">parcela passada</Badge>}
-              {it.origin === "future" && <Badge variant="secondary" className="text-[10px] ml-1.5 align-middle">parcela futura</Badge>}
+              {it.origin === "past" && <Badge variant="secondary" className="text-caption2 ml-1.5 align-middle">parcela passada</Badge>}
+              {it.origin === "future" && <Badge variant="secondary" className="text-caption2 ml-1.5 align-middle">parcela futura</Badge>}
               {isDup && <DuplicateBadge />}
             </p>
             <p className="text-xs text-muted-foreground">

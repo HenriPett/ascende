@@ -187,11 +187,11 @@ function Medians({
         { label: copy.lowLabel, value: low, suffix: copy.lowSuffix },
       ].map((side) => (
         <div key={side.label} className="rounded-lg border px-3 py-2">
-          <p className="text-[11px] text-muted-foreground">{side.label}</p>
+          <p className="text-caption2 text-muted-foreground">{side.label}</p>
           <p className="font-display text-lg font-semibold leading-tight">
             {copy.format(side.value)}
           </p>
-          {side.suffix && <p className="text-[11px] text-muted-foreground">{side.suffix}</p>}
+          {side.suffix && <p className="text-caption2 text-muted-foreground">{side.suffix}</p>}
         </div>
       ))}
     </div>
@@ -299,14 +299,14 @@ function InsightCard({ insight, askFeedback }: { insight: Insight; askFeedback: 
           {/* Estes dois casos não são falta de tempo, e dizer "faltam N dias"
               seria impreciso: aqui falta VARIEDADE de dias. */}
           {insight.reason === "grupo_pequeno" && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-subhead text-muted-foreground">
               Já tenho {insight.sample_size} dias, mas ainda faltam {insight.days_missing} de
               um dos dois tipos de dia — para comparar eu preciso de pelo menos
               {" "}{MIN_GROUP_DAYS} de cada lado.
             </p>
           )}
           {insight.reason === "sem_variacao" && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-subhead text-muted-foreground">
               Nesses {insight.sample_size} dias esse lado quase não variou. Sem dias diferentes
               entre si, não há o que comparar.
             </p>
@@ -374,7 +374,7 @@ export default function TrendInsights() {
     <section className="space-y-2.5" aria-label="Tendências">
       <div>
         <h2 className="font-display text-lg font-semibold">O que andou junto</h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-subhead text-muted-foreground">
           Comparações calculadas sobre os seus próprios registros dos últimos três meses.
           O número vem do código, não da IA — e cada card mostra quantos dias entraram.
         </p>

@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
-import { Loader2 } from "lucide-react";
+  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerBody,
+} from "@/components/ui/drawer";
+import { Input } from "@/components/ui/input";
 import { chip } from "@/components/social/uteis";
 import { toast } from "sonner";
 
@@ -29,12 +28,17 @@ export default function CriarGrupoDialog({
   const [comoMeChamo, setComoMeChamo] = useState("");
   const [dias, setDias] = useState<number>(30);
   const [salvando, setSalvando] = useState(false);
+  /* O ERRO DO CAMPO MORA EMBAIXO DO CAMPO. Ele era um toast: aparecia no topo
+     da tela, longe de onde a pessoa estava olhando, e sumia sozinho. Aqui ele
+     aparece onde o problema está, fica até ela corrigir, e o leitor de tela o
+     anuncia (`role="alert"`) e o associa ao campo (`aria-describedby`). */
+  const [erroNome, setErroNome] = useState<string | null>(null);
 
   const fim = new Date();
   fim.setDate(fim.getDate() + dias);
 
   const criar = async () => {
-    if (!nome.trim()) { toast.error("Dê um nome ao grupo. Ex.: \"Os Teimosos\"."); return; }
+    if (!nome.trim()) { setErroNome("Dê um nome ao grupo. Ex.: \"Os Teimosos\"."); return; }
     setSalvando(true);
     const { data, error } = await supabase.rpc("criar_grupo", {
       p_nome: nome.trim(),
@@ -42,30 +46,43 @@ export default function CriarGrupoDialog({
       p_ends_on: fim.toISOString().slice(0, 10),
     });
     setSalvando(false);
-    if (error || !data) { toast.error(error?.message ?? "Não consegui criar o grupo."); return; }
-    toast.success("Grupo criado. Nada seu é compartilhado até você escolher.");
+    // `id` estável: a mensagem pode vir do banco, e é pelo id que a próxima
+    // tentativa bem-sucedida dispensa este erro.
+    if (error || !data) { toast.error(error?.message ?? "Não consegui criar o grupo.", { id: "grupo-criar" }); return; }
+    toast.dismiss("grupo-criar");
+    // Sem toast de sucesso: a folha de consentimento abre no mesmo instante e
+    // diz, com mais detalhe, a mesma coisa ("Tudo começa desligado") — e o
+    // toast ficaria por cima dela, disputando a primeira leitura do grupo.
     onOpenChange(false);
     setNome(""); setComoMeChamo("");
     onCriado(String(data));
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Criar um grupo</DialogTitle>
-          <DialogDescription>
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Criar um grupo</DrawerTitle>
+          <DrawerDescription>
             Pequeno funciona melhor: você e duas, três pessoas que se acompanham por
             um tempo combinado.
-          </DialogDescription>
-        </DialogHeader>
+          </DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody>
         <div className="space-y-3">
           <Input
             className="min-h-11" maxLength={60} autoFocus
             placeholder='Nome do grupo. Ex.: "Os Teimosos"'
-            value={nome} onChange={(e) => setNome(e.target.value)}
+            value={nome} onChange={(e) => { setNome(e.target.value); setErroNome(null); }}
             aria-label="Nome do grupo"
+            enterKeyHint="next"
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.currentTarget.form ?? document).querySelector<HTMLInputElement>('input[aria-label="Como o grupo te chama"]')?.focus(); } }}
+            aria-invalid={!!erroNome || undefined}
+            aria-describedby={erroNome ? "erro-nome-grupo" : undefined}
           />
+          {erroNome && (
+            <p id="erro-nome-grupo" role="alert" className="text-footnote text-destructive">{erroNome}</p>
+          )}
           {/* O nome do grupo é do GRUPO, e por isso é pedido aqui em vez de
               lido do perfil: `profiles` tem renda e remédios na mesma linha do
               nome, e RLS não recorta coluna. */}
@@ -75,8 +92,10 @@ export default function CriarGrupoDialog({
               placeholder={nomeSugerido ? `Como eles te chamam (ex.: ${nomeSugerido})` : "Como eles te chamam"}
               value={comoMeChamo} onChange={(e) => setComoMeChamo(e.target.value)}
               aria-label="Como o grupo te chama"
+              enterKeyHint="go"
+              onKeyDown={(e) => { if (e.key === "Enter") criar(); }}
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-caption2 text-muted-foreground">
               Só este nome sai para o grupo. O resto do seu perfil não vai junto.
             </p>
           </div>
@@ -93,22 +112,28 @@ export default function CriarGrupoDialog({
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-caption2 text-muted-foreground">
               Termina {fim.toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}.
               O grupo tem fim porque é um combinado, não um lugar para ficar — e ele
               expira sozinho, sem ninguém precisar encerrar.
             </p>
           </div>
         </div>
-        <DialogFooter>
+        </DrawerBody>
+        {/* `flex-col-reverse`: no celular os botões empilham, e o Cancelar fica
+            EMBAIXO da pilha, com a ação principal em cima — a mesma ordem do
+            rodapé dos alertas da casa (ui/alert-dialog.tsx), e a que o
+            `alerts.md` pede para uma pilha. No código ele vem primeiro só
+            para a ordem de tabulação continuar Cancelar → ação. */}
+        <DrawerFooter className="flex-col-reverse">
           <Button variant="ghost" className="min-h-11" onClick={() => onOpenChange(false)} disabled={salvando}>
             Cancelar
           </Button>
-          <Button className="min-h-11" onClick={criar} disabled={salvando}>
-            {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar"}
+          <Button className="min-h-11" onClick={criar} disabled={salvando} loading={salvando}>
+            Criar
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   );
 }

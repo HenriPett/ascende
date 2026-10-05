@@ -133,7 +133,7 @@ export default function PlanSections({
       <div>
         <div className="flex items-baseline justify-between gap-2 mb-2">
           <p className="font-display text-sm font-semibold">{copy.many(items.length)}</p>
-          <p className="text-[11px] text-muted-foreground">toque para abrir</p>
+          <p className="text-caption2 text-muted-foreground">toque para abrir</p>
         </div>
         <p className="text-xs text-muted-foreground mb-2.5">{copy.hint}</p>
 
@@ -165,7 +165,7 @@ export default function PlanSections({
                       <div className="space-y-1">
                         <label
                           htmlFor={`titulo-${section.id}`}
-                          className="text-[11px] font-medium text-muted-foreground"
+                          className="text-caption2 font-medium text-muted-foreground"
                         >
                           Título d{copy.article} {copy.one}
                         </label>
@@ -180,7 +180,7 @@ export default function PlanSections({
                       <div className="space-y-1">
                         <label
                           htmlFor={`corpo-${section.id}`}
-                          className="text-[11px] font-medium text-muted-foreground"
+                          className="text-caption2 font-medium text-muted-foreground"
                         >
                           Conteúdo
                         </label>
@@ -193,7 +193,7 @@ export default function PlanSections({
                         />
                       </div>
 
-                      <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                      <p className="flex items-start gap-1.5 text-caption2 text-muted-foreground">
                         <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
                         <span>
                           Use <code className="rounded bg-muted px-1">-</code> para itens e{" "}

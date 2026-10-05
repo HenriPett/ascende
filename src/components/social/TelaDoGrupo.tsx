@@ -17,7 +17,7 @@ import { ehAdmin, useAcoesDoGrupo, useGrupo } from "@/hooks/useGrupo";
 import { textoDoTempo, useGrupoAoVivo, useMarcadorDeNovo } from "@/hooks/useGrupoAoVivo";
 import { diaLocal } from "@/lib/socialSemana";
 import ConfirmarSaida from "@/components/social/ConfirmarSaida";
-import { ChevronLeft, Settings2 } from "lucide-react";
+import { Settings2 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TELA (b) — O GRUPO ABERTO
@@ -124,13 +124,14 @@ export default function TelaDoGrupo({
        é um painel, e esticar cartão de pessoa por 1440px só aumenta a distância
        de varredura. */
     <div className="max-w-3xl mx-auto space-y-4 animate-fade-up">
+      {/* SEM voltar próprio: o cabeçalho do app já tem um (AppLayout), e dois
+          botões de voltar na mesma tela, a dois dedos um do outro, fazendo a
+          mesma coisa, é um a mais para a pessoa decidir qual tocar. Abrir um
+          grupo empilha uma entrada no histórico (`abrir`, em pages/Social.tsx),
+          então o voltar do cabeçalho devolve à lista — o mesmo destino de antes.
+          `onVoltar` continua existindo para o "sair do grupo", que precisa
+          levar de volta à lista por conta própria. */}
       <div className="flex items-center gap-1">
-        <Button
-          variant="ghost" size="icon" className="w-11 h-11 shrink-0 -ml-2"
-          onClick={onVoltar} aria-label="Voltar para os meus grupos"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </Button>
         <div className="flex-1 min-w-0">
           <h1 className="font-display text-xl font-semibold truncate">{data?.nome ?? "Grupo"}</h1>
           {!!data && (

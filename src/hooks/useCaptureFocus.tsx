@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect } from "react";
+import { prefersReducedMotion } from "@/hooks/useReducedMotion";
 
 /* Ponte entre o botão REGISTRAR da barra e a caixa de captura da tela.
  *
@@ -59,8 +60,8 @@ export function useProvideCaptureFocus(fn: FocusFn): void {
 export function focusCaptureElement(wrapper: HTMLElement | null): void {
   if (!wrapper) return;
 
-  const reduced = typeof window !== "undefined"
-    && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  // A leitura pontual do hook da casa: isto é uma função, não um componente.
+  const reduced = prefersReducedMotion();
 
   wrapper.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" });
 

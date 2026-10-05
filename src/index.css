@@ -25,7 +25,11 @@
     --primary: 42 95% 50%;             /* dourado-sol: a ação */
     --primary-foreground: 240 25% 10%;
 
-    --secondary: 46 40% 94%;
+    /* --secondary é apelido de --muted (nos dois temas). Os dois valores
+       antigos (46 40% 94% e 46 30% 94%) mediam 1,007:1 entre si — dois nomes
+       para o mesmo pixel, e cada tela escolhia um ao acaso. Agora é uma cor só;
+       quem quiser um fundo de destaque visível tem o --accent (ouro pálido). */
+    --secondary: var(--muted);
     --secondary-foreground: 235 12% 20%;
 
     --muted: 46 30% 94%;
@@ -44,6 +48,10 @@
     --destructive-text: 4 72% 49%;   /* tinta (text-destructive) */
     --destructive-foreground: 46 55% 98%;
 
+    /* Preenchimentos sólidos de success/warning com texto claro por cima
+       NÃO passam no claro (3,98:1 e 3,11:1) — hoje só existem como tinta /5,
+       nunca como fundo de texto. Se um dia aparecer um botão verde ou âmbar
+       sólido, escurecer aqui antes: 152 45% 32% (5,29:1) e 32 92% 34% (4,89:1). */
     --success: 152 45% 38%;
     --success-foreground: 46 55% 98%;
     --warning: 32 92% 44%;
@@ -51,6 +59,35 @@
 
     --gold: 42 95% 48%;                /* XP, nível, progresso */
     --gold-foreground: 240 25% 10%;
+
+    /* ── TINTA: a cor de identidade não é obrigada a ser a cor de texto ──
+       Esta doutrina nasceu caso a caso (.text-gold-ink, .text-vitalidade-ink,
+       .text-mente-ink, e antes o --destructive-text) e por isso vazou: as
+       utilities cruas continuavam gerando tinta que reprova no claro —
+       `text-gold` 2,03:1 sobre o card (41 usos), `text-primary` 1,87:1,
+       `text-success` 4,10:1, `text-vitalidade` 4,04:1, `text-mente` 4,49:1,
+       `text-warning` 3,21:1. Agora a regra mora no TOKEN: o
+       tailwind.config.ts aponta `textColor.<cor>` para estes valores, então
+       `text-gold`, `hover:text-primary` e `text-success/80` saem certos sem
+       ninguém lembrar de nada. Preenchimento, gráfico, anel e árvore
+       continuam no token de identidade — zero pixel muda fora do texto.
+       Contraste no claro (card branco · fundo marfim): */
+    --gold-text: 40 90% 30%;           /* 5,23 · 5,07 — o valor de .text-gold-ink */
+    --success-text: 152 45% 31%;       /* 5,74 · 5,56 */
+    --warning-text: 32 92% 33%;        /* 5,29 · 5,13 */
+    --vitalidade-text: 150 38% 36%;    /* 4,83 · 4,68 — o de .text-vitalidade-ink */
+    --mente-text: 258 60% 48%;         /* 7,78 · 7,54 — o de .text-mente-ink */
+
+    /* Superfície ELEVADA: folhas, diálogos, popovers. No claro é o branco do
+       card (nada muda). No escuro ela precisa ser mais CLARA que o card — ver
+       a nota no .dark. */
+    --elevated: 0 0% 100%;
+
+    /* Água: era `hsl(205 70% 55%)` escrito à mão em cinco lugares, sem
+       variante — 3,07:1 sobre o card claro, no limite do objeto gráfico. Com
+       45% no claro: 4,24:1. No escuro fica o valor de sempre (5,84:1). Não é
+       um quarto pilar: é a cor de um dado dentro de Vitalidade. */
+    --agua: 205 70% 45%;
 
     /* Pilares — etéreos, mas com contraste funcional.
        TRÊS, desde a fusão de 17/09/2026: as matizes ficam em 42° (ouro), 150°
@@ -85,18 +122,12 @@
 
     --border: 45 22% 89%;
     --input: 45 22% 87%;
-    --ring: 42 95% 48%;
+    /* O anel de foco era o dourado cru (42 95% 48%): 2,03:1 sobre o card,
+       abaixo dos 3:1 de indicador não textual. Agora é a tinta de ouro —
+       continua dourado, só mais profundo: 5,23:1. */
+    --ring: 40 90% 30%;
 
     --radius: 1.25rem;
-
-    --sidebar-background: 240 8% 7%;
-    --sidebar-foreground: 46 40% 94%;
-    --sidebar-primary: 44 95% 58%;
-    --sidebar-primary-foreground: 240 10% 8%;
-    --sidebar-accent: 240 7% 13%;
-    --sidebar-accent-foreground: 46 40% 94%;
-    --sidebar-border: 240 7% 14%;
-    --sidebar-ring: 44 95% 58%;
 
     /* Mokari: três peças de BAIXA OPACIDADE que não herdam do tema.
        Sobreposição translúcida não acompanha a inversão do token — o que é
@@ -117,13 +148,22 @@
 
     --card: 240 7% 9.5%;
     --card-foreground: 45 30% 95%;
-    --popover: 240 7% 9.5%;
+    /* Base e elevado, como o iOS: no escuro, o que vem para a FRENTE é mais
+       claro, não mais escuro. Folhas e diálogos pintavam `bg-background`
+       (5,5%) por cima de cartões a 9,5% — a camada da frente afundava. E o
+       popover era idêntico ao card, então sobre um card não tinha elevação.
+       12,5%: 1,08:1 sobre o card, 1,17:1 sobre o fundo; o muted-foreground
+       segue acima de 6:1 aqui. */
+    --elevated: 240 7% 12.5%;
+    --popover: 240 7% 12.5%;
     --popover-foreground: 45 30% 95%;
 
     --primary: 44 95% 60%;             /* ouro luminoso */
     --primary-foreground: 240 20% 7%;
 
-    --secondary: 240 6% 14%;
+    /* Repetido aqui de propósito: se a classe .dark um dia sair do <html> e
+       for para um descendente, o apelido herdado já viria resolvido no claro. */
+    --secondary: var(--muted);
     --secondary-foreground: 45 25% 92%;
 
     --muted: 240 6% 13%;
@@ -162,6 +202,17 @@
     --gold: 44 95% 58%;
     --gold-foreground: 240 20% 7%;
 
+    /* Tinta no escuro: os tokens de identidade já passam com folga sobre o
+       card quase-preto (6,2:1 a 11:1), então a tinta é o próprio token. O ouro
+       ganha 4 pontos, como o .text-gold-ink sempre teve (11,56:1). */
+    --gold-text: 44 95% 62%;
+    --success-text: var(--success);
+    --warning-text: var(--warning);
+    --vitalidade-text: var(--vitalidade);
+    --mente-text: var(--mente);
+
+    --agua: 205 70% 55%;
+
     /* Pilares brilhando na noite */
     --prosperidade: 44 95% 58%;
     --vitalidade: 150 45% 56%;
@@ -177,15 +228,6 @@
     --input: 240 6% 17%;
     --ring: 44 95% 58%;
 
-    --sidebar-background: 240 9% 4%;
-    --sidebar-foreground: 45 30% 95%;
-    --sidebar-primary: 44 95% 58%;
-    --sidebar-primary-foreground: 240 10% 8%;
-    --sidebar-accent: 240 7% 11%;
-    --sidebar-accent-foreground: 45 30% 95%;
-    --sidebar-border: 240 7% 12%;
-    --sidebar-ring: 44 95% 58%;
-
     /* Mokari — ver o comentário no :root. No escuro a névoa precisa de mais
        corpo, e os pontos de luz viram estrela em vez de mota de sol. */
     --mokari-cloud: hsl(var(--foreground) / 0.12);
@@ -197,10 +239,39 @@
 
   html { -webkit-font-smoothing: antialiased; }
 
+  /* Dynamic Type no PWA. `-apple-system-body` é a palavra-chave com que o
+     WebKit expõe o estilo Body do sistema: 17px no tamanho padrão, e cresce
+     ou encolhe com Ajustes › Tela e Brilho › Tamanho do Texto (e com o Texto
+     Maior da Acessibilidade). Como todo tamanho do Tailwind é rem, pôr isso
+     na raiz faz o app inteiro acompanhar — no modo standalone não existe o
+     menu "aA" do Safari, então este é o ÚNICO jeito de quem lê com letra
+     grande aumentar o texto. Fora do WebKit o @supports falha e a raiz fica
+     nos 16px de sempre. O shorthand `font` zera a família; ela é devolvida
+     no body pelo `font-sans` — e zera também a entrelinha, que o preflight
+     do Tailwind deixava em 1.5 e todo texto sem `leading-*` herda; ela volta
+     logo em seguida para nada mudar de altura além do tamanho.
+
+     SÓ NO iPhone/iPad. No WebKit do macOS a mesma palavra-chave resolve para
+     o Body do Mac, 13px — medido pelo Pixel: getComputedStyle(html).fontSize
+     = 13px. Como tudo é rem, não era só o texto que encolhia 19%: espaço,
+     alturas e alvos junto (input h-10 = 33px, abas 26px no /auth). Por isso
+     duas travas: `-webkit-touch-callout`, que só o WebKit do iOS reconhece,
+     e `pointer: coarse`, para o caso de algum WebKit de desktop passar a
+     reconhecê-la. No Mac e no resto, a raiz fica nos 16px de sempre. */
+  @media (pointer: coarse) {
+    @supports (font: -apple-system-body) and (-webkit-touch-callout: none) {
+      html { font: -apple-system-body; line-height: 1.5; }
+    }
+  }
+
   body {
     @apply bg-background text-foreground font-sans;
     overflow-x: clip; /* rede de segurança: nunca rolar na horizontal */
-    transition: background-color .25s ease, color .25s ease;
+    /* Sem transição de cor no body. Ela só servia para a troca de tema, e
+       custava caro: num quadro de animação congelado (aba em segundo plano,
+       PWA suspenso, CSS chegando depois do primeiro paint) o texto ficava
+       preso no valor inicial — preto sobre a noite, 1,08:1, medido pelo Lince.
+       Trocar de tema num estalo é o que o próprio iOS faz. */
   }
 
   img, video, svg { max-width: 100%; }
@@ -208,10 +279,16 @@
   /* Celulares dão zoom automático ao focar campos com fonte < 16px —
      e nem sempre desfazem, "desconfigurando" a tela até o zoom manual.
      16px nos campos em telas pequenas elimina o zoom involuntário. */
+  /* O piso de 16px continua; o `max` deixa o campo CRESCER com o Dynamic
+     Type (a 17px padrão, ou mais com Texto Maior) em vez de ficar travado. */
   @media (max-width: 767px) {
-    input, select, textarea { font-size: 16px !important; }
+    input, select, textarea { font-size: max(16px, 1rem) !important; }
   }
 
+  /* Aperto de título. Na tabela de tracking do SF o aperto cresce até ~20pt
+     e depois volta a abrir; -0.02em vale para os tamanhos de título até
+     text-2xl. Do text-3xl para cima o próprio fontSize (tailwind.config.ts)
+     traz -0.01em, e por ser utility ele vence esta regra de base. */
   h1, h2, h3 { letter-spacing: -0.02em; }
 
   /* Movimento reduzido: 0.01ms em vez de `none`. Zerar a duração ainda
@@ -227,16 +304,45 @@
       transition-delay: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+
+    /* O indicador de progresso é ESTADO, não enfeite: congelado na regra
+       acima, os 77 `animate-spin` viravam um glifo parado e ninguém sabia se
+       algo estava acontecendo. Reduzir movimento corta o periférico (zoom,
+       deslize, balanço), não o sinal de "carregando" — o spinner do sistema
+       também continua girando. Fica uma rotação lenta, sem deslocamento. */
+    .animate-spin {
+      animation-duration: 1.5s !important;
+      animation-iteration-count: infinite !important;
+    }
+  }
+
+  /* ── Aumentar contraste (Ajustes › Acessibilidade › Tela e Tamanho do Texto) ──
+     O padrão da marca é "bordas quase invisíveis, tudo flutua" — e fica. Mas
+     ali o que separa uma superfície da outra é quase só borda: card sobre
+     fundo 1,03:1 no claro, borda 1,25:1; no escuro 1,08:1 e 1,16:1. Quem liga
+     Aumentar contraste está pedindo exatamente o oposto, e o WebKit nos conta
+     por `prefers-contrast: more`. Só aqui as bordas chegam perto de 3:1 e o
+     texto secundário escurece. Vem DEPOIS do .dark para vencer por ordem. */
+  @media (prefers-contrast: more) {
+    :root {
+      --border: 45 10% 55%;            /* 3,11:1 sobre o card (era 1,25) */
+      --input: 45 10% 55%;
+      --muted-foreground: 235 10% 35%; /* 7,71:1 (era 5,24) */
+    }
+    .dark {
+      --border: 240 5% 40%;            /* 2,93:1 card · 3,17:1 fundo (era 1,16) */
+      --input: 240 5% 40%;
+      --muted-foreground: 240 6% 75%;  /* 9,46:1 (era 6,53) */
+    }
   }
 }
 
 @layer utilities {
-  /* `text-destructive` é gerado pelo Tailwind a partir de --destructive, que
-     agora é a cor de PREENCHIMENTO. Esta linha é o que faz a utility usar o
-     token de TINTA. `:root` só está aqui para garantir a especificidade
-     (0,2,0) sobre a utility original (0,1,0), independente da ordem em que o
-     Tailwind emitir as duas. */
-  :root .text-destructive { color: hsl(var(--destructive-text)); }
+  /* `text-destructive` usava aqui um seletor `:root .text-destructive` para
+     trocar o preenchimento pela tinta. Saiu: agora `textColor.destructive` no
+     tailwind.config.ts aponta direto para --destructive-text, como todas as
+     outras tintas (ver --gold-text no :root) — e assim `hover:text-destructive`
+     também sai certo, coisa que o seletor antigo não alcançava. */
 
   /* ── Cristal: o chrome do app (header, navegação, flutuantes) ──
    *
@@ -291,6 +397,11 @@
   .dark .glass {
     background: hsl(var(--card));
     border-color: hsl(0 0% 100% / 0.08);
+  }
+  /* Com Aumentar contraste, a borda branca a 8% (1,24:1) cede para a borda
+     reforçada do tema. */
+  @media (prefers-contrast: more) {
+    .glass, .dark .glass { border-color: hsl(var(--border)); }
   }
 
   /* ── Éter: atmosfera de fundo (auras de ouro e lilás) ──
@@ -349,8 +460,10 @@
      Com 30%: 5,2:1 e 5,0:1. Mesma matiz, mesma saturação — a mesma cirurgia
      que este arquivo já fez em `.text-vitalidade-ink`. O escuro não muda (já
      dá 11,5:1), e quem usa a classe em outras telas só ganha contraste. */
-  .text-gold-ink { color: hsl(40 90% 30%); }
-  .dark .text-gold-ink { color: hsl(44 95% 62%); }
+  /* @deprecated desde a tinta no token (ver --gold-text): hoje `text-gold`
+     já sai com esta cor. Fica como apelido para não mexer em 31 call sites
+     no mesmo commit; REMOVER ATÉ 30/11/2026, junto com o --alimentacao. */
+  .text-gold-ink { color: hsl(var(--gold-text)); }
 
   /* Sálvia para TEXTO — mesma doutrina do dourado acima, e pelo mesmo motivo:
      a cor que identifica o pilar não é obrigada a ser a cor que carrega
@@ -362,8 +475,9 @@
      O token do pilar NÃO muda: a árvore, os gráficos e as bolinhas do hub
      continuam exatamente na mesma cor. No escuro o token já dá 8,76:1, então
      lá a tinta é o próprio token. */
-  .text-vitalidade-ink { color: hsl(150 38% 36%); }
-  .dark .text-vitalidade-ink { color: hsl(var(--vitalidade)); }
+  /* @deprecated — apelido de `text-vitalidade` (ver --vitalidade-text).
+     REMOVER ATÉ 30/11/2026. */
+  .text-vitalidade-ink { color: hsl(var(--vitalidade-text)); }
 
   /* Lilás para TEXTO e para objeto gráfico pequeno — a MESMA doutrina do
      dourado e da sálvia acima, e pelo mesmo motivo: a cor que identifica o
@@ -374,8 +488,9 @@
      luminosidade a menos levam a 4,6:1, que passa em AA em qualquer tamanho.
      O token do pilar NÃO muda: o céu, os gráficos e o glow continuam iguais.
      No escuro o token já passa com folga, então lá a tinta é o próprio token. */
-  .text-mente-ink { color: hsl(258 60% 48%); }
-  .dark .text-mente-ink { color: hsl(var(--mente)); }
+  /* @deprecated — apelido de `text-mente` (ver --mente-text).
+     REMOVER ATÉ 30/11/2026. */
+  .text-mente-ink { color: hsl(var(--mente-text)); }
 
   /* Celebração sutil quando uma meta do dia é batida (1x por dia) */
   @keyframes goal-hit {

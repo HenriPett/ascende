@@ -4,9 +4,11 @@ export type Theme = "light" | "dark" | "system";
 const KEY = "ascende-theme";
 
 /* A meta `theme-color` pinta a status bar do PWA instalado e a barra do
-   Chrome no Android. Os valores são os tokens `--background` de `:root` e de
-   `.dark` em hex, iguais aos declarados no index.html. */
-const THEME_COLOR = { light: "#FCFAF4", dark: "#0e0e12" } as const;
+   Chrome no Android. Os valores são os tokens `--background` de `:root`
+   (46 55% 98%) e de `.dark` (240 8% 5.5%) convertidos para hex — iguais aos
+   do index.html e do manifest. Os antigos #FCFAF4/#0e0e12 diziam ser isso e
+   não eram; quem mudar o token, recalcula os três lugares. */
+const THEME_COLOR = { light: "#FDFBF7", dark: "#0D0D0F" } as const;
 
 /* Ler ou escrever em localStorage pode LANÇAR — Safari com cookies
    bloqueados, modo restrito, WKWebView sem storage configurado. `initTheme()`

@@ -97,12 +97,12 @@ function CaptureDemo() {
             <div key={`${demo}-${i}`} className="flex items-center gap-2.5 rounded-md border p-2.5 animate-fade-up">
               <Check className="w-4 h-4 text-success shrink-0" />
               <span className="text-sm flex-1">{ev.label}</span>
+              {/* O chip do pilar: a identidade fica no FUNDO tingido, e a tinta
+                  é a do texto comum. Na cor pura do pilar, a 10 pt, o rótulo
+                  dava 2,46:1 no claro — e 10 pt já está abaixo do mínimo. */}
               <span
-                className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                style={{
-                  background: `hsl(var(${meta.colorVar}) / 0.12)`,
-                  color: `hsl(var(${meta.colorVar}))`,
-                }}
+                className="text-xs font-medium px-2 py-0.5 rounded-full text-foreground"
+                style={{ background: `hsl(var(${meta.colorVar}) / 0.12)` }}
               >
                 {meta.name}
               </span>
@@ -110,7 +110,7 @@ function CaptureDemo() {
           );
         })}
       </div>
-      <p className="text-[11px] text-muted-foreground mt-1">
+      <p className="text-caption2 text-muted-foreground mt-1">
         Uma frase. Vários pilares. Menos de 10 segundos por dia.
       </p>
     </div>
@@ -202,15 +202,15 @@ function TryItDemo() {
                     <Check className="w-4 h-4 text-success shrink-0" />
                     <span className="text-sm flex-1">{ev.label}</span>
                     <span
-                      className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                      style={{ background: `hsl(var(${meta.colorVar}) / 0.12)`, color: `hsl(var(${meta.colorVar}))` }}
+                      className="text-xs font-medium px-2 py-0.5 rounded-full text-foreground"
+                      style={{ background: `hsl(var(${meta.colorVar}) / 0.12)` }}
                     >
                       {meta.name}
                     </span>
                   </div>
                 );
               })}
-              <p className="text-[11px] text-muted-foreground pt-1">
+              <p className="text-caption2 text-muted-foreground pt-1">
                 Prévia simplificada, feita no seu navegador. A IA completa entende valores,
                 categorias, macros e contexto — e registra de verdade.
               </p>
@@ -219,7 +219,7 @@ function TryItDemo() {
               </Button>
             </>
           ) : (
-            <p className="text-sm text-muted-foreground rounded-md border p-2.5">
+            <p className="text-subhead text-muted-foreground rounded-md border p-2.5">
               A prévia local não reconheceu nada nessa frase — mas a IA completa entende muito
               mais. Conte ações do dia (gastos, treino, sono, refeições, humor) ou{" "}
               <Link to="/auth?intent=signup" className="underline underline-offset-2 text-foreground">crie a conta grátis</Link>{" "}
@@ -375,7 +375,7 @@ export default function Landing() {
               },
             ].map((s) => (
               <div key={s.n} className="text-center md:text-left">
-                <div className="w-10 h-10 rounded-full bg-gold/10 text-gold font-display font-semibold text-lg grid place-items-center mx-auto md:mx-0 mb-4">
+                <div className="w-10 h-10 rounded-full bg-gold/10 text-gold-ink font-display font-semibold text-lg grid place-items-center mx-auto md:mx-0 mb-4">
                   {s.n}
                 </div>
                 <h3 className="font-display text-xl font-semibold mb-2">{s.title}</h3>

@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { MessageCircle, Loader2, Copy, ExternalLink, Unlink, X } from "lucide-react";
+import { MessageCircle, Copy, ExternalLink, Unlink, X } from "lucide-react";
 
 const WA_NUMBER: string = (import.meta.env.VITE_WHATSAPP_NUMBER as string | undefined) ?? "";
 
@@ -60,6 +60,7 @@ export function WhatsappHojeCard() {
     const { data, error } = await supabase.rpc("create_whatsapp_pairing_code");
     setBusy(false);
     if (error || !data) { toast.error("Não consegui gerar o código. Tente de novo."); return; }
+    toast.dismiss("Não consegui gerar o código. Tente de novo.");
     setCode(String(data));
     qc.invalidateQueries({ queryKey: ["whatsapp-link"] });
   };
@@ -94,19 +95,26 @@ export function WhatsappHojeCard() {
                   </Button>
                 )}
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-caption2 text-muted-foreground">
                 Mande o código (vale por 15 minutos). Assim que ele chegar, esta tela
                 confirma o vínculo sozinha.
               </p>
             </div>
           ) : (
-            <Button variant="outline" size="sm" onClick={generate} disabled={busy}>
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Conectar meu WhatsApp"}
+            <Button variant="outline" size="sm" onClick={generate} disabled={busy} loading={busy}>
+              Conectar meu WhatsApp
             </Button>
           )}
         </div>
-        <button onClick={dismiss} className="text-muted-foreground hover:text-foreground" aria-label="Dispensar convite do WhatsApp">
-          <X className="w-4 h-4" />
+        {/* 44×44 pt de alvo (era o ícone de 16 px sozinho: 17 pt tocáveis,
+            abaixo até do mínimo de 28). O `-m-3` devolve o espaço que a caixa
+            maior tomaria, e o X fica desenhado no mesmo lugar — a mesma conta
+            do Fechar das folhas (ui/fechar.tsx). */}
+        <button
+          type="button" onClick={dismiss} aria-label="Dispensar convite do WhatsApp"
+          className="-m-3 grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <X className="w-4 h-4" aria-hidden />
         </button>
       </div>
     </Card>
@@ -128,6 +136,7 @@ export default function WhatsappCard() {
     const { data, error } = await supabase.rpc("create_whatsapp_pairing_code");
     setBusy(false);
     if (error || !data) { toast.error("Não consegui gerar o código. Tente de novo."); return; }
+    toast.dismiss("Não consegui gerar o código. Tente de novo.");
     setCode(String(data));
   };
 
@@ -141,7 +150,9 @@ export default function WhatsappCard() {
     if (error) {
       qc.invalidateQueries({ queryKey: ["whatsapp-link"] });
       toast.error("Não consegui salvar a preferência.");
+      return;
     }
+    toast.dismiss("Não consegui salvar a preferência.");
   };
 
   const unlink = async () => {
@@ -149,6 +160,7 @@ export default function WhatsappCard() {
     const { error } = await supabase.rpc("unlink_whatsapp");
     setBusy(false);
     if (error) { toast.error("Não consegui desvincular."); return; }
+    toast.dismiss("Não consegui desvincular.");
     setCode(null);
     qc.invalidateQueries({ queryKey: ["whatsapp-link"] });
     toast.success("WhatsApp desvinculado. Nada do seu número ficou guardado.");
@@ -182,15 +194,15 @@ export default function WhatsappCard() {
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="wa-retro" className="text-sm font-normal">
                 Retrospectiva de domingo
-                <span className="block text-[11px] text-muted-foreground">Um aviso por semana, quando ela ficar pronta</span>
+                <span className="block text-caption2 text-muted-foreground">Um aviso por semana, quando ela ficar pronta</span>
               </Label>
               <Switch id="wa-retro" checked={link!.notify_retro}
                 onCheckedChange={(v) => setPrefs({ notify_retro: v })} />
             </div>
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="wa-brief" className="text-sm font-normal">
-                Briefing diário <span className="text-[11px] text-gold-ink">Ascende+</span>
-                <span className="block text-[11px] text-muted-foreground">Toda manhã, quando o briefing do dia estiver no app</span>
+                Briefing diário <span className="text-caption2 text-gold-ink">Ascende+</span>
+                <span className="block text-caption2 text-muted-foreground">Toda manhã, quando o briefing do dia estiver no app</span>
               </Label>
               <Switch id="wa-brief" checked={link!.notify_briefing}
                 onCheckedChange={(v) => setPrefs({ notify_briefing: v })} />
@@ -198,14 +210,14 @@ export default function WhatsappCard() {
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="wa-return" className="text-sm font-normal">
                 Recomeço sem cobrança
-                <span className="block text-[11px] text-muted-foreground">Depois de um tempo sem registros, uma mensagem com o que continua valendo — no máximo uma a cada 2 semanas</span>
+                <span className="block text-caption2 text-muted-foreground">Depois de um tempo sem registros, uma mensagem com o que continua valendo — no máximo uma a cada 2 semanas</span>
               </Label>
               <Switch id="wa-return" checked={link!.notify_return}
                 onCheckedChange={(v) => setPrefs({ notify_return: v })} />
             </div>
           </div>
-          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={unlink} disabled={busy}>
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : (<><Unlink className="w-3.5 h-3.5 mr-1.5" /> Desvincular número</>)}
+          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={unlink} disabled={busy} loading={busy}>
+            <Unlink className="w-3.5 h-3.5 mr-1.5" /> Desvincular número
           </Button>
         </div>
       ) : code ? (
@@ -233,13 +245,13 @@ export default function WhatsappCard() {
               Envie o código para o número oficial do Ascende no WhatsApp.
             </p>
           )}
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-caption2 text-muted-foreground">
             Assim que o código chegar, esta tela confirma o vínculo sozinha.
           </p>
         </div>
       ) : (
-        <Button variant="outline" size="sm" onClick={generate} disabled={busy}>
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Conectar meu WhatsApp"}
+        <Button variant="outline" size="sm" onClick={generate} disabled={busy} loading={busy}>
+          Conectar meu WhatsApp
         </Button>
       )}
     </Card>

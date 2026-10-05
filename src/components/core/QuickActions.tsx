@@ -101,6 +101,14 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
   const [category, setCategory] = useState<string>("Mercado");
   const [parcelar, setParcelar] = useState(false);
   const [parcelas, setParcelas] = useState("");
+  /* Os erros do formulário moram EMBAIXO do campo que está errado, e não num
+     toast no topo que some sozinho. O layout deste diálogo foi medido para que
+     o que aparece empurre o TOPO para cima e o botão não ande um pixel (ver o
+     comentário do DialogContent abaixo) — então uma linha de erro entra sem
+     tirar o "Registrar gasto" de baixo do dedo. Qualquer mudança no valor, nas
+     parcelas ou no modo apaga os dois: o erro descrevia o que estava ali. */
+  const [erroValor, setErroValor] = useState<string | null>(null);
+  const [erroParcelas, setErroParcelas] = useState<string | null>(null);
   // Qual dos dois números a pessoa digitou. Padrão "total", igual à
   // Prosperidade — o outro o app calcula e devolve na linha de resumo.
   const [valorMode, setValorMode] = useState<"parcela" | "total">("total");
@@ -126,11 +134,13 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
     });
   }, [parcelar, offerInstallments, value, parcelas, valorMode, category]);
 
+  useEffect(() => { setErroValor(null); setErroParcelas(null); }, [amount, parcelas, parcelar, valorMode]);
+
   const desligarParcelamento = () => { setParcelar(false); setParcelas(""); setValorMode("total"); };
   const reset = () => { setAmount(""); desligarParcelamento(); };
 
   const save = async () => {
-    if (!user || !value || value <= 0) { toast.error("Informe um valor válido em reais, como 30."); return; }
+    if (!user || !value || value <= 0) { setErroValor("Informe um valor válido em reais, como 30."); return; }
 
     // Parcelada: N linhas de uma vez, ligadas por um group_id — a mesma forma
     // que a Prosperidade grava. Cada parcela com a data real dela, para cair
@@ -143,10 +153,10 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
       // mandá-la consertar o campo errado.
       const n = Number(parcelas);
       if (!Number.isInteger(n) || n < MIN_INSTALLMENTS || n > MAX_INSTALLMENTS) {
-        toast.error(`Escolha em quantas parcelas — de ${MIN_INSTALLMENTS} a ${MAX_INSTALLMENTS}.`);
+        setErroParcelas(`Escolha em quantas parcelas — de ${MIN_INSTALLMENTS} a ${MAX_INSTALLMENTS}.`);
         return;
       }
-      if (!plan) { toast.error("Esse valor não dá para dividir nesse número de parcelas."); return; }
+      if (!plan) { setErroValor("Esse valor não dá para dividir nesse número de parcelas."); return; }
       setSaving(true);
       const groupId = newInstallmentGroupId();
       const { error } = await supabase.from("transactions").insert(
@@ -158,6 +168,7 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
       );
       setSaving(false);
       if (error) { toast.error("Não consegui registrar as parcelas. Tente de novo."); return; }
+      toast.dismiss("Não consegui registrar as parcelas. Tente de novo.");
       toast.success(`Compra em ${plan.count}x · ${category} registrada. +2 XP${xpToastSuffix()}`);
       reset(); setOpen(false);
       invalidateKeys(qc, FINANCE_KEYS);
@@ -171,6 +182,7 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
     });
     setSaving(false);
     if (error) { toast.error("Não consegui registrar o gasto. Tente de novo."); return; }
+    toast.dismiss("Não consegui registrar o gasto. Tente de novo.");
     toast.success(`Gasto de R$ ${value.toFixed(2).replace(".", ",")} · ${category} registrado. +2 XP${xpToastSuffix()}`);
     reset(); setOpen(false);
     invalidateKeys(qc, FINANCE_KEYS);
@@ -183,7 +195,9 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
         disabled={disabled}
         className="shrink-0 h-11 px-3 rounded-full border bg-card text-xs font-medium flex items-center gap-1.5 hover:bg-muted/60 active:scale-95 transition-all disabled:opacity-60"
       >
-        <span className="text-[13px] font-semibold" style={{ color: "hsl(var(--prosperidade))" }} aria-hidden>R$</span> Gasto
+        {/* `text-gold` é a TINTA do ouro (--gold-text, 5,23:1): o token do
+            pilar cru dava 2,74:1 no claro, abaixo dos 3:1 de um símbolo. */}
+        <span className="text-footnote font-semibold text-gold" aria-hidden>R$</span> Gasto
       </button>
       <Dialog open={open} onOpenChange={(o) => {
         setOpen(o);
@@ -226,7 +240,12 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") save(); }}
+              aria-invalid={!!erroValor || undefined}
+              aria-describedby={erroValor ? "erro-valor-gasto" : undefined}
             />
+            {erroValor && (
+              <p id="erro-valor-gasto" role="alert" className="text-footnote text-destructive">{erroValor}</p>
+            )}
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger><SelectValue placeholder="Categoria" /></SelectTrigger>
               <SelectContent>
@@ -294,12 +313,17 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
                         aria-label="Outro número de parcelas"
                         value={(QUICK_INSTALLMENT_CHIPS as readonly number[]).includes(Number(parcelas)) ? "" : parcelas}
                         onChange={(e) => setParcelas(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                        aria-invalid={!!erroParcelas || undefined}
+                        aria-describedby={erroParcelas ? "erro-parcelas-gasto" : undefined}
                       />
                     </div>
+                    {erroParcelas && (
+                      <p id="erro-parcelas-gasto" role="alert" className="text-footnote text-destructive">{erroParcelas}</p>
+                    )}
                     {/* Uma linha: a parcela e, principalmente, QUANDO acaba —
                         o compromisso real que a pessoa está assumindo. */}
                     {plan && (
-                      <p aria-live="polite" className="text-[11px] text-muted-foreground text-center">
+                      <p aria-live="polite" className="text-caption2 text-muted-foreground text-center">
                         {quickInstallmentSummary(plan, brl, cycleDay, valorMode)}
                       </p>
                     )}
@@ -318,7 +342,7 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
                       // estado PADRÃO. Quem mostra o modo é o rótulo do campo,
                       // que é o mesmo sinal que a pessoa vidente usa.
                       onClick={() => setValorMode(valorMode === "total" ? "parcela" : "total")}
-                      className="w-full min-h-11 text-[11px] text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
+                      className="w-full min-h-11 text-caption2 text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
                     >
                       {valorMode === "total" ? "digitei o valor da parcela" : "digitei o valor total"}
                     </button>
@@ -337,7 +361,7 @@ function QuickExpense({ disabled }: { disabled?: boolean }) {
                 : parcelar ? "Registrar parcelas"
                 : "Registrar gasto"}
             </Button>
-            <p className="text-[11px] text-muted-foreground text-center">
+            <p className="text-caption2 text-muted-foreground text-center">
               Descrição, data e entradas ficam no{" "}
               <Link to="/app/prosperidade" className="underline underline-offset-2" onClick={() => setOpen(false)}>
                 pilar Prosperidade
@@ -394,13 +418,18 @@ export default function QuickActions() {
     const { error } = await supabase.from("life_events").insert({ user_id: user.id, source: "form", ...row });
     setSavingKey(null);
     if (error) { toast.error("Não consegui registrar. Tente de novo."); return; }
+    toast.dismiss("Não consegui registrar. Tente de novo.");
     toast.success(okMsg + xpToastSuffix());
     invalidateKeys(qc, LIFE_DATA_KEYS);
   };
 
   const addWater = (ml: number, label: string) =>
     insert(`w${ml}`, { pillar: "vitalidade", kind: "water", payload: { ml, summary: `Água: ${ml} ml` } },
-      `${label} registrada (+${ml} ml). +2 XP`);
+      /* "Registrado: Copo" e não "Copo registrada": o rótulo é do recipiente
+         que a pessoa nomeou (copo, garrafa, caneca…), e o particípio
+         concordava com "água", que não está na frase. Pondo o rótulo depois
+         dos dois-pontos, a frase fica certa para qualquer nome. */
+      `Registrado: ${label} (+${ml} ml). +2 XP`);
 
   const logMood = (score: number, emoji: string, label: string) =>
     insert(`m${score}`, { pillar: "mente", kind: "mood", payload: { score, label, summary: `Humor: ${label}` } },
@@ -426,11 +455,15 @@ export default function QuickActions() {
 
   return (
     <div className="space-y-1.5">
-      <p className="text-[11px] font-medium text-muted-foreground px-0.5">Registro em 1 toque</p>
+      <p className="text-caption2 font-medium text-muted-foreground px-0.5">Registro em 1 toque</p>
       <div
         ref={trilho}
         onScroll={medir}
-        className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1"
+        /* Trilho que rola no celular, e que QUEBRA LINHA no desktop: a
+           1440 px o último atalho ficava cortado numa rolagem horizontal sem
+           barra e sem gesto óbvio de mouse. Com `lg:flex-wrap` não sobra o que
+           rolar, a medição dá `rolaMais = false` e o esmaecimento some junto. */
+        className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 lg:flex-wrap lg:overflow-x-visible"
         style={{
           scrollbarWidth: "none",
           ...(rolaMais ? { maskImage: FADE_ROLAGEM, WebkitMaskImage: FADE_ROLAGEM } : {}),
@@ -443,8 +476,10 @@ export default function QuickActions() {
             disabled={!!savingKey}
             className="shrink-0 h-11 px-3 rounded-full border bg-card text-xs font-medium flex items-center gap-1.5 hover:bg-muted/60 active:scale-95 transition-all disabled:opacity-60"
           >
-            <Droplet className="w-3.5 h-3.5" style={{ color: "hsl(205 70% 55%)" }} />
-            {b.label} <span className="text-muted-foreground">{b.ml}ml</span>
+            <Droplet className="w-3.5 h-3.5" style={{ color: "hsl(var(--agua))" }} />
+            {/* "250 ml", com espaço inseparável: a MESMA grafia do aviso e do
+                resumo do registro ("Água: 250 ml"). */}
+            {b.label} <span className="text-muted-foreground">{b.ml}{"\u00a0"}ml</span>
           </button>
         ))}
         {showWater && (showMood || showMeal || showExpense || showWorkout) && (
