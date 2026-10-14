@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { defaultChoices, type BlueprintProposal } from "./blueprint";
 
 /* ─────────────────────────────────────────────────────────────────
    O TETO DE SAÍDA DO BLUEPRINT TEM QUE CABER O QUE A FERRAMENTA PEDE
@@ -65,14 +66,36 @@ describe("a falha do Blueprint é diagnosticável e recuperável", () => {
   });
 
   it("toda saída de falha estorna a cortesia ANTES de responder", () => {
-    // A promessa "a cortesia não foi consumida" só é verdade se o refund
-    // acontecer em todos os caminhos. Cada `recoverable: true` tem que ter
-    // um `await refund()` logo acima.
-    const trechos = fn.split("recoverable: true");
-    expect(trechos.length - 1).toBeGreaterThanOrEqual(3);
+    // A promessa "a cortesia não foi consumida" só é verdade se o estorno
+    // acontecer em todos os caminhos. Desde que a proposta passou a ficar
+    // guardada (migração 20261013120000), o fluxo mora em decide.ts: a
+    // geração (index.ts) só devolve `null` nas falhas recuperáveis, e quem
+    // responde é o fluxo — que libera (apaga a linha `generating` e devolve
+    // o carimbo, na mesma transação) antes de cada saída de falha.
+    // O comportamento é provado em decide.test.ts (deno test); aqui fica a
+    // trava de leitura, para ninguém reintroduzir uma resposta de falha
+    // direto da geração, por fora do estorno.
+    const fluxo = readFileSync(
+      new URL("../../supabase/functions/onboarding-blueprint/decide.ts", import.meta.url), "utf8",
+    );
+    const gerar = fn.slice(fn.indexOf("async function gerarBlueprint"), fn.indexOf("Deno.serve("));
+    expect(gerar).not.toContain("recoverable");
+    expect((gerar.match(/return null;/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    // Cada `recoverable: true` do fluxo tem a liberação (da geração DESTE
+    // token) logo acima — com UMA exceção legítima: a geração superada, cuja
+    // linha já é de outra chamada (ou sumiu). Ali não há cortesia nossa para
+    // devolver; liberar apagaria a geração nova. Ela é reconhecida pelo
+    // `if (!atual)` que relê o banco antes de responder.
+    const trechos = fluxo.split("recoverable: true");
+    expect(trechos.length - 1).toBeGreaterThanOrEqual(1);
     for (const antes of trechos.slice(0, -1)) {
-      expect(antes.slice(-120)).toContain("await refund()");
+      const perto = antes.slice(-160);
+      const superada = perto.includes("if (!atual)");
+      expect(superada || /await d\.liberar\(token\)/.test(perto)).toBe(true);
     }
+    // …e a geração que LANÇA, ou a proposta que não deu para guardar, também
+    // liberam antes de o erro subir.
+    expect((fluxo.match(/await d\.liberar\(token\);\s*throw e;/g) ?? []).length).toBe(2);
   });
 
   it("a tela oferece TENTAR DE NOVO quando o servidor diz que dá", () => {
@@ -102,18 +125,42 @@ describe("a falha do Blueprint é diagnosticável e recuperável", () => {
    e contar (dizer onde o plano guardado foi parar).
 ────────────────────────────────────────────────────────────────── */
 describe("ativar o Blueprint na conta grátis", () => {
+  /* A ativação MUDOU DE LADO: era a tela inserindo plano a plano, e virou a
+     RPC `activate_blueprint`, numa transação (o Blueprint que não se perde ao
+     recarregar). As três partes da correção continuam valendo — só que agora
+     são verificadas onde moram: o laço e a degradação na função SQL, a
+     prevenção (caixas que cabem) em `defaultChoices`, e o "dizer onde foi
+     parar" no resumo que vem do servidor. A migração é achada pelo CONTEÚDO,
+     não pelo nome — e, se sumir, o teste falha alto em vez de passar vazio. */
   const tela = readFileSync(new URL("../pages/Onboarding.tsx", import.meta.url), "utf8");
-  const activate = tela.slice(tela.indexOf("const activate = async"), tela.indexOf("const steps"));
+  const dir = new URL("../../supabase/migrations/", import.meta.url);
+  const migracao = readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()
+    .map((f) => readFileSync(new URL(f, dir), "utf8"))
+    .filter((t) => t.includes("function public.activate_blueprint("))
+    .pop() ?? "";
+  const ini = migracao.indexOf("function public.activate_blueprint(");
+  const activate = ini < 0 ? "" : migracao.slice(ini, migracao.indexOf("$$;", ini));
+
+  it("a ativação existe no servidor — e a tela só chama ela", () => {
+    expect(activate).not.toBe("");
+    expect(tela).toContain('rpc("activate_blueprint"');
+    // A prova de que a tela não voltou a gravar planos por conta própria.
+    expect(tela).not.toMatch(/from\("plans"\)\s*\.insert/);
+  });
 
   it("os planos entram UM DE CADA VEZ — o lote derrubava junto o que cabia", () => {
-    expect(activate).toMatch(/for \(const pl of chosenPlans\)/);
-    // A prova de que não voltou o insert em lote com o array inteiro.
-    expect(activate).not.toMatch(/insert\(\s*chosenPlans\.map/);
+    // Cada plano no seu próprio bloco begin/exception: o erro de um não
+    // desfaz os outros.
+    expect(activate).toMatch(/for i in 0 \.\. jsonb_array_length\(coalesce\(r\.proposal->'plans'/);
+    expect(activate).toMatch(/begin\s+insert into public\.plans/);
   });
 
   it("o plano que não cabe ativo é GUARDADO, nunca descartado", () => {
-    expect(activate).toContain("isPlanCapError");
-    expect(activate).toContain('status: "arquivado"');
+    expect(activate).toContain("PLAN_LIMIT_REACHED");
+    expect(activate).toMatch(/'blueprint', 'arquivado'\)/);
+    expect(activate).toContain("'plans_archived'");
     // E o limite não conta arquivado — é isso que faz a saída existir.
     const sql = readFileSync(new URL("../../supabase/setup.sql", import.meta.url), "utf8");
     const gatilho = sql.slice(sql.indexOf("enforce_active_plans_cap"), sql.indexOf("trg_plans_cap"));
@@ -123,11 +170,16 @@ describe("ativar o Blueprint na conta grátis", () => {
   it("um erro que NÃO é o da cota continua explodindo", () => {
     // A degradação é só para o limite. Engolir qualquer erro aqui esconderia
     // falha de rede ou de permissão atrás de um "guardei seu plano".
-    expect(activate).toMatch(/if \(!isPlanCapError\(error\)\) throw error;/);
+    expect(activate).toMatch(/if sqlerrm not like 'PLAN_LIMIT_REACHED%' then raise; end if;/);
   });
 
   it("vêm marcadas só as caixas que cabem ativas", () => {
-    expect(tela).toContain("bp.plans.map((_, i) => i < maxActivePlans)");
+    // Três planos numa conta que comporta um ativo.
+    const p = {
+      plans: [0, 1, 2].map((i) => ({ kind: `k${i}`, title: "", pillar: "", content_markdown: "" })),
+      habits: [],
+    } as unknown as BlueprintProposal;
+    expect(defaultChoices(p, 1).plans).toEqual([true, false, false]);
   });
 
   it("a cota é dita antes do clique e o destino do resto é dito depois", () => {

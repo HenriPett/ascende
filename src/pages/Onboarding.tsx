@@ -17,7 +17,7 @@
 // Custo de IA: UMA chamada Sonnet por conta (cortesia), com unicidade
 // garantida no servidor (claim_blueprint) e fallback local por TMB quando a
 // função estiver indisponível — o onboarding nunca quebra por IA.
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,15 +39,18 @@ import {
 import { Markdown } from "@/components/core/Markdown";
 import { toast } from "sonner";
 import { PILLARS, inferPillarFromGoal, pillarById, type PillarId } from "@/lib/pillars";
-import { TRACKERS } from "@/lib/trackers";
+import { TRACKERS, activeTrackerSet } from "@/lib/trackers";
 import {
   tmbMifflin, tdee, kcalRangeLabel, PLAN_KIND_META,
-  type BlueprintProposal, type BlueprintPlan,
+  retomadaDaLinha, retomadaDaResposta, interpretarAtivacao, resumoDaAtivacao,
+  goalKeysFor, itensEfetivos, contaComoRetomada, proximoPassoDaEspera, ESPERA_ENTRE_LEITURAS_MS,
+  type BlueprintProposal, type BlueprintPlan, type BlueprintChoices, type Retomada,
+  type ActivationResult,
 } from "@/lib/blueprint";
 import { sleepWindowHours, formatWindowHours, timeForInput } from "@/lib/sleep";
 import SleepSchedule from "@/components/core/SleepSchedule";
 import CaptureBar from "@/components/core/CaptureBar";
-import { readFnError, isPlanCapError } from "@/lib/fnError";
+import { readFnError } from "@/lib/fnError";
 import {
   Check, Loader2, ArrowRight, ArrowLeft, Sparkles, X, Plus, Eye, Mountain,
 } from "lucide-react";
@@ -69,6 +72,11 @@ const CHIP_INK: Record<PillarId, string> = {
 const DEFAULT_PRACTICE = "Momento de prática";
 const FALLBACK_PILLAR: PillarId = "prosperidade";
 const TOTAL_STEPS = 9;
+/* Os dois passos para onde a retomada pula. Nomeados porque a retomada salta
+   para eles a partir do passo 0 — com o número solto, mudar a ordem dos blocos
+   faria uma pessoa que recarregou cair no bloco errado sem nenhum erro. */
+const PASSO_DO_BLUEPRINT = 7;
+const PASSO_DA_MAGICA = 8;
 
 /** Frase digitada na demo da landing (TryItDemo) — lida uma vez e descartada. */
 function consumeLandingPhrase(): string {
@@ -190,7 +198,14 @@ export default function Onboarding() {
 
   // Trackers ativos segundo as escolhas do bloco 7 (fonte local: o perfil
   // pode não ter recarregado quando o Blueprint é ativado).
+  //
+  // Na RETOMADA o estado local está vazio — a página recarregou, ou a pessoa
+  // voltou pelos Primeiros passos dias depois —, e a escolha dela já está
+  // salva no perfil. Aí a fonte é o perfil, pela mesma regra do resto do app.
+  // Sem isto, quem recarregava via "nenhuma meta para as áreas que você
+  // acompanha" e perdia as metas da proposta.
   const activeTrackers = useMemo(() => {
+    if (!pillars.length) return activeTrackerSet(profile) as Set<string>;
     const set = new Set<string>();
     for (const t of TRACKERS) {
       if (!pillars.includes(t.pillar)) continue;
@@ -198,7 +213,7 @@ export default function Onboarding() {
       set.add(t.id);
     }
     return set;
-  }, [pillars, prefs]);
+  }, [pillars, prefs, profile]);
 
   const patchProfile = async (patch: Record<string, unknown>) => {
     if (!user) return false;
@@ -348,7 +363,132 @@ export default function Onboarding() {
     } finally { setSaving(false); }
   };
 
+  /* ═══ O BLUEPRINT GUARDADO ═══════════════════════════════════════════════
+     A proposta não vive mais só nesta tela. Antes ela ficava em `useState`:
+     recarregar a página depois de gerar (ou o iPhone matar a aba em segundo
+     plano) perdia a proposta E a cortesia — a função passava a responder
+     `409 already` para sempre, e a pessoa perdia a única vez em que a IA
+     escreve um plano sobre a vida dela.
+
+     Agora a função grava a proposta em `blueprint_proposals` ANTES de
+     responder, e esta tela só lê. O que cada estado da linha significa é
+     decidido em lib/blueprint.ts (`retomadaDaLinha`), com teste — aqui só se
+     desenha. Contrato: scratchpad/blueprint/PLANO.md. */
+
+  /** As escolhas como o banco as tem da última vez que salvamos — `null`
+   *  quando ainda é preciso salvar (proposta nova, ou escolhas completadas). */
+  const ultimaSalva = useRef<string | null>(null);
+  /** Desde quando a tela espera outra aba terminar de gerar (`null`: não espera). */
+  const [esperandoDesde, setEsperandoDesde] = useState<number | null>(null);
+  /** A proposta já foi ativada: as escolhas deixam de ser salvas. */
+  const [bpAtivado, setBpAtivado] = useState(false);
+  /** A última tentativa de ativar falhou — dito na tela, ao lado do botão. */
+  const [ativacaoFalhou, setAtivacaoFalhou] = useState(false);
+
+  const escolhas: BlueprintChoices = useMemo(
+    () => ({ plans: plansChecked, habits: habitsChecked, goals: activateGoals }),
+    [plansChecked, habitsChecked, activateGoals],
+  );
+
+  const aplicarResumo = (r: ActivationResult) => {
+    const resumo = resumoDaAtivacao(r);
+    setActivatedPlans(resumo.planosAtivos);
+    setArchivedPlans(resumo.planosGuardados);
+    setActivatedGoals(resumo.metas);
+    setActivatedHabits(resumo.habitos);
+    return resumo;
+  };
+
+  /** Quando a pessoa não consegue ler a própria proposta, isso vira medida
+   *  (falhas de recuperação) — e nunca trava a tela: a falha de registrar a
+   *  falha é só um log. */
+  const reportarFalha = (motivo: string) => {
+    void supabase.rpc("report_blueprint_resume_failure", { p_reason: motivo.slice(0, 120) })
+      .then(({ error }) => { if (error) console.error("report_blueprint_resume_failure", error.message); });
+  };
+
+  /** Põe na tela o que a linha (ou a resposta da função) diz. Devolve se havia
+   *  algo a mostrar. */
+  const hidratar = (r: Retomada): boolean => {
+    if (r.kind === "nenhuma" || r.kind === "invalida") return false;
+    setBpFallback(false);
+    setBpRetry(false);
+    if (r.kind === "gerando") {
+      // Outra aba (ou esta, antes de recarregar) está gerando. NÃO se gera de
+      // novo: a tela espera a linha ficar pronta.
+      setBlueprint(null);
+      setGenerating(true);
+      setEsperandoDesde((d) => d ?? Date.now());
+      return true;
+    }
+    setGenerating(false);
+    setEsperandoDesde(null);
+    if (r.kind === "ativada") {
+      if (r.proposal) setBlueprint(r.proposal);
+      aplicarResumo(r.result);
+      setBpAtivado(true);
+      return true;
+    }
+    setBlueprint(r.proposal);
+    setPlansChecked(r.choices.plans);
+    setHabitsChecked(r.choices.habits);
+    setActivateGoals(r.choices.goals);
+    // Escolhas intactas já estão no banco: hidratar não regrava. Completadas
+    // aqui (cota da conta, linha recém-gerada): o efeito abaixo salva.
+    ultimaSalva.current = r.escolhasIntactas ? JSON.stringify(r.choices) : null;
+    return true;
+  };
+  // As funções acima mudam a cada render; os efeitos leem sempre a atual.
+  const hidratarRef = useRef(hidratar);
+  hidratarRef.current = hidratar;
+
+  /* A RETOMADA VIRA MEDIDA. A métrica de "falhou e não voltou" precisa saber
+     que a pessoa VOLTOU — e a volta de verdade não passa pela função (que
+     grava o próprio `resumed`): é esta tela lendo a linha. Uma vez por
+     montagem; o servidor ainda segura a 1 evento a cada 30 min por pessoa,
+     para recarregar não inflar a conta. Falhar aqui é só log. */
+  const retomadaRegistrada = useRef(false);
+  const registrarRetomada = (r: Retomada) => {
+    if (retomadaRegistrada.current || !contaComoRetomada(r)) return;
+    retomadaRegistrada.current = true;
+    void supabase.rpc("report_blueprint_resumed")
+      .then(({ error }) => { if (error) console.error("report_blueprint_resumed", error.message); });
+  };
+  const registrarRetomadaRef = useRef(registrarRetomada);
+  registrarRetomadaRef.current = registrarRetomada;
+
+  const lerMinhaLinha = async () =>
+    supabase.from("blueprint_proposals")
+      .select("status, proposal, choices, choices_updated_at, activation_result")
+      .eq("user_id", user!.id)
+      .maybeSingle();
+
+  /* ── AO MONTAR: a proposta guardada, se houver ───────────────────────
+     Recarregar no passo do Blueprint volta à MESMA proposta e às MESMAS
+     escolhas, sem nova chamada ao modelo — mesmo com o `step` voltando a 0.
+     E é por aqui que se volta pelos Primeiros passos, dias depois. */
+  const leuAoMontar = useRef(false);
+  useEffect(() => {
+    if (!user || leuAoMontar.current) return;
+    leuAoMontar.current = true;
+    void (async () => {
+      const { data, error } = await lerMinhaLinha();
+      if (error) { reportarFalha(`leitura_falhou:${error.code ?? "rede"}`); return; }
+      const r = retomadaDaLinha(data, maxActivePlans);
+      if (r.kind === "invalida") { reportarFalha(r.motivo); return; }
+      if (!hidratarRef.current(r)) return;
+      registrarRetomada(r);
+      setStep(r.kind === "ativada" ? PASSO_DA_MAGICA : PASSO_DO_BLUEPRINT);
+    })();
+    // `lerMinhaLinha` e `reportarFalha` só leem `user`, que está nas deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, maxActivePlans]);
+
   // ── Geração do Blueprint (1 chamada Sonnet por conta, cortesia) ──
+  //
+  // A função decide pelo estado da linha: `ready` devolve a proposta guardada
+  // SEM chamar o modelo; `activated` devolve o resumo; `generating` responde
+  // que outra aba está gerando. Só sem linha ela gera de verdade.
   const generate = async () => {
     setGenerating(true);
     setBpFallback(false);
@@ -357,144 +497,145 @@ export default function Onboarding() {
       const { data, error } = await supabase.functions.invoke("onboarding-blueprint", { body: {} });
       if (error) {
         const body = await readFnError(error);
-        if (body?.already) { setBpFallback(true); return; }
+        // Legado: gerado antes desta mudança, quando a proposta ainda não era
+        // guardada — ela se perdeu e não há como recuperá-la.
+        if (body?.already) { setBpFallback(true); setGenerating(false); return; }
         // O servidor distingue "não deu certo agora, a cortesia voltou" de
         // "o Blueprint está desligado". Só o primeiro vale um botão de
         // tentar — no segundo, tentar de novo é enganar a pessoa.
-        if (body?.recoverable) { setBpRetry(true); return; }
+        if (body?.recoverable) { setBpRetry(true); setGenerating(false); return; }
         throw new Error(typeof body?.error === "string" ? body.error : "erro");
       }
       if (data?.error) throw new Error(String(data.error));
-      const bp = data?.blueprint as BlueprintProposal | undefined;
-      if (!bp?.plans?.length) throw new Error("erro");
-      setBlueprint(bp);
-      // Marcadas só as que cabem ativas. As outras continuam ali, para
-      // marcar — e o que passar da cota é GUARDADO, não perdido.
-      setPlansChecked(bp.plans.map((_, i) => i < maxActivePlans));
-      setHabitsChecked(bp.habits.map(() => true));
+      const r = retomadaDaResposta(data, maxActivePlans);
+      if (r.kind === "invalida") reportarFalha(r.motivo);
+      if (!hidratar(r)) throw new Error("erro");
+      if (r.kind === "ativada") next();
     } catch {
       // Fallback local honesto (Emenda 4: o onboarding nunca quebra por IA):
       // a TMB já dá o retrato; o plano completo fica com o Conselheiro.
       setBpFallback(true);
-    } finally {
       setGenerating(false);
     }
   };
+  const generateRef = useRef(generate);
+  generateRef.current = generate;
 
-  // Ativar o que a pessoa marcou: plano composto (1 plano), metas e hábitos.
+  /* ── ESPERANDO OUTRA ABA ─────────────────────────────────────────────
+     Relê a linha a cada ~2 s. Com teto: passado ele, chama a função de novo,
+     e ELA decide — se a geração da outra aba ainda é recente, responde
+     "gerando" e a espera recomeça; se envelheceu (a função morreu no meio),
+     reivindica e gera. A tela nunca chama o modelo por conta própria. */
+  useEffect(() => {
+    if (esperandoDesde === null || !user) return;
+    let viva = true;
+    const timer = setInterval(async () => {
+      if (proximoPassoDaEspera(Date.now() - esperandoDesde) === "chamar-a-funcao") {
+        clearInterval(timer);
+        setEsperandoDesde(null);
+        void generateRef.current();
+        return;
+      }
+      const { data, error } = await lerMinhaLinha();
+      // Erro de rede no meio da espera não é fim de linha: o próximo tique tenta.
+      if (!viva || error) return;
+      const r = retomadaDaLinha(data, maxActivePlans);
+      if (r.kind === "gerando") return;
+      clearInterval(timer);
+      setEsperandoDesde(null);
+      if (r.kind === "nenhuma") {
+        // A linha sumiu: a geração da outra aba falhou, e o servidor desfez a
+        // linha e estornou a cortesia. Tentar de novo funciona de verdade.
+        setGenerating(false);
+        setBpRetry(true);
+        return;
+      }
+      if (r.kind === "invalida") {
+        reportarFalha(r.motivo);
+        setGenerating(false);
+        setBpFallback(true);
+        return;
+      }
+      hidratarRef.current(r);
+      registrarRetomadaRef.current(r);
+      if (r.kind === "ativada") setStep(PASSO_DA_MAGICA);
+    }, ESPERA_ENTRE_LEITURAS_MS);
+    return () => { viva = false; clearInterval(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esperandoDesde, user, maxActivePlans]);
+
+  /* ── AS ESCOLHAS SÃO SALVAS ENQUANTO A PESSOA ESCOLHE ────────────────
+     Com uma janela de 400 ms, para um clique-clique-clique virar uma chamada.
+     Falhar aqui não trava nada: a ativação manda as escolhas de qualquer jeito
+     (`p_choices`), então o pior caso de uma falha é recarregar e ver a última
+     escolha salva, não a última feita. Por isso é log, não aviso na tela. */
+  useEffect(() => {
+    if (!blueprint || bpAtivado || generating) return;
+    const json = JSON.stringify(escolhas);
+    if (json === ultimaSalva.current) return;
+    const timer = setTimeout(async () => {
+      const { error } = await supabase.rpc("save_blueprint_choices", { p_choices: escolhas });
+      if (error) { console.error("save_blueprint_choices", error.message); return; }
+      ultimaSalva.current = json;
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [escolhas, blueprint, bpAtivado, generating]);
+
+  /* ── ATIVAR ───────────────────────────────────────────────────────────
+     Antes a tela fazia N inserts um a um, e interromper no meio e tentar de
+     novo DUPLICAVA planos e compromissos. Agora é UMA chamada, numa transação
+     no servidor: ou aplica tudo, ou nada — e a segunda chamada devolve o que
+     a primeira aplicou (`already`) sem gravar de novo. Tentar de novo passou a
+     ser seguro, e é por isso que a falha agora oferece tentar.
+
+     A tela manda só as ESCOLHAS e as CHAVES de meta; os valores (o texto dos
+     planos, a meta de calorias) o servidor tira da proposta guardada. E a
+     regra da cota continua lá: plano que não cabe ativo é GUARDADO como
+     arquivado, nunca descartado — e o resumo, que agora vem do servidor, diz
+     onde ele foi parar. */
+  const nadaParaAtivar = !!blueprint && itensEfetivos(escolhas, blueprint, activeTrackers) === 0;
+
   const activate = async () => {
     if (!user || !blueprint) return;
     setActivating(true);
+    setAtivacaoFalhou(false);
     try {
-      const applied: string[] = [];
-      // Um plano POR ÁREA (alimentar, treino, rotina, financeiro): cada um
-      // aparece sozinho em "Meus planos". Antes era um plano composto de
-      // "rotina", e a pessoa achava que os outros não tinham sido criados.
-      const chosenPlans = blueprint.plans.filter((_, i) => plansChecked[i]);
-      if (chosenPlans.length) {
-        /* UM DE CADA VEZ, E O QUE NÃO COUBER ATIVO VAI GUARDADO.
-           O insert em lote fazia o gatilho do limite derrubar tudo junto —
-           inclusive os planos que caberiam. Linha a linha, cada plano tem a
-           própria sorte, e a cota é descoberta pelo próprio servidor em vez
-           de adivinhada aqui.
-
-           O plano que não cabe ativo NÃO É DESCARTADO: entra como
-           'arquivado', que o limite não conta e que a tela Meus planos já
-           sabe reativar (Planos.tsx:112). Jogar fora um plano que a IA
-           escreveu sobre a vida da pessoa, na única vez em que ela ganha
-           isso de cortesia, seria o pior desfecho possível — e ela nem
-           ficaria sabendo. */
-        const ativados: string[] = [];
-        const guardados: string[] = [];
-        for (const pl of chosenPlans) {
-          const row = {
-            user_id: user.id,
-            title: pl.title,
-            kind: pl.kind,
-            pillar: pl.pillar ?? inferred ?? null,
-            content: pl.content_markdown,
-            origin: "blueprint",
-          };
-          const rotulo = (PLAN_KIND_META[pl.kind]?.label ?? pl.kind).toLowerCase();
-          const { error } = await supabase.from("plans").insert(row);
-          if (!error) { ativados.push(rotulo); continue; }
-          if (!isPlanCapError(error)) throw error;
-          const { error: arqErr } = await supabase.from("plans").insert({ ...row, status: "arquivado" });
-          if (arqErr) throw arqErr;
-          guardados.push(rotulo);
-        }
-        if (ativados.length) {
-          applied.push(ativados.length === 1 ? "1 plano" : `${ativados.length} planos`);
-          setActivatedPlans(ativados);
-        }
-        if (guardados.length) {
-          // Dito em voz alta, e no lugar onde a pessoa pode agir: guardar em
-          // silêncio seria a mesma perda de antes, só que sem o erro.
-          applied.push(guardados.length === 1 ? "1 plano guardado" : `${guardados.length} planos guardados`);
-          setArchivedPlans(guardados);
-        }
+      const { data, error } = await supabase.rpc("activate_blueprint", {
+        p_choices: escolhas,
+        p_goal_keys: activateGoals ? goalKeysFor(blueprint, activeTrackers) : [],
+      });
+      // Erro de transporte e `ok:false` são a mesma coisa para a pessoa: não
+      // ativou, nada ficou pela metade, dá para tentar de novo.
+      const r = error ? null : interpretarAtivacao(data);
+      if (!r || !r.ok) {
+        setAtivacaoFalhou(true);
+        return;
       }
-      if (activateGoals) {
-        // Metas só das áreas que a pessoa ACOMPANHA: aplicar uma meta de
-        // água para quem desligou água criaria cobrança invisível.
-        const on = (id: string) => activeTrackers.has(id);
-        const patch: Record<string, unknown> = {};
-        if (blueprint.daily_calories_kcal && on("meals")) patch.calorie_goal_kcal = Math.round(blueprint.daily_calories_kcal);
-        if (blueprint.daily_protein_g && on("protein")) patch.protein_goal_g = Math.round(blueprint.daily_protein_g);
-        if (blueprint.weekly_workouts && on("workouts")) patch.weekly_workouts_goal = Math.round(blueprint.weekly_workouts);
-        if (blueprint.sleep_hours_target && on("sleep")) patch.sleep_goal_h = blueprint.sleep_hours_target;
-        if (blueprint.daily_spend_limit && on("spend_limit")) patch.daily_spend_limit = blueprint.daily_spend_limit;
-        if (blueprint.water_goal_ml && on("water")) patch.water_goal_ml = Math.round(blueprint.water_goal_ml);
-        if (Object.keys(patch).length) {
-          const { error } = await supabase.from("profiles").update(patch).eq("user_id", user.id);
-          if (error) throw error;
-          applied.push("metas");
-          const GOAL_LABEL: Record<string, string> = {
-            calorie_goal_kcal: "calorias", protein_goal_g: "proteína",
-            weekly_workouts_goal: "treinos", sleep_goal_h: "sono",
-            daily_spend_limit: "teto de gasto", water_goal_ml: "água",
-          };
-          setActivatedGoals(Object.keys(patch).map((k) => GOAL_LABEL[k] ?? k));
-        }
-      }
-      const chosen = blueprint.habits.filter((_, i) => habitsChecked[i]);
-      if (chosen.length) {
-        const { error } = await supabase.from("habits").insert(
-          chosen.map((h) => ({ user_id: user.id, name: h.name, pillar: h.pillar }))
-        );
-        if (error) throw error;
-        applied.push(chosen.length === 1 ? "1 compromisso" : `${chosen.length} compromissos`);
-        setActivatedHabits(chosen.length);
-      }
-      /* O CARIMBO DA ATIVAÇÃO. Sem ele, a tela Hoje não tem como distinguir
-         quem ativou de quem gerou e recusou — e desligava a trilha de
-         Primeiros Passos para os dois, deixando quem recusou com um app sem
-         zona nenhuma além do convite de assinatura. Ver a migração
-         20260913120000 e o comentário em Hoje.tsx:498.
-
-         Só quando `applied` tem algo: "ativei nada" não é ativação, e é
-         exatamente o caso que precisa continuar recebendo o andaime.
-         A falha aqui não desfaz o que já foi ativado nem quebra o fluxo — no
-         pior caso a pessoa vê a trilha que ela já cumpriu, que é o lado
-         errado menos grave dos dois. */
-      if (applied.length) {
-        const { error: stampErr } = await supabase.from("profiles")
-          .update({ blueprint_activated_at: new Date().toISOString() })
-          .eq("user_id", user.id);
-        if (stampErr) console.error("blueprint_activated_at", stampErr.message ?? stampErr);
-      }
+      // Defesa: a tela não oferece "Ativar" sem nada efetivo, mas se as
+      // escolhas mudaram entre o clique e o servidor (outra aba), a resposta
+      // é "nada aplicado, a proposta segue guardada" — o mesmo "agora não".
+      if (r.nada === true) { explorarPrimeiro(); return; }
+      const resumo = aplicarResumo(r.result);
+      setBpAtivado(true);
       qc.invalidateQueries();
       refresh();
-      toast.dismiss("Não consegui ativar agora. Tente de novo.");
-      toast.success(applied.length
-        ? `Ativado: ${applied.join(", ")}. Tudo isso vive na tela Hoje e em Jornada > Planos.`
-        : "Tudo bem — nada foi ativado. O Blueprint continua disponível com o Conselheiro.");
+      toast.success(resumo.frase);
       next();
     } catch {
-      toast.error("Não consegui ativar agora. Tente de novo.");
+      setAtivacaoFalhou(true);
     } finally {
       setActivating(false);
     }
+  };
+
+  /* "Agora não — quero explorar primeiro": o carimbo `dismissed_at` é só
+     medida; a proposta CONTINUA guardada e retomável (Primeiros passos, na
+     Hoje). A pessoa não espera a chamada para seguir — dispensar é um gesto,
+     e travar a saída esperando a rede seria cobrar pelo "agora não". */
+  const explorarPrimeiro = () => {
+    void supabase.rpc("dismiss_blueprint")
+      .then(({ error }) => { if (error) console.error("dismiss_blueprint", error.message); });
+    next();
   };
 
   const addChip = (
@@ -919,10 +1060,33 @@ export default function Onboarding() {
               trocar qual está ativo quando quiser.
             </p>
           )}
-          <Button className="w-full min-h-11" onClick={activate} loading={activating}>
-            <Check className="w-4 h-4 mr-1.5" /> Ativar {plansChecked.filter(Boolean).length > 1 ? "meus planos" : "meu plano"}
-          </Button>
-          {skipLink("Agora não — quero explorar primeiro", next)}
+          {/* A falha da ativação é dita AQUI, ao lado do botão, e não num aviso
+              no topo: o servidor desfez a tentativa inteira, então o mesmo
+              botão é o "tentar de novo" — e agora é seguro tentar. */}
+          {ativacaoFalhou && (
+            <p role="alert" className="text-xs text-destructive rounded-md border border-destructive/40 p-2.5">
+              Não consegui ativar agora — e nada ficou pela metade. Dá para tentar de novo.
+            </p>
+          )}
+          {/* Com NADA efetivo marcado, "Ativar" não tem o que ativar — e antes
+              consumia a proposta à toa. Desabilitar deixaria um botão morto
+              sem dizer por quê; o botão principal passa a ser a saída que a
+              escolha já expressa, e o link (agora repetido) sai. */}
+          {nadaParaAtivar ? (
+            <Button className="w-full min-h-11" variant="outline" onClick={explorarPrimeiro}>
+              Agora não — quero explorar primeiro
+            </Button>
+          ) : (
+            <>
+              <Button className="w-full min-h-11" onClick={activate} loading={activating}>
+                <Check className="w-4 h-4 mr-1.5" />
+                {ativacaoFalhou
+                  ? "Tentar de novo"
+                  : `Ativar ${plansChecked.filter(Boolean).length > 1 ? "meus planos" : "meu plano"}`}
+              </Button>
+              {skipLink("Agora não — quero explorar primeiro", explorarPrimeiro)}
+            </>
+          )}
         </div>
       )}
 
