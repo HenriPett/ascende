@@ -79,7 +79,12 @@ limiares as (
     0.30::numeric as t6_retorno,
     0.50::numeric as t6_retorno_d2,
     0.30::numeric as t7_adocao,
-    0.60::numeric as t7_adocao_alta
+    0.60::numeric as t7_adocao_alta,
+    -- Blueprint (medidas 9-13). As 11 e 13 reaproveitam t1_* e t4_* de
+    -- propósito: medir o primeiro registro e a utilidade com réguas
+    -- diferentes das medidas 1 e 4 seria criar duas verdades.
+    0.60::numeric as t9_ativacao_24h,
+    0.40::numeric as t12_plano_ativo
 ),
 
 -- ═══ 1. TEMPO ATÉ O PRIMEIRO VALOR ═════════════════════════════════════
@@ -205,6 +210,87 @@ m7 as (
     ) as proporcao,
     count(*) filter (where v.state = 'nunca_perguntamos')                as nunca_perguntamos
   from public.metric_companion_reaction v
+  join elegiveis e on e.user_id = v.user_id
+),
+
+-- ═══ 9. A PROPOSTA GERADA CHEGOU À ATIVAÇÃO EM 24 H ════════════════════
+-- Denominador: quem GEROU. Dispensar ("explorar primeiro") é lido ao lado,
+-- nunca dentro do numerador: é opção que o produto oferece de propósito, e
+-- somá-la a fracasso faria a leitura seguinte ser tirar a opção da tela.
+m9 as (
+  select
+    count(*)                                                             as denominador,
+    round(
+      count(*) filter (where v.activated_within_24h)::numeric / nullif(count(*), 0), 3
+    )                                                                    as proporcao,
+    count(*) filter (where v.dispensou_e_nao_voltou)                     as dispensaram,
+    count(*) filter (where v.legado_sem_proposta)                        as legado,
+    round(percentile_cont(0.5) within group (order by v.minutes_to_activation)
+      filter (where v.activated)::numeric, 1)                            as mediana_minutos
+  from public.metric_blueprint_funnel v
+  join elegiveis e on e.user_id = v.user_id
+),
+
+-- ═══ 10. FALHAS DE RECUPERAÇÃO ═════════════════════════════════════════
+-- Auditoria da promessa desta branch, não comportamento. Por PESSOA: quem
+-- estava com rede ruim e tentou dez vezes não responde pelas outras.
+m10 as (
+  select
+    count(*)                                                             as denominador,
+    count(*) filter (where v.resume_failures_novas > 0)                  as pessoas_com_falha_nova,
+    count(*) filter (where v.resume_failures_legado > 0)                 as pessoas_com_falha_legado,
+    count(*) filter (where v.falhou_e_nao_voltou)                        as falhou_e_nao_voltou,
+    coalesce(sum(v.resume_failures_novas), 0)                            as eventos_novos
+  from public.metric_blueprint_resume_failures v
+  join elegiveis e on e.user_id = v.user_id
+),
+
+-- ═══ 11. PRIMEIRO REGISTRO, FORA DO ONBOARDING ═════════════════════════
+-- Irmã honesta da medida 1. Este número vai ser PIOR que o dela, por
+-- construção — a medida 1 contava o peso que o nosso próprio formulário
+-- escreve. Quem comparar os dois e gritar "pioramos" leu errado.
+m11 as (
+  select
+    count(*) filter (where v.minutes_to_first_record is not null)        as denominador,
+    round(percentile_cont(0.5) within group (order by v.minutes_to_first_record)::numeric, 1) as mediana,
+    count(*)                                                             as pessoas,
+    round(
+      count(*) filter (where not v.reached_in_24h)::numeric / nullif(count(*), 0), 3
+    )                                                                    as sem_registro_24h,
+    count(*) filter (where v.onboarding_weight_excluded)                 as pesos_excluidos
+  from public.metric_first_record_outside_onboarding v
+  join elegiveis e on e.user_id = v.user_id
+),
+
+-- ═══ 12. PLANO ATIVADO ═════════════════════════════════════════════════
+-- Arquivado por cota conta separado: não é escolha da pessoa, é o produto
+-- prometendo o que não pode entregar.
+m12 as (
+  select
+    count(*)                                                             as denominador,
+    round(
+      count(*) filter (where v.ficou_com_plano_ativo)::numeric / nullif(count(*), 0), 3
+    )                                                                    as proporcao,
+    count(*) filter (where v.ativou_sem_plano)                           as ativou_sem_plano,
+    coalesce(sum(v.blueprint_plans_archived), 0)                         as planos_arquivados,
+    count(*) filter (where v.blueprint_plans_archived > 0)               as pessoas_com_arquivado
+  from public.metric_blueprint_plan_activation v
+  join elegiveis e on e.user_id = v.user_id
+),
+
+-- ═══ 13. UTILIDADE DECLARADA ═══════════════════════════════════════════
+-- Hoje devolve zero para todo mundo: nada no produto pergunta. A linha
+-- aparece mesmo assim, marcada SEM SINAL AINDA — medida omitida é medida
+-- esquecida, e a pergunta proposta já está escrita no documento.
+m13 as (
+  select
+    count(*) filter (where v.answered > 0)                               as denominador,
+    round(percentile_cont(0.5) within group (order by v.useful_rate)
+      filter (where v.answered > 0)::numeric, 3)                         as mediana_utilidade,
+    count(*) filter (where v.asked > 0)                                  as denom_resposta,
+    round(percentile_cont(0.5) within group (order by v.answer_rate)
+      filter (where v.asked > 0)::numeric, 3)                            as mediana_resposta
+  from public.metric_blueprint_declared_usefulness v
   join elegiveis e on e.user_id = v.user_id
 )
 
@@ -341,5 +427,88 @@ select * from (
       || ' calculados), não a pessoa: é medida sobre o motor. Acima do limiar, o gargalo é volume de dados e a integração nativa é conserto de volume — '
       || 'é a ponte mais limpa entre uma medida e a decisão D1. Sem este número, "precisamos de mais dados" é palpite.'
   from m4b, limiares l, quorum q
+
+  union all
+  select 9, 'Blueprint: gerado -> ativado em 24h', 'proporção de pessoas', m9.denominador,
+    case when m9.denominador >= q.minimo then coalesce(m9.proporcao::text, '—') else 'INSUFICIENTE' end,
+    '>= ' || l.t9_ativacao_24h,
+    case
+      when m9.denominador < q.minimo then 'INSUFICIENTE'
+      when m9.proporcao < l.t9_ativacao_24h then 'DECIDIR'
+      else 'ok'
+    end,
+    'Dispensaram de propósito ("explorar primeiro"): ' || m9.dispensaram
+      || ' — isso NÃO é falha e não entra no numerador; se for a maioria das não-ativações, a opção está funcionando e tirá-la seria o erro. '
+      || 'Legado sem proposta (gerou antes da correção e perdeu): ' || m9.legado
+      || '. Mediana até ativar: ' || coalesce(m9.mediana_minutos::text, '—') || ' min. '
+      || 'Abaixo do limiar, o conserto é no FLUXO, não no modelo.'
+  from m9, limiares l, quorum q
+
+  union all
+  select 10, 'Blueprint: falhas de recuperação', 'pessoas com >= 1 falha', m10.denominador,
+    case when m10.denominador >= q.minimo then m10.pessoas_com_falha_nova::text else 'INSUFICIENTE' end,
+    '= 0 pessoas (motivo novo)',
+    case
+      when m10.denominador < q.minimo then 'INSUFICIENTE'
+      when m10.pessoas_com_falha_nova > 0 then 'DECIDIR'
+      else 'ok'
+    end,
+    'Auditoria da promessa desta branch ("a proposta não se perde"), e é binária como a medida 2: uma pessoa já reprova. '
+      || m10.eventos_novos || ' eventos de motivo novo; ' || m10.pessoas_com_falha_legado
+      || ' pessoas com falha de LEGADO (dano de antes da correção, fora da barra, contado para não sumir). '
+      || 'Falharam e nunca mais retomaram nem ativaram: ' || m10.falhou_e_nao_voltou
+      || ' — é o corte que separa ruído de rede de promessa quebrada. Sem o motivo, o número não aciona conserto nenhum.'
+  from m10, limiares l, quorum q
+
+  union all
+  select 11, 'Primeiro registro (fora do onboarding)', 'mediana por pessoa', m11.denominador,
+    case when m11.denominador >= q.minimo
+         then m11.mediana::text || ' min' else 'INSUFICIENTE' end,
+    '<= ' || l.t1_minutos || ' min',
+    case
+      when m11.denominador < q.minimo then 'INSUFICIENTE'
+      when m11.mediana > l.t1_minutos then 'DECIDIR'
+      else 'ok'
+    end,
+    'NÃO SOMAR com as linhas 12 e 13: são três fatos sobre três momentos, e a soma sobe quando melhoramos o passo mais fácil. '
+      || 'Sem registro em 24h: ' || coalesce(m11.sem_registro_24h::text, '—') || ' (limiar ' || l.t1_sem_24h || '). '
+      || 'Pesos de onboarding descontados: ' || m11.pesos_excluidos
+      || '. Este número É PIOR que o da medida 1 por construção — ela contava o peso que o nosso próprio formulário escreve. Não é regressão.'
+  from m11, limiares l, quorum q
+
+  union all
+  select 12, 'Blueprint: ficou com plano ativo', 'proporção de pessoas', m12.denominador,
+    case when m12.denominador >= q.minimo then coalesce(m12.proporcao::text, '—') else 'INSUFICIENTE' end,
+    '>= ' || l.t12_plano_ativo,
+    case
+      when m12.denominador < q.minimo then 'INSUFICIENTE'
+      when m12.pessoas_com_arquivado > 0 then 'DECIDIR'
+      when m12.proporcao < l.t12_plano_ativo then 'DECIDIR'
+      else 'ok'
+    end,
+    'NÃO SOMAR com as linhas 11 e 13. Planos arquivados pela COTA: ' || m12.planos_arquivados
+      || ' em ' || m12.pessoas_com_arquivado || ' pessoas — uma já reprova: é o produto prometendo um plano e recusando no mesmo segundo, e isso é correção, não comportamento. '
+      || 'Carimbaram ativação e ficaram sem plano nenhum: ' || m12.ativou_sem_plano
+      || '. Abaixo do limiar, o problema é o que o modelo escreve, não o botão.'
+  from m12, limiares l, quorum q
+
+  union all
+  select 13, 'Blueprint: utilidade declarada', 'mediana por pessoa', m13.denominador,
+    case
+      when m13.denom_resposta = 0 then 'SEM SINAL AINDA'
+      when m13.denominador >= q.minimo then coalesce(m13.mediana_utilidade::text, '—')
+      else 'INSUFICIENTE'
+    end,
+    '>= ' || l.t4_utilidade || ' (com resposta >= ' || l.t4_resposta || ')',
+    case
+      when m13.denom_resposta = 0 then 'SEM SINAL'
+      when m13.denominador < q.minimo then 'INSUFICIENTE'
+      when m13.mediana_utilidade < l.t4_utilidade then 'DECIDIR'
+      else 'ok'
+    end,
+    'NÃO SOMAR com as linhas 11 e 12 — esta é a única das três que é juízo da pessoa, e a única que não se infere: ativar não prova que ajudou, arquivar não prova que atrapalhou. '
+      || 'SEM SINAL significa que nada no produto pergunta ainda; a pergunta proposta (texto decidido com a Fiel) e as duas condições para o sinal existir estão em docs/medidas-e-limiares.md, medida 13. '
+      || 'A linha aparece assim mesmo porque medida omitida é medida esquecida.'
+  from m13, limiares l, quorum q
 ) medidas
 order by n;

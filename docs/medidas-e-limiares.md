@@ -344,3 +344,243 @@ dados", e ela é uma resposta, não um adiamento.
 **Revisão dos limiares:** primeira releitura 30 dias depois da 20ª pessoa. O
 que mudar, muda com o raciocínio escrito ao lado — quem discordar de um número
 discute o parágrafo, não a lembrança de quem propôs.
+
+---
+
+## MEDIDAS 9–13 — O BLUEPRINT DA SUBIDA
+
+Cinco medidas acrescentadas em 13/10/2026, junto com a correção que faz a
+proposta do Blueprint sobreviver a um recarregamento. Mesmas três regras das
+sete primeiras: mediana por pessoa, denominador explícito, quórum de 20. Nenhuma
+ferramenta nova — quatro saem de tabelas que a própria pessoa preencheu, e a
+quinta não tem sinal nenhum e está marcada como tal.
+
+### A soma que não se faz
+
+As medidas 11, 12 e 13 respondem à mesma pergunta de negócio ("o Blueprint
+entregou alguma coisa?") e é por isso mesmo que **nunca se somam**. São três
+fatos sobre três momentos, e nenhum implica o seguinte:
+
+- **11 — registrar** prova que a pessoa CHEGOU, não que o plano serviu;
+- **12 — ativar** prova que ela ACEITOU, não que usou: ativar é um toque;
+- **13 — declarar útil** é a única que é juízo dela, e a única que não se infere.
+
+Somadas, viram um funil que SOBE quando melhoramos o passo mais fácil (ativar)
+e fica igual quando o difícil (ajudar) piora. Três linhas no relatório, três
+views no banco, e está escrito no `comment on view` de cada uma. Quem quiser um
+número único terá que escrever a soma à mão — e aí a responsabilidade é de quem
+somou, não da medida.
+
+### 9. Proposta gerada que chega à ativação em 24 h
+
+**(a) Definição.**
+
+```
+denominador = pessoas com generated_at (metric_blueprint_funnel)
+numerador   = dessas, as que têm activated_at <= generated_at + 24h
+```
+
+- **Dispensar NÃO é falhar.** "Agora não — quero explorar primeiro" é uma opção
+  que o produto oferece de propósito. `dispensou_e_nao_voltou` é lido ao lado,
+  nunca dentro do numerador: somá-lo transformaria uma escolha legítima em taxa
+  de fracasso, e a leitura seguinte seria tirar a opção da tela.
+- **`legado_sem_proposta` entra no denominador, mas marcado.** Quem gerou antes
+  desta correção perdeu a proposta e nunca teve como ativar. Tirá-lo seria
+  esconder o dano; deixá-lo solto faria o dano antigo virar piso permanente que
+  nenhuma melhoria futura consegue mover.
+- 24 h e não "algum dia": a proposta é feita na primeira sessão, com a pessoa
+  olhando. Ativação uma semana depois é outro evento, não a conclusão deste.
+
+**(b) Limiar.** *Se menos de 60% de quem gera chegar à ativação em 24 h — fora
+quem dispensou de propósito —, o Blueprint está sendo gerado e jogado fora, e o
+conserto é no FLUXO, não no modelo.*
+
+Por que 60%: gerar um Blueprint é a coisa mais cara que este produto faz (~104 s
+de modelo, e consome a cortesia da pessoa). Quem esperou dois minutos por um
+plano e não o ativa no mesmo dia ou não gostou, ou perdeu. Abaixo de 60%, a
+causa mais provável continua sendo mecânica — e mecânica é barata de consertar.
+Só acima disso a pergunta passa a ser sobre a qualidade do que o modelo escreve.
+
+**A leitura reversa, e ela importa:** *se a maioria das não-ativações for
+`dispensou_e_nao_voltou`, isso não é falha — é a opção "explorar primeiro"
+funcionando.* Tirar a opção porque ela é usada seria o erro mais caro que este
+número pode provocar.
+
+### 10. Falhas de recuperação da proposta
+
+**(a) Definição.**
+
+```
+denominador = pessoas com qualquer evento de Blueprint
+numerador   = dessas, as com >= 1 evento resume_failed de motivo NOVO
+              (motivo <> 'legado_sem_proposta')
+```
+
+Por pessoa e **com o motivo**: sem o motivo o número não aciona conserto nenhum
+— "falhou 7 vezes" não diz se o problema é o cliente, a função ou o banco. E por
+pessoa, não por evento, porque quem estava com rede ruim e tentou dez vezes não
+pode responder pelas outras dezenove.
+
+`falhou_e_nao_voltou` (falhou e nunca mais retomou nem ativou) é o corte que
+separa ruído de rede de promessa quebrada.
+
+**(b) Limiar.** *Qualquer pessoa com ≥ 1 falha de motivo novo é defeito de
+correção, e barra o fechamento desta branch até ser entendido.*
+
+Por que binário e não faixa: é a mesma natureza da medida 2 (recibo de
+importação). A promessa desta branch — "sua proposta não se perde" — é binária:
+foi cumprida com aquela pessoa ou não foi. As medidas sobre gosto e
+comportamento admitem faixa; auditoria da própria promessa, não.
+
+Falhas de legado ficam de fora da barra, contadas e visíveis: são dano de antes
+da correção, não defeito novo.
+
+### 11. Primeiro registro — sem o que nasceu dentro do onboarding
+
+**(a) Definição.** Irmã honesta da medida 1. Mesma elegibilidade de evento,
+copiada linha por linha de `metric_time_to_first_value` (duas definições de
+"primeiro valor" que divergem um dia é como duas verdades nascem), **menos o
+peso que o próprio onboarding escreve**.
+
+O onboarding insere um `life_events` sozinho: no bloco do corpo, o peso digitado
+vira `kind='weight'`, `source='form'` (`Onboarding.tsx`, `finishBody`). Para a
+medida 1 isso está certo — o peso É um registro real. Para decidir "o Blueprint
+entregou a promessa?", não serve: acontece ANTES de existir qualquer plano, e
+contá-lo faz o Blueprint parecer eficaz por causa de um campo de formulário.
+
+**Critério de exclusão** (três itens, nenhuma constante arbitrária). O evento
+nasceu dentro do onboarding quando:
+
+1. é `kind='weight'`, `source='form'`, `data_source_id is null` — a forma exata
+   e única que o onboarding escreve, e ele escreve um evento só;
+2. é o **primeiro** evento elegível da pessoa — no fluxo, o bloco do corpo vem
+   antes de qualquer outra tela que registre;
+3. e, quando há `profiles.blueprint_generated_at`, foi criado até esse carimbo.
+
+O item 3 é **guarda, não filtro**: protege quem pulou o campo de peso no
+onboarding e registrou um peso pela tela de Vitalidade semanas depois. Esse é
+ato real da pessoa e continua contando.
+
+**O custo, escrito agora para ninguém descobrir em seis meses:** quem pulou o
+peso no onboarding E cujo primeiro registro de todos foi um peso pelo
+formulário, antes de gerar o Blueprint, é excluído junto. Não dá para separar os
+dois casos sem marcar a linha na origem — e marcar a linha é instrumentação
+nova, que a Fase 6 recusou. Entre inflar a medida do Blueprint e perder alguns
+primeiros registros legítimos, esta mesa escolhe perder.
+
+**(b) Limiar.** Os mesmos da medida 1 — *mediana ≤ 10 min, e ≤ 40% sem chegar ao
+primeiro registro em 24 h* — lidos **separadamente** dela.
+
+**Esperado, e não é regressão:** este número vai ser PIOR que o da medida 1, por
+construção. Quem comparar os dois e gritar "pioramos" leu errado: a medida 1
+estava contando o nosso próprio formulário como valor que a pessoa produziu.
+
+### 12. Plano ativado
+
+**(a) Definição.**
+
+```
+denominador = pessoas com generated_at
+numerador   = dessas, as com >= 1 plano origin='blueprint' e status='ativo'
+```
+
+Duas fontes que precisam concordar: o carimbo (`activated_at`) e os planos de
+fato (`plans.origin='blueprint'`). Divergirem é informação — `ativou_sem_plano`
+é carimbo de ativação que não deixou plano nenhum na mão da pessoa.
+
+`blueprint_plans_archived` conta separado porque **não é escolha dela**: o
+contrato manda arquivar quando o gatilho de cota recusa. Somar arquivado com
+ativo responderia "ela aceitou?" quando a pergunta da medida é "ela FICOU com o
+plano?".
+
+**(b) Limiar.** *Se menos de 40% de quem gerou ficar com ao menos um plano ativo
+vindo do Blueprint, o problema é o que o modelo escreve, não o botão.*
+
+Por que 40%: ativar é um toque, de graça, imediatamente depois de a pessoa ter
+pedido aquele plano e esperado por ele. Isso converte alto quando o plano
+ressoa. Menos de dois em cinco é o plano não ressoando — e aí construir mais
+fluxo em volta do botão é consertar o lugar errado.
+
+**O corte binário, e ele é o mais acionável:** *qualquer pessoa com
+`blueprint_plans_archived > 0` é o produto prometendo o que não pode entregar* —
+oferecemos um plano e a cota o recusou no mesmo segundo. Isso é defeito de
+correção, não comportamento, e se lê como a medida 2.
+
+### 13. Utilidade declarada do plano — **SEM SINAL AINDA**
+
+**(a) Definição.** Formato da medida 4, e de propósito: utilidade é juízo da
+pessoa e não se infere de comportamento. Ativar não prova que ajudou; arquivar
+não prova que atrapalhou.
+
+```
+perguntados = insight_feedback com kind='blueprint_util'
+respondidos = dos perguntados, os que a pessoa respondeu
+úteis       = dos respondidos, os "sim"
+taxa de utilidade = úteis ÷ respondidos
+taxa de resposta  = respondidos ÷ perguntados   (a barra de erro da primeira)
+```
+
+**Hoje isto devolve zero para todo mundo, porque nada no produto pergunta.**
+`docs/medidas.sql` imprime SEM SINAL AINDA. A view já existe para que o dia em
+que o sinal nascer seja uma migração de UI e não uma discussão sobre como medir
+— e para a medida aparecer no relatório em vez de sumir dele. Medida omitida é
+medida esquecida.
+
+**Para o sinal existir, duas coisas — nenhuma delas feita agora:**
+
+1. a pergunta na tela, com o texto abaixo;
+2. `insight_feedback_kind_valido` passando a aceitar `'blueprint_util'`.
+
+Por que `insight_feedback` e não tabela nova: é a única mesa do produto onde a
+pessoa responde uma pergunta, e a medida 4 já mora lá com este exato formato.
+Tabela nova para uma coluna de resposta é instrumentação nova. O `check` que
+hoje barra o kind é o atrito certo — obriga quem criar a pergunta a passar por
+uma migração. (`insight_id` fica nulo: a pergunta é sobre plano, não sobre
+insight.) *Se o Maestro preferir que o sinal nasça em `blueprint_events` com um
+`kind` novo, isso é mudança de contrato e precisa de aviso; a view muda de
+`from` e mais nada.*
+
+**(b) A pergunta proposta.** Texto decidido com a Fiel em 13/10/2026:
+
+> **Nestas duas semanas, o plano Treino de força te ajudou?**
+> `[ Ajudou ]  [ Não ajudou ]`
+
+- **Quando:** uma vez só, 14 dias depois de `activated_at`, e só para quem
+  ativou ao menos um plano E registrou alguma coisa depois. Quem ignora não é
+  perguntado de novo — sem segunda chance, sem lembrete.
+- **Onde:** na Hoje, no mesmo lugar discreto da pergunta da medida 4. Nunca em
+  push, nunca em modal.
+
+O raciocínio da Fiel, nas palavras dela:
+
+1. *"'Em alguma coisa' rebaixa a barra do sim e infla a medida a nosso favor — e
+   uma medida que nos lisonjeia é pior que medida nenhuma, porque faz a empresa
+   acreditar que o Blueprint funciona quando ele não funciona."*
+2. *"O nome põe o plano no banco dos réus em vez da pessoa, e é o que permite
+   saber qual plano falhou — genérico coleta uma média de nada."*
+3. *"Catorze dias medem vida vivida em vez de novidade, e 'nestas duas semanas'
+   dentro da pergunta impede que a resposta seja sobre o humor de hoje."*
+
+**O terceiro botão saiu.** *"Quem ignora já é a saída sem custo, e já conta na
+taxa de resposta — é a sua barra de erro. 'Prefiro não dizer' não acrescenta
+informação, acrescenta uma decisão, e parece respeito sendo contabilidade.
+Gentileza falsa é a que serve a nós."*
+
+**CONDIÇÃO VINCULANTE da Fiel, que não estava na proposta e é dela:**
+
+> *"A resposta não pode mudar nada do que a pessoa recebe. Se 'não ajudou' abrir
+> oferta de outro plano, re-onboarding ou qualquer conversa, a pergunta deixou de
+> ser medição e virou funil — e aí o 'não' passa a ter preço, o que contamina a
+> própria medida que você quer. Vale dos dois lados: 'ajudou' não gera
+> comemoração, nem XP (ação no app, Micro-incoerência 1), nem push. Registra e
+> agradece em uma linha."*
+
+**(c) Limiar, para quando o sinal existir.** Os mesmos da medida 4 — *utilidade
+≥ 40% com taxa de resposta ≥ 25%* —, pelo mesmo motivo: um plano é uma afirmação
+sobre a vida da própria pessoa, e a barra não é "interessante", é "me ajudou".
+
+### Quórum
+
+Vale igual: 20 pessoas por denominador, e os denominadores aqui são menores que
+os das sete primeiras (só quem gerou um Blueprint). A resposta correta hoje é
+INSUFICIENTE nas cinco, e ela é uma resposta.

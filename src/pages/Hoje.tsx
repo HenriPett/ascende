@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import {
   Sunrise, ChevronRight, CircleCheck, Circle, Flame, Droplet, Dumbbell, Moon, Smile,
   BookOpen, X, UserRound, ListChecks, MessageCircle, Trophy, CalendarHeart,
-  HandHeart, ClipboardList, Trash2, Plus,
+  HandHeart, ClipboardList, Trash2, Plus, Sparkles,
 } from "lucide-react";
 import { PLAN_KIND_META } from "@/lib/blueprint";
 import { appPath } from "@/lib/routes";
@@ -296,6 +296,26 @@ function FirstSteps() {
 
   const { data } = useFirstStepsQuery();
 
+  /* O BLUEPRINT GUARDADO ESPERA AQUI. Quem saiu do onboarding pelo "Agora não
+     — quero explorar primeiro" (ou fechou a aba antes de ativar) tem uma
+     proposta pronta em `blueprint_proposals` — escrita pela IA uma única vez,
+     sobre a vida dela. Esta trilha é o lugar natural para voltar a ela porque
+     aparece EXATAMENTE para essa população: some para quem já ativou
+     (`absorbed`, acima). A linha não conta como passo — a trilha pode
+     terminar sem o Blueprint, que é convite, não dever. Falhar a leitura só
+     esconde a linha: o /onboarding também retoma a proposta sozinho. */
+  const { data: blueprintPronto } = useQuery({
+    queryKey: ["blueprint-proposal-status", user?.id],
+    enabled: !!user && !absorbed,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data: row, error } = await supabase.from("blueprint_proposals")
+        .select("status").eq("user_id", user!.id).maybeSingle();
+      if (error) return false;
+      return row?.status === "ready";
+    },
+  });
+
   const raioxDone = (data?.raiox ?? 0) > 0 || Number(profile?.monthly_income ?? 0) > 0;
 
   const steps = data ? [
@@ -359,6 +379,13 @@ function FirstSteps() {
         </button>
       </div>
       <div className="space-y-1.5">
+        {blueprintPronto && (
+          <Link to="/onboarding" className="flex items-center gap-2.5 rounded-md border border-gold/40 bg-gold/5 p-2.5 hover:bg-gold/10 transition-colors">
+            <Sparkles className="w-5 h-5 text-gold-ink shrink-0" aria-hidden />
+            <span className="text-sm flex-1 min-w-0 break-words">Seu Blueprint está guardado — retome quando quiser</span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
+          </Link>
+        )}
         {steps.map((st) => {
           const inner = (
             <>
