@@ -9,6 +9,7 @@ import {
   UtensilsCrossed, Check, Camera, Mic, ScanLine, Paperclip, Swords, ShieldCheck,
 } from "lucide-react";
 import Logo from "@/components/core/Logo";
+import { BLOG_TEM_POSTS } from "@/blog/temPosts";
 import SiteFooter from "@/components/core/SiteFooter";
 
 /* ─────────────────────────────────────────────────────────────────
@@ -240,6 +241,13 @@ export default function Landing() {
         <div className="container flex items-center justify-between h-16">
           <Logo />
           <div className="flex items-center gap-2">
+            {/* "Blog" no topo só a partir do sm: no celular o topo já tem o
+                essencial, e o rodapé leva ao blog em qualquer largura. */}
+            {BLOG_TEM_POSTS && (
+              <Button asChild variant="ghost" className="hidden sm:inline-flex">
+                <a href="/blog/">Blog</a>
+              </Button>
+            )}
             <Button asChild variant="ghost" className="hidden sm:inline-flex">
               <Link to="/auth">Entrar</Link>
             </Button>
