@@ -80,6 +80,16 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // Supabase, fontes, Clarity
 
+  /* O BLOG NÃO É A SPA. /blog/ e /blog/<slug>/ são HTML estático gerado no
+     build (scripts/blog.mjs), cada página um documento próprio. O
+     `networkFirst` abaixo guarda TODA navegação bem-sucedida como o shell da
+     SPA — com o blog, abrir um artigo online gravaria o HTML do artigo no
+     lugar do index.html, e depois, sem rede, qualquer tela do app abriria o
+     artigo. Sem interceptar, o navegador busca a página direto e o cache do
+     shell continua sendo só da SPA. Offline, o blog mostra a página de
+     "sem conexão" do próprio navegador: honesto, e nada se confunde. */
+  if (url.pathname === "/blog" || url.pathname.startsWith("/blog/")) return;
+
   if (request.mode === "navigate") {
     event.respondWith(networkFirst(request));
     return;

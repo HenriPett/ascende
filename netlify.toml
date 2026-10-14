@@ -6,6 +6,13 @@
   NODE_VERSION = "20"
 
 # SPA: todas as rotas caem no index.html (React Router cuida do resto)
+#
+# O BLOG DEPENDE DESTA REGRA NÃO TER `force = true`. Sem `force`, o Netlify
+# serve o arquivo que EXISTE antes de aplicar a regra ("shadowing"): o build
+# grava dist/blog/index.html e dist/blog/<slug>/index.html (scripts/blog.mjs),
+# e é esse HTML estático — completo, indexável sem JS — que sai para /blog/ e
+# /blog/<slug>/. Com `force = true` todo artigo viraria o shell da SPA. O mesmo
+# vale para /sitemap.xml e /blog/feed.xml, também gerados no build.
 [[redirects]]
   from = "/*"
   to = "/index.html"

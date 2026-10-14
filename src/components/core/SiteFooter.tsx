@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
+import { BLOG_TEM_POSTS } from "@/blog/temPosts";
 
 /** Rodapé compartilhado das páginas públicas (Landing, Recusas, Legal...):
  *  mesmo aviso, mesmos links legais, em qualquer porta de entrada fria. */
-export default function SiteFooter() {
+export default function SiteFooter({ blog = BLOG_TEM_POSTS }: { blog?: boolean }) {
   return (
     <footer className="border-t">
       <div className="container py-8 text-center">
@@ -14,6 +15,14 @@ export default function SiteFooter() {
         {/* Cada link tem 44 pt de altura de alvo: no celular eram 15 pt, e é a
             linha onde ficam a política de privacidade e os termos. */}
         <div className="flex flex-wrap justify-center gap-x-4 mt-2 text-xs">
+          {/* "Blog" só quando /blog existe — decidido no build (BLOG_TEM_POSTS).
+              `<a>` e não `<Link>`: o blog é HTML estático fora da SPA, e o
+              React Router não tem rota para ele. `min-w-11`: com 4 letras o
+              alvo ficava com 27 pt de largura — os vizinhos passam por ter
+              mais texto. */}
+          {blog && (
+            <a href="/blog/" className="inline-flex items-center justify-center min-h-11 min-w-11 text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">Blog</a>
+          )}
           <Link to="/recusas" className="inline-flex items-center min-h-11 text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">O que o Ascende recusa</Link>
           <Link to="/privacidade" className="inline-flex items-center min-h-11 text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">Política de Privacidade</Link>
           <Link to="/termos" className="inline-flex items-center min-h-11 text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">Termos e Condições</Link>
