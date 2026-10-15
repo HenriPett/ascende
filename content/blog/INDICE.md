@@ -11,3 +11,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | slug | intenção | cluster | publicado | modificado |
 |---|---|---|---|---|
 | lista-de-compras-semanal-orcamento | como organizar a lista de compras semanal dentro do orçamento | alimentacao-orcamento | 2026-10-14 |  |
+| revisao-semanal-rotina-checklist | como revisar a semana e decidir o que cabe na próxima | rotina-integrada | 2026-10-15 |  |

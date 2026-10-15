@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import type { ImagemDoPost } from "@/lib/blog/tipos";
 
 // Renderizador de markdown enxuto para as respostas do Conselheiro e os planos:
 // títulos, negrito, itálico, código, listas, tabelas e divisores.
@@ -17,9 +18,18 @@ const LINK_ARTIGO =
 
 function inline(text: string, links = false): ReactNode[] {
   const nodes: ReactNode[] = [];
+  /* O `_itálico_` segue a regra do CommonMark: o `_` que abre não pode vir
+     seguido de espaço nem o que fecha precedido de espaço, e nenhum dos dois
+     pode estar colado em letra, número ou outro `_`. Antes, `_([^_]+)_` casava
+     "_ a _" dentro de "___ a ___" (lacunas de preencher) e gerava
+     "__<em> a </em>__" (Clareira, post 2). E `nome_do_arquivo` não vira mais
+     itálico. Sem lookbehind de propósito — `(?<!…)` só existe no Safari
+     16.4+, e um SyntaxError aqui derrubaria o chat inteiro num iPhone mais
+     velho: o caractere de antes é CAPTURADO (grupo 4) e devolvido como texto. */
+  const SUBLINHADO = String.raw`(^|[^\p{L}\p{N}_])_([^_\s](?:[^_]*[^_\s])?)_(?![\p{L}\p{N}_])`;
   const regex = links
-    ? /(\*\*([^*]+)\*\*|\*([^*\s][^*]*)\*|_([^_]+)_|`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\))/g
-    : /(\*\*([^*]+)\*\*|\*([^*\s][^*]*)\*|_([^_]+)_|`([^`]+)`)/g;
+    ? new RegExp(String.raw`(\*\*([^*]+)\*\*|\*([^*\s][^*]*)\*|${SUBLINHADO}|\x60([^\x60]+)\x60|\[([^\]]+)\]\(([^)\s]+)\))`, "gu")
+    : new RegExp(String.raw`(\*\*([^*]+)\*\*|\*([^*\s][^*]*)\*|${SUBLINHADO}|\x60([^\x60]+)\x60)`, "gu");
   let last = 0;
   let key = 0;
   let m: RegExpExecArray | null;
@@ -27,18 +37,21 @@ function inline(text: string, links = false): ReactNode[] {
     if (m.index > last) nodes.push(text.slice(last, m.index));
     if (m[2] !== undefined) nodes.push(<strong key={key++}>{m[2]}</strong>);
     else if (m[3] !== undefined) nodes.push(<em key={key++}>{m[3]}</em>);
-    else if (m[4] !== undefined) nodes.push(<em key={key++}>{m[4]}</em>);
-    else if (m[5] !== undefined)
+    else if (m[5] !== undefined) {
+      if (m[4]) nodes.push(m[4]);
+      nodes.push(<em key={key++}>{m[5]}</em>);
+    }
+    else if (m[6] !== undefined)
       nodes.push(
         <code key={key++} className="rounded bg-muted px-1 py-0.5 text-[0.85em]">
-          {m[5]}
+          {m[6]}
         </code>
       );
-    else if (m[6] !== undefined) {
-      const externo = /^https:\/\//.test(m[7]);
+    else if (m[7] !== undefined) {
+      const externo = /^https:\/\//.test(m[8]);
       nodes.push(
-        <a key={key++} href={m[7]} className={LINK_ARTIGO} {...(externo ? { rel: "noopener" } : {})}>
-          {inline(m[6])}
+        <a key={key++} href={m[8]} className={LINK_ARTIGO} {...(externo ? { rel: "noopener" } : {})}>
+          {inline(m[7])}
         </a>
       );
     }
@@ -52,6 +65,8 @@ const isBullet = (l: string) => /^\s*[-*]\s+/.test(l);
 const isNumbered = (l: string) => /^\s*\d+\.\s+/.test(l);
 const isHeading = (l: string) => /^#{1,6}\s+/.test(l);
 const isTableRow = (l: string) => /^\s*\|.*\|\s*$/.test(l);
+/** `![alt](./arquivo.png "legenda")` sozinha na linha. Só existe no artigo. */
+const IMAGEM = /^\s*!\[([^\]]*)\]\((\S+?)(?:\s+"([^"]*)")?\)\s*$/;
 const isQuote = (l: string) => /^\s*>\s?/.test(l);
 const isHr = (l: string) => /^\s*-{3,}\s*$/.test(l);
 const isTableSep = (l: string) => /^\s*\|(\s*:?-{2,}:?\s*\|)+\s*$/.test(l);
@@ -67,7 +82,55 @@ function ancora(texto: string): string {
     .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "secao";
 }
 
-export function Markdown({ content, doc = false, artigo = false }: { content: string; doc?: boolean; artigo?: boolean }) {
+/* A FIGURA DO ARTIGO. Só no modo artigo e só com a imagem já resolvida pelo
+   pipeline (`imagens`, indexado pelo src exato do corpo): dimensões lidas do
+   arquivo no build viram width/height — o navegador reserva o espaço e o
+   texto não pula quando ela carrega —, e a variante -360 vira srcset.
+   No chat e nos planos não há imagem: lá a sintaxe continua texto, porque o
+   texto vem da IA e uma imagem dela seria uma requisição para fora.
+
+   A altura tem TETO: o diagrama do post 2 é vertical (720×1160), e na coluna
+   do desktop ele passaria de uma tela inteira. `max-width` proporcional à
+   altura da tela (85svh × largura/altura) encolhe a figura mantendo a
+   proporção; no celular quem manda continua sendo a largura da coluna. */
+const SIZES = "(min-width: 42rem) 40rem, calc(100vw - 2.5rem)";
+
+function Figura({ img, alt, legenda }: { img: ImagemDoPost; alt: string; legenda: string }) {
+  const proporcao = img.width / img.height;
+  return (
+    <figure className="mt-8 first:mt-0 mx-auto" style={{ maxWidth: `min(100%, calc(85svh * ${proporcao.toFixed(4)}))` }}>
+      {/* A imagem abre sozinha, no tamanho original: é o zoom com pinça do
+          celular, sem JS — no diagrama, o texto miúdo fica legível ali. O nome
+          do link diz o que ele faz E o que a imagem mostra. */}
+      <a
+        href={img.src}
+        aria-label={`Abrir a imagem em tamanho original: ${alt}`}
+        className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      >
+      <img
+        src={img.src}
+        width={img.width}
+        height={img.height}
+        {...(img.variantes.length > 1
+          ? { srcSet: img.variantes.map((v) => `${v.src} ${v.width}w`).join(", "), sizes: SIZES }
+          : {})}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        // No escuro, um diagrama de fundo claro brilha mais que a página
+        // inteira: um pouco menos de brilho (dark-mode.md › soften white
+        // backgrounds). É a única exceção ao "só tokens": imagem não tem token.
+        className="block w-full h-auto rounded-lg border bg-card dark:brightness-90"
+      />
+      </a>
+      <figcaption className="mt-2 text-footnote text-muted-foreground text-pretty break-words">{legenda}</figcaption>
+    </figure>
+  );
+}
+
+export function Markdown({
+  content, doc = false, artigo = false, imagens = {},
+}: { content: string; doc?: boolean; artigo?: boolean; imagens?: Record<string, ImagemDoPost> }) {
   const lines = content.replace(/\r/g, "").split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
@@ -149,6 +212,20 @@ export function Markdown({ content, doc = false, artigo = false }: { content: st
       continue;
     }
 
+    const fig = artigo ? IMAGEM.exec(line) : null;
+    if (fig) {
+      const [, alt, src, legenda] = fig;
+      const img = imagens[src];
+      // O blog:check garante alt, legenda e arquivo; chegar aqui sem eles é
+      // bug do pipeline — publicar uma figura sem dimensão, sem alt ou
+      // quebrada seria pior que o build falhar.
+      if (!img) throw new Error(`imagem do artigo sem resolução no pipeline: ${src}`);
+      if (!alt.trim() || !legenda?.trim()) throw new Error(`imagem do artigo sem alt ou legenda: ${src}`);
+      blocks.push(<Figura key={key++} img={img} alt={alt.trim()} legenda={legenda.trim()} />);
+      i++;
+      continue;
+    }
+
     // Citação (só no artigo): linhas `> ` seguidas viram um bloco só.
     if (artigo && isQuote(line)) {
       const para: string[] = [];
@@ -213,7 +290,7 @@ export function Markdown({ content, doc = false, artigo = false }: { content: st
     while (
       i < lines.length && lines[i].trim() &&
       !isHeading(lines[i]) && !isBullet(lines[i]) && !isNumbered(lines[i]) &&
-      !isTableRow(lines[i]) && !isHr(lines[i]) && !(artigo && isQuote(lines[i]))
+      !isTableRow(lines[i]) && !isHr(lines[i]) && !(artigo && (isQuote(lines[i]) || IMAGEM.test(lines[i])))
     ) {
       para.push(lines[i]);
       i++;

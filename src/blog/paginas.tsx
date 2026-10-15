@@ -113,7 +113,10 @@ export function Listagem({ posts }: { posts: PostDoBlog[] }) {
   if (posts.length === 0) throw new Error("listagem do blog sem posts: /blog não deve ser gerado");
   return (
     <Moldura>
-      <div className="mx-auto max-w-3xl px-5 pt-10 pb-16 md:pt-14">
+      {/* Margem em px, não rem: a margem do iOS não cresce com o Texto Maior, e
+          em rem (50 px de cada lado a 40 pt) a coluna — e a figura dentro
+          dela — encolhia justo para quem aumentou o texto (Prisma). */}
+      <div className="mx-auto max-w-3xl px-[20px] pt-10 pb-16 md:pt-14">
         <h1 className="font-display font-semibold text-[min(1.75rem,64px)] leading-tight md:text-4xl text-balance break-words hyphens-auto">Blog do Ascende</h1>
         <p className="mt-3 text-lg text-muted-foreground text-pretty">
           {DESCRICAO_DO_BLOG}
@@ -150,7 +153,8 @@ export function Artigo({ post, relacionados }: { post: PostDoBlog; relacionados:
   const continue_ = relacionados.filter((r) => r.slug !== post.slug).slice(0, 3);
   return (
     <Moldura>
-      <div className="mx-auto max-w-[66ch] px-5 pt-6 pb-16 md:pt-10">
+      {/* Margem em px — ver a listagem. */}
+      <div className="mx-auto max-w-[66ch] px-[20px] pt-6 pb-16 md:pt-10">
         <article>
           <nav aria-label="Trilha">
             <a
@@ -168,7 +172,7 @@ export function Artigo({ post, relacionados }: { post: PostDoBlog; relacionados:
           <p className="mt-4 text-footnote text-muted-foreground"><Meta post={post} /></p>
 
           <div className="mt-8 text-body leading-[1.6] text-foreground">
-            <Markdown content={post.corpo} artigo />
+            <Markdown content={post.corpo} artigo imagens={post.imagens} />
           </div>
 
           {post.sources.length > 0 && (

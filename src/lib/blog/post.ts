@@ -15,6 +15,7 @@ import {
   CLUSTERS, PRODUCT_PATHS, SITE_URL,
   type ClusterDoBlog, type FonteDoPost, type PostDoBlog, type ProductPath,
 } from "@/lib/blog/tipos";
+import { errosDaImagemNoTexto, imagensDoCorpo } from "@/lib/blog/imagem";
 
 export const CHAVES_OBRIGATORIAS = [
   "title", "description", "slug", "datePublished", "intent", "cluster", "sources",
@@ -28,7 +29,7 @@ const PROIBIDAS: Record<string, string> = {
   reviewedBy: "o Ascende não tem revisão profissional para declarar",
   medicalReview: "o Ascende não tem revisão médica para declarar",
   rating: "o blog não publica avaliação",
-  image: "por ora não há imagem própria; o og:image é /icon-512.png",
+  image: "o og:image continua /icon-512.png; imagem do artigo vai no corpo, ![alt](./arquivo.png \"legenda\")",
 };
 
 export const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -223,6 +224,8 @@ export function lerPost(nomeArquivo: string, texto: string, hoje: string): Lido 
       related,
       productPath,
       corpo: partes.corpo.replace(/^\n+/, ""),
+      // Preenchido por checagem.ts, que conhece os arquivos da pasta do post.
+      imagens: {},
       caminho,
       url: `${SITE_URL}${caminho}`,
     },
@@ -230,7 +233,7 @@ export function lerPost(nomeArquivo: string, texto: string, hoje: string): Lido 
 }
 
 /** Linhas fora de bloco de código (```), com o número da linha. */
-function linhasDeTexto(corpo: string): { n: number; l: string }[] {
+export function linhasDeTexto(corpo: string): { n: number; l: string }[] {
   const out: { n: number; l: string }[] = [];
   let dentro = false;
   corpo.split("\n").forEach((l, i) => {
@@ -246,11 +249,9 @@ function linhasDeTexto(corpo: string): { n: number; l: string }[] {
 export function errosDoCorpo(corpo: string): string[] {
   const erros: string[] = [];
   if (!corpo.trim()) return ["o corpo está vazio"];
-  // Imagem não renderiza no template (e o blog não tem imagem própria por
-  // ora): `![…](…)` sairia como texto literal no artigo publicado.
-  for (const { n, l } of linhasDeTexto(corpo)) {
-    if (/!\[[^\]]*\]\(/.test(l)) erros.push(`corpo, linha ${n}: imagem não é suportada no artigo`);
-  }
+  // A imagem: alt, legenda, sozinha na linha, local e no formato certo. O
+  // que depende do arquivo (existe, tamanho, dimensões) fica em checagem.ts.
+  for (const img of imagensDoCorpo(linhasDeTexto(corpo))) erros.push(...errosDaImagemNoTexto(img));
   let anterior = 1;
   for (const { n, l } of linhasDeTexto(corpo)) {
     const m = l.match(/^(#{1,6})\s+\S/);
@@ -287,11 +288,12 @@ export function placeholders(texto: string): string[] {
 }
 
 /** Os links `[texto](destino)` do corpo, com a linha. Imagens (`![…](…)`)
- *  também entram: um destino quebrado é quebrado dos dois jeitos. */
+ *  NÃO entram: o destino delas é um arquivo do post (`./x.png`), conferido
+ *  pelas regras de imagem — pela de link, seria um "caminho relativo" errado. */
 export function linksDoCorpo(corpo: string): { n: number; destino: string }[] {
   const out: { n: number; destino: string }[] = [];
   for (const { n, l } of linhasDeTexto(corpo)) {
-    for (const m of l.matchAll(/\]\(\s*([^)\s]+)(?:\s+"[^"]*")?\s*\)/g)) out.push({ n, destino: m[1] });
+    for (const m of l.matchAll(/(?<!!)\[[^\]]*\]\(\s*([^)\s]+)(?:\s+"[^"]*")?\s*\)/g)) out.push({ n, destino: m[1] });
   }
   return out;
 }

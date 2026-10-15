@@ -28,6 +28,7 @@ function post(slug: string, extra: Partial<PostDoBlog> = {}): PostDoBlog {
     corpo: "Primeiro parágrafo com [um link](/recusas).\n\n## Uma seção\n\nTexto.\n\n### Detalhe\n\n> Uma citação.\n",
     caminho: `/blog/${slug}/`,
     url: `https://ascende.site/blog/${slug}/`,
+    imagens: {},
     ...extra,
   };
 }
@@ -215,5 +216,97 @@ describe("as regras pequenas", () => {
     expect(f(true)).toContain('href="/blog/"');
     // Sem o define do build (aqui, no Vitest), o padrão é "não há post".
     expect(f()).not.toContain('href="/blog/"');
+  });
+});
+
+/* ── A figura do artigo (post 2): só no artigo, só resolvida pelo pipeline ── */
+describe("a figura do artigo", () => {
+  const img = {
+    src: "/blog/fx/diagrama.png", width: 720, height: 1160,
+    variantes: [{ src: "/blog/fx/diagrama-360.png", width: 360 }, { src: "/blog/fx/diagrama.png", width: 720 }],
+  };
+  const corpo = 'Antes.\n![Diagrama em três etapas da revisão](./diagrama.png "Diagrama: Ascende")\nDepois.';
+  const fig = (c = corpo, imagens: Record<string, typeof img> = { "./diagrama.png": img }) =>
+    renderToStaticMarkup(createElement(Markdown, { content: c, artigo: true, imagens }));
+
+  it("figure > img com dimensões, srcset, sizes, alt, lazy e async + figcaption", () => {
+    const h = fig();
+    expect(h).toMatch(/<figure[^>]*><a href="\/blog\/fx\/diagrama\.png" aria-label="Abrir a imagem em tamanho original: Diagrama em três etapas da revisão"[^>]*><img src="\/blog\/fx\/diagrama\.png" width="720" height="1160"/);
+    expect(h).toContain('srcSet="/blog/fx/diagrama-360.png 360w, /blog/fx/diagrama.png 720w"');
+    expect(h).toContain('sizes="(min-width: 42rem) 40rem, calc(100vw - 2.5rem)"');
+    expect(h).toContain('alt="Diagrama em três etapas da revisão"');
+    expect(h).toContain('loading="lazy"');
+    expect(h).toContain('decoding="async"');
+    expect(h).toContain("<figcaption");
+    expect(h).toContain(">Diagrama: Ascende</figcaption>");
+    // A imagem é um bloco: o parágrafo de antes e o de depois continuam inteiros.
+    expect(h).toMatch(/<p[^>]*>Antes\.<\/p><figure/);
+    expect(h).toMatch(/<\/figure><p[^>]*>Depois\.<\/p>/);
+  });
+
+  it("não estoura a coluna: largura 100%, altura proporcional, teto pela altura da tela", () => {
+    const h = fig();
+    expect(h).toContain("w-full h-auto");
+    expect(h).toContain("dark:brightness-90");
+    expect(h).toContain("max-width:min(100%, calc(85svh * 0.6207))");
+  });
+
+  it("sem variante, sem srcset", () => {
+    const h = fig(corpo, { "./diagrama.png": { ...img, variantes: [{ src: img.src, width: 720 }] } });
+    expect(h).not.toContain("srcSet");
+    expect(h).not.toContain("sizes=");
+  });
+
+  it("imagem não resolvida, sem alt ou sem legenda: o build falha, não publica figura quebrada", () => {
+    expect(() => fig(corpo, {})).toThrow();
+    expect(() => fig('![](./diagrama.png "Legenda")')).toThrow();
+    expect(() => fig("![Um alt](./diagrama.png)")).toThrow();
+  });
+
+  it("no chat e nos planos não existe imagem: a sintaxe continua texto", () => {
+    for (const modo of [{}, { doc: true }]) {
+      const h = renderToStaticMarkup(createElement(Markdown, { content: corpo, ...modo }));
+      expect(h).not.toContain("<img");
+      expect(h).toContain("![Diagrama em três etapas da revisão]");
+    }
+  });
+
+  it("o artigo passa as imagens do post ao corpo", () => {
+    const h = renderArtigo(post("fx", { corpo, imagens: { "./diagrama.png": img } }), [], ctx);
+    expect(h).toContain('<img src="/blog/fx/diagrama.png"');
+    // Não muda o og:image (o diagrama vertical não serve de prévia).
+    expect(h).toContain('<meta property="og:image" content="https://ascende.site/icon-512.png"/>');
+  });
+});
+
+/* ── O `_` do itálico segue o CommonMark (Clareira, post 2) ── */
+describe("itálico com sublinhado", () => {
+  const md = (c: string, artigo = false) => renderToStaticMarkup(createElement(Markdown, { content: c, artigo }));
+
+  it("lacunas '___ a ___' continuam texto, sem <em>", () => {
+    for (const artigo of [false, true]) {
+      const h = md("Vou fazer: ___ a ___ e depois ___.", artigo);
+      expect(h).not.toContain("<em>");
+      expect(h).toContain("___ a ___");
+    }
+  });
+
+  it("_palavra_ e _duas palavras_ viram itálico, com o texto de antes preservado", () => {
+    expect(md("um _texto_ aqui")).toContain("um <em>texto</em> aqui");
+    expect(md("_começo_ e (_entre parênteses_).")).toContain("<em>começo</em> e (<em>entre parênteses</em>).");
+  });
+
+  it("sublinhado dentro de palavra não abre ênfase", () => {
+    expect(md("o arquivo nome_do_arquivo.md")).not.toContain("<em>");
+    expect(md("ação_rápida_já")).not.toContain("<em>");
+  });
+
+  it("os outros marcadores continuam: negrito, *itálico*, `código` e link no artigo", () => {
+    const h = md("**forte**, *leve*, `x_y`, [link](/recusas) e _fim_", true);
+    expect(h).toContain("<strong>forte</strong>");
+    expect(h).toContain("<em>leve</em>");
+    expect(h).toMatch(/<code[^>]*>x_y<\/code>/);
+    expect(h).toContain('href="/recusas"');
+    expect(h).toContain("<em>fim</em>");
   });
 });

@@ -5,7 +5,8 @@
 // HISTÓRICO, para um post apagado não voltar como "novo" com outra roupa —,
 // `related` apontando para quem existe, e links internos que resolvem.
 import { PAGINAS_PUBLICAS } from "@/lib/blog/sitemap";
-import { linksDoCorpo, lerPost, normalizarIntencao } from "@/lib/blog/post";
+import { linhasDeTexto, linksDoCorpo, lerPost, normalizarIntencao } from "@/lib/blog/post";
+import { conferirImagens, imagensDoCorpo } from "@/lib/blog/imagem";
 import type { LinhaDoIndice } from "@/lib/blog/indice";
 import type { PostDoBlog } from "@/lib/blog/tipos";
 
@@ -19,7 +20,13 @@ export interface ResultadoDaChecagem {
   posts: PostDoBlog[];
   /** `arquivo: mensagem`. Vazio = a coleção pode ir ao ar. */
   erros: string[];
+  /** Imagens a copiar: destino relativo a dist/ → { slug, nome } na pasta
+   *  content/blog/img/<slug>/. Só o que algum post usa. */
+  copias: Record<string, { slug: string; nome: string }>;
 }
+
+/** As pastas de imagem: slug → (nome do arquivo → bytes). */
+export type PastasDeImagem = Record<string, Record<string, Uint8Array>>;
 
 /** Do mais novo para o mais antigo; slug desempata, para a ordem nunca
  *  depender da ordem em que o sistema de arquivos listou os arquivos. */
@@ -37,15 +44,30 @@ function destinoInternoExiste(destino: string, slugs: Set<string>): boolean {
 }
 
 export function checarColecao(
-  arquivos: ArquivoDePost[], indice: LinhaDoIndice[], hoje: string,
+  arquivos: ArquivoDePost[], indice: LinhaDoIndice[], hoje: string, pastasDeImagem: PastasDeImagem = {},
 ): ResultadoDaChecagem {
   const erros: string[] = [];
   const posts: PostDoBlog[] = [];
+  const copias: ResultadoDaChecagem["copias"] = {};
 
   for (const a of arquivos) {
     const { post, erros: e } = lerPost(a.nome, a.texto, hoje);
     erros.push(...e.map((m) => `${a.nome}: ${m}`));
-    if (post) posts.push(post);
+    if (!post) continue;
+    // As imagens: cada uma existe na pasta DO POST, no formato e tamanho
+    // certos, com as dimensões lidas do arquivo — e a pasta não tem sobra.
+    const conf = conferirImagens(post.slug, imagensDoCorpo(linhasDeTexto(post.corpo)), pastasDeImagem[post.slug]);
+    erros.push(...conf.erros);
+    post.imagens = conf.imagens;
+    for (const [destino, nome] of Object.entries(conf.copias)) copias[destino] = { slug: post.slug, nome };
+    posts.push(post);
+  }
+  // Pasta de imagem sem post é sobra: nada dela seria publicado, e o nome
+  // errado (um slug digitado diferente) é exatamente o que ela costuma ser.
+  for (const slug of Object.keys(pastasDeImagem)) {
+    if (!arquivos.some((a) => a.nome === `${slug}.md`)) {
+      erros.push(`content/blog/img/${slug}/: não há post com esse slug`);
+    }
   }
 
   // Slugs únicos. Com o slug igual ao nome do arquivo, só se repete se dois
@@ -118,5 +140,5 @@ export function checarColecao(
     }
   }
 
-  return { posts: posts.sort(porPublicacao), erros };
+  return { posts: posts.sort(porPublicacao), erros, copias };
 }

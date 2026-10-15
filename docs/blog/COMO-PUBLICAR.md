@@ -43,11 +43,32 @@ sources:
 ```
 
 Depois do segundo `---` vem o corpo, em Markdown: `##` e `###` (o H1 é o `title`), parágrafos, listas, **negrito**,
-links e citações.
+links, citações e imagens (abaixo).
 
 O esquema é **estrito**: chave fora da lista é erro. `author`, `reviewedBy`, `medicalReview`, `rating` e `image` são
-recusados nominalmente, porque o Ascende não tem autor-pessoa, revisão profissional, avaliação nem imagem própria para
-declarar. O autor é sempre a Organization "Ascende", fixo no template.
+recusados nominalmente, porque o Ascende não tem autor-pessoa, revisão profissional nem avaliação para declarar — e o
+`og:image` é sempre `/icon-512.png`; imagem do artigo vai no **corpo**, não no frontmatter. O autor é sempre a
+Organization "Ascende", fixo no template.
+
+#### Imagem no corpo
+
+Só imagem **local**, na pasta do próprio post: `content/blog/img/<slug>/<nome>.png` (ou `.jpg`, `.webp`). No corpo,
+**sozinha na linha**, com alt e legenda:
+
+```markdown
+![O que a imagem mostra, para quem não a vê](./nome.png "Legenda com o crédito. Crédito: Ascende.")
+```
+
+- **alt** (20 a 250 caracteres): descreve o conteúdo, não "imagem de…".
+- **legenda** (10 a 200, o texto entre aspas): obrigatória, com o crédito. Vira o `<figcaption>`.
+- **variante opcional** `nome-360.png`, ao lado: a mesma imagem com **360 px** de largura e a mesma proporção. Entra
+  no `srcset` para o celular baixar menos.
+- **até 500 KB** por arquivo. Nada de SVG, de URL externa, nem de caminho fora da pasta do post.
+
+Largura e altura **não** se escrevem: o build lê do cabeçalho do arquivo e põe no `<img width height>` (sem salto de
+layout ao carregar). A extensão tem de bater com o formato real. Os arquivos são copiados para
+`dist/blog/<slug>/`, ao lado do `index.html` — a URL pública é `/blog/<slug>/nome.png`. Na pasta do post fica só o que o
+texto usa: arquivo que nenhuma imagem referencia é erro.
 
 ### 2. Registrar no histórico — `npm run blog:indice`
 
@@ -70,7 +91,11 @@ Recusa, com motivo e linha:
 | post fora do INDICE, ou INDICE desatualizado | rode o passo 2 |
 | `related` ou link interno que não resolve | só `/blog/`, `/blog/<slug>/` que existe, `/`, `/recusas`, `/privacidade`, `/termos`, `/aviso-legal` (com `#âncora`, se quiser) |
 | link externo que não é `https://` | |
-| `# ` no corpo, título que pula nível, `####` ou mais, imagem `![…](…)` | o template desenha só `##` e `###`, e não tem imagem |
+| `# ` no corpo, título que pula nível, `####` ou mais | o template desenha só `##` e `###` |
+| imagem fora da linha própria, sem alt descritivo (20–250) ou sem legenda (10–200), externa, SVG, ou fora de `./<nome>.(png\|jpg\|webp)` | é desenhada como `<figure>`; o alt é para quem não vê, a legenda leva o crédito |
+| arquivo de imagem ausente, acima de 500 KB, ilegível, ou com extensão que não é o formato real | as dimensões vêm do cabeçalho; sem elas não há `width`/`height` |
+| variante `-360` com outra largura, outra proporção, ou não mais estreita | o `srcset` promete a mesma imagem |
+| arquivo em `content/blog/img/<slug>/` que o texto não usa, ou pasta sem post | nada vai para `dist/` sem estar no texto |
 | marcador de texto não pronto | `lorem`, `ipsum`, `[inserir`, `placeholder`, `example.com`, `exemplo.com` em qualquer caixa; `TODO`, `TBD`, `FIXME`, `XXX` só em MAIÚSCULAS e palavra inteira (em minúsculas, "todo dia" é português) |
 
 **Erro em um post não publica nenhum.** O build do blog é tudo ou nada: metade do blog no ar é pior que um build que
@@ -84,6 +109,7 @@ falha, porque ninguém nota a metade que faltou.
 - `dist/blog/<slug>/index.html` — cada artigo, com o HTML **renderizado** (lido sem JavaScript), `<title>`,
   description, canonical com barra final, Open Graph e JSON-LD (`BlogPosting` + `BreadcrumbList`; `Blog` na listagem);
 - `dist/blog/feed.xml` — RSS 2.0;
+- `dist/blog/<slug>/<imagem>` — as imagens do post (e a variante `-360`), byte a byte como estão em `content/`;
 - `dist/blog/tema.js` — o único JS das páginas do blog (aplica o tema escuro; a página funciona sem ele);
 - `dist/sitemap.xml` — as 5 páginas públicas de sempre + `/blog/` + cada post, com `lastmod` da data real.
 
@@ -95,7 +121,8 @@ e apaga qualquer `dist/blog/` de um build anterior.
 
 ### 5. Commit e publicação
 
-- Um commit por post: `post(blog): <slug>`, com o `.md` e o `INDICE.md` **juntos**.
+- Um commit por post: `post(blog): <slug>`, com o `.md`, o `INDICE.md` e a pasta `content/blog/img/<slug>/` (se
+  houver) **juntos**.
 - Push para `main`. O Netlify roda `npm run build` e publica `dist/`.
 
 ### 6. Conferir em produção
@@ -139,7 +166,8 @@ Uma vez retirado, a intenção dele continua valendo para o check? Não: a linha
 | o quê | onde |
 |---|---|
 | posts e histórico | `content/blog/*.md`, `content/blog/INDICE.md` |
-| esquema, check, INDICE, sitemap, RSS, pipeline | `src/lib/blog/` (tipos.ts, post.ts, checagem.ts, indice.ts, sitemap.ts, pipeline.ts) |
+| imagens dos posts | `content/blog/img/<slug>/` |
+| esquema, check, INDICE, sitemap, RSS, pipeline | `src/lib/blog/` (tipos.ts, post.ts, checagem.ts, indice.ts, sitemap.ts, pipeline.ts, imagem.ts) |
 | templates e `<head>` | `src/blog/` (render.tsx, paginas.tsx) |
 | o comando | `scripts/blog.mjs` (carrega o TypeScript pela API do Vite; sem dependência nova) |
 | as 5 páginas públicas do sitemap | `PAGINAS_PUBLICAS` em `src/lib/blog/sitemap.ts` — rota pública nova entra **ali** |

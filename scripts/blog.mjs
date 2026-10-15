@@ -52,6 +52,24 @@ function lerArquivos() {
     .sort()
     .map((nome) => ({ nome, texto: readFileSync(join(conteudo, nome), "utf8") }));
 }
+/** content/blog/img/<slug>/<arquivo>: slug → (nome → bytes). Arquivo oculto
+ *  (`.DS_Store`, que o Finder cria sozinho) não conta: não é do post e não
+ *  pode virar "imagem que ninguém usa". */
+function lerPastasDeImagem() {
+  const raiz = join(conteudo, "img");
+  if (!existsSync(raiz)) return {};
+  const out = {};
+  for (const slug of readdirSync(raiz, { withFileTypes: true })) {
+    if (!slug.isDirectory() || slug.name.startsWith(".")) continue;
+    out[slug.name] = {};
+    for (const f of readdirSync(join(raiz, slug.name), { withFileTypes: true })) {
+      if (f.isFile() && !f.name.startsWith(".")) {
+        out[slug.name][f.name] = new Uint8Array(readFileSync(join(raiz, slug.name, f.name)));
+      }
+    }
+  }
+  return out;
+}
 const caminhoDoIndice = join(conteudo, "INDICE.md");
 const lerIndiceTexto = () => (existsSync(caminhoDoIndice) ? readFileSync(caminhoDoIndice, "utf8") : null);
 
@@ -69,16 +87,18 @@ try {
   const { lerIndice, gerarIndice, atualizarIndice } = await vite.ssrLoadModule("/src/lib/blog/indice.ts");
   const hoje = hojeEmSaoPaulo();
   const arquivos = lerArquivos();
+  const imagens = lerPastasDeImagem();
   const indiceTexto = lerIndiceTexto();
 
   if (comando === "check") {
-    const { posts, erros } = checarColecao(arquivos, lerIndice(indiceTexto ?? ""), hoje);
+    const { posts, erros, copias } = checarColecao(arquivos, lerIndice(indiceTexto ?? ""), hoje, imagens);
     if (erros.length) {
       console.error(`blog:check — ${erros.length} erro(s) em ${relative(RAIZ, conteudo)}:`);
       for (const e of erros) console.error(`  ✗ ${e}`);
       process.exit(1);
     }
-    console.log(`blog:check — ok: ${posts.length} post(s) em ${relative(RAIZ, conteudo)} (hoje em São Paulo: ${hoje}).`);
+    const nImagens = Object.keys(copias).length;
+    console.log(`blog:check — ok: ${posts.length} post(s), ${nImagens} arquivo(s) de imagem em ${relative(RAIZ, conteudo)} (hoje em São Paulo: ${hoje}).`);
   }
 
   if (comando === "indice") {
@@ -93,7 +113,7 @@ try {
       process.exit(1);
     }
     const novo = atualizarIndice(lerIndice(indiceTexto ?? ""), lidos.map((l) => l.post));
-    const { erros } = checarColecao(arquivos, novo, hoje);
+    const { erros } = checarColecao(arquivos, novo, hoje, imagens);
     if (erros.length) {
       console.error("blog:indice — a coleção não passa contra o índice novo:");
       for (const e of erros) console.error(`  ✗ ${e}`);
@@ -116,7 +136,7 @@ try {
     const templates = temPost
       ? await vite.ssrLoadModule("/src/blog/render.tsx")
       : { renderListagem: () => "", renderArtigo: () => "" };
-    const out = gerarBlog({ arquivos, indice: indiceTexto, hoje, ctx, templates });
+    const out = gerarBlog({ arquivos, indice: indiceTexto, hoje, ctx, templates, imagens });
     if (out.erros.length) {
       console.error(`blog: o build NÃO publica — ${out.erros.length} erro(s):`);
       for (const e of out.erros) console.error(`  ✗ ${e}`);
