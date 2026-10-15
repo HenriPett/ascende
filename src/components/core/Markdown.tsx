@@ -145,8 +145,10 @@ export function Markdown({
         h12: "font-display font-semibold text-title2 mt-12 mb-3 first:mt-0 text-balance break-words hyphens-auto scroll-mt-20",
         h3: "font-semibold text-title3 mt-8 mb-2 first:mt-0 text-balance break-words hyphens-auto scroll-mt-20",
         p: "mt-5 first:mt-0 text-pretty break-words",
-        ul: "list-disc pl-5 space-y-2 mt-5",
-        ol: "list-decimal pl-5 space-y-2 mt-5",
+        // Listas quebram palavra como os parágrafos: a 40 pt
+        // "desnecessariamente" num item estourava a tela (Lince, post 3).
+        ul: "list-disc pl-5 space-y-2 mt-5 break-words hyphens-auto",
+        ol: "list-decimal pl-5 space-y-2 mt-5 break-words hyphens-auto",
       }
     : doc
     ? {
