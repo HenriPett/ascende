@@ -23,6 +23,21 @@ export interface FonteDoPost {
   accessed: string; // YYYY-MM-DD
 }
 
+/** Uma imagem do corpo, já conferida e medida no build. A imagem é do POST:
+ *  mora em content/blog/img/<slug>/ e é publicada em /blog/<slug>/. `alt` e
+ *  legenda não estão aqui — saem do próprio markdown, `![alt](./x.png "legenda")`. */
+export interface ImagemDoPost {
+  /** Caminho publicado: /blog/<slug>/<arquivo> */
+  src: string;
+  /** Dimensões REAIS, lidas do cabeçalho do arquivo (width/height no <img>
+   *  para a página não pular quando a imagem carregar). */
+  width: number;
+  height: number;
+  /** Para o `srcset` com descritor `w`: a variante `<nome>-360.<ext>`, se
+   *  existir, e a própria — em largura crescente. Só a própria sem variante. */
+  variantes: { src: string; width: number }[];
+}
+
 /** O post como os templates o recebem: frontmatter validado + o que o
  *  pipeline deriva (corpo, URLs). Datas são strings YYYY-MM-DD de calendário
  *  real — nunca `Date`, para nenhum fuso mudar o dia no caminho. */
@@ -45,6 +60,9 @@ export interface PostDoBlog {
   productPath: ProductPath;
   /** O corpo em markdown, sem o frontmatter. O H1 vem de `title`. */
   corpo: string;
+  /** As imagens do corpo, pelo `src` EXATO do markdown (`./arquivo.png`).
+   *  `{}` quando o post não tem imagem. */
+  imagens: Record<string, ImagemDoPost>;
   /** Caminho público, com barra final: /blog/<slug>/ */
   caminho: string;
   /** URL absoluta canônica: https://ascende.site/blog/<slug>/ */

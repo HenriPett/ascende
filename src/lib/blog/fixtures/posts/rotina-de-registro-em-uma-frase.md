@@ -17,6 +17,8 @@ Este é um texto de **fixture** do pipeline, usado só em teste e preview.
 
 Um gasto, um treino e uma refeição cabem na mesma frase.
 
+![Diagrama de fixture: uma frase dividida em gasto, treino e refeição.](./diagrama-da-frase.png "Diagrama de fixture do pipeline. Crédito: Ascende.")
+
 ### Um exemplo curto
 
 Veja também a [página de recusas](/recusas) e o [início](/).

@@ -9,7 +9,7 @@
 // Nada de dist/blog/, nada de feed, nada de /blog no sitemap. Só o sitemap das
 // 5 páginas de sempre. Uma listagem vazia publicada seria conteúdo fictício
 // com outro nome.
-import { checarColecao, type ArquivoDePost } from "@/lib/blog/checagem";
+import { checarColecao, type ArquivoDePost, type PastasDeImagem } from "@/lib/blog/checagem";
 import { lerIndice } from "@/lib/blog/indice";
 import { gerarFeed, gerarSitemap } from "@/lib/blog/sitemap";
 import type { ContextoDoBlog, PostDoBlog } from "@/lib/blog/tipos";
@@ -27,8 +27,8 @@ export interface Templates {
 }
 
 export interface SaidaDoBlog {
-  /** caminho relativo a dist/ → conteúdo. */
-  arquivos: Record<string, string>;
+  /** caminho relativo a dist/ → conteúdo (texto, ou os bytes de uma imagem). */
+  arquivos: Record<string, string | Uint8Array>;
   posts: PostDoBlog[];
   erros: string[];
 }
@@ -39,14 +39,17 @@ export function gerarBlog(entrada: {
   hoje: string;
   ctx: ContextoDoBlog;
   templates: Templates;
+  /** content/blog/img/: slug → (nome → bytes). */
+  imagens?: PastasDeImagem;
 }): SaidaDoBlog {
-  const { posts, erros } = checarColecao(entrada.arquivos, lerIndice(entrada.indice ?? ""), entrada.hoje);
+  const pastas = entrada.imagens ?? {};
+  const { posts, erros, copias } = checarColecao(entrada.arquivos, lerIndice(entrada.indice ?? ""), entrada.hoje, pastas);
   // Coleção com erro não publica NADA — nem os posts que estão certos. Um
   // build que sai com metade do blog é pior que um build que falha: o primeiro
   // ninguém nota.
   if (erros.length) return { arquivos: {}, posts: [], erros };
 
-  const arquivos: Record<string, string> = { "sitemap.xml": gerarSitemap(posts) };
+  const arquivos: SaidaDoBlog["arquivos"] = { "sitemap.xml": gerarSitemap(posts) };
   if (posts.length === 0) return { arquivos, posts, erros };
 
   const porSlug = new Map(posts.map((p) => [p.slug, p]));
@@ -57,6 +60,10 @@ export function gerarBlog(entrada: {
   }
   arquivos["blog/feed.xml"] = gerarFeed(posts);
   arquivos[entrada.templates.CAMINHO_DO_TEMA.replace(/^\//, "")] = entrada.templates.TEMA_JS;
+  // As imagens vão para a pasta DO ARTIGO (dist/blog/<slug>/), ao lado do
+  // index.html: o caminho publicado é /blog/<slug>/<arquivo>, o mesmo que o
+  // render recebe em `post.imagens`.
+  for (const [destino, { slug, nome }] of Object.entries(copias)) arquivos[destino] = pastas[slug][nome];
   return { arquivos, posts, erros };
 }
 

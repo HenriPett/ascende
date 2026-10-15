@@ -11,7 +11,8 @@ import { join } from "node:path";
 import {
   dataValida, errosDoCorpo, hojeEmSaoPaulo, lerPost, normalizarIntencao, placeholders,
 } from "@/lib/blog/post";
-import { checarColecao, type ArquivoDePost } from "@/lib/blog/checagem";
+import { checarColecao, type ArquivoDePost, type PastasDeImagem } from "@/lib/blog/checagem";
+import { conferirImagens, errosDaImagemNoTexto, imagensDoCorpo, lerDimensoes, LIMITE_BYTES } from "@/lib/blog/imagem";
 import { atualizarIndice, gerarIndice, lerIndice } from "@/lib/blog/indice";
 import { dataRfc822, gerarFeed, gerarSitemap, PAGINAS_PUBLICAS } from "@/lib/blog/sitemap";
 import { cssDoIndex, gerarBlog, type Templates } from "@/lib/blog/pipeline";
@@ -23,6 +24,12 @@ const fixtures = (): ArquivoDePost[] =>
   readdirSync(PASTA).filter((n) => n.endsWith(".md") && n !== "INDICE.md").sort()
     .map((nome) => ({ nome, texto: readFileSync(join(PASTA, nome), "utf8") }));
 const indiceDasFixtures = () => readFileSync(join(PASTA, "INDICE.md"), "utf8");
+/** O mesmo que scripts/blog.mjs lê de content/blog/img/: slug → (nome → bytes). */
+const imagensDasFixtures = (): PastasDeImagem => Object.fromEntries(
+  readdirSync(join(PASTA, "img")).map((slug) => [slug, Object.fromEntries(
+    readdirSync(join(PASTA, "img", slug)).map((n) => [n, new Uint8Array(readFileSync(join(PASTA, "img", slug, n)))]),
+  )]),
+);
 const CTX = { siteUrl: "https://ascende.site", cssHrefs: ["/assets/index-teste.css"] };
 
 /** Um post válido mínimo, com campos sobrescrevíveis, para testar UMA regra por vez. */
@@ -142,8 +149,16 @@ describe("um post: o corpo", () => {
     expect(errosDoCorpo("Texto.\n\n```\n# comentário de shell\n```\n")).toEqual([]);
   });
 
-  it("imagem não é suportada (sairia como texto literal)", () => {
-    expect(errosDoCorpo("Veja ![foto](/x.png)\n").join(" ")).toMatch(/imagem não é suportada/);
+  it("imagem no meio do texto, sem alt descritivo nem legenda, ou fora da pasta do post: erro", () => {
+    const e = errosDoCorpo("Veja ![foto](/x.png)\n").join(" ");
+    expect(e).toMatch(/sozinha na linha/);
+    expect(e).toMatch(/alt com 4 caracteres/);
+    expect(e).toMatch(/falta a legenda/);
+    expect(e).toMatch(/na pasta do próprio post/);
+  });
+
+  it("imagem certa no corpo não é erro, e não conta como link", () => {
+    expect(errosDoCorpo(`Texto.\n\n![${ALT}](./grafico-da-semana.png "${LEGENDA}")\n`)).toEqual([]);
   });
 
   it("placeholder: 'TODO' maiúsculo é erro, 'todo dia' e 'todos' são português", () => {
@@ -163,11 +178,147 @@ describe("um post: o corpo", () => {
   });
 });
 
+// ─── 1b. Imagens ────────────────────────────────────────────────────────
+
+const ALT = "Gráfico da semana com três barras de gasto.";
+const LEGENDA = "Gráfico do Ascende. Crédito: Ascende.";
+
+/** Só o cabeçalho — o leitor não precisa do resto do arquivo. */
+function png(w: number, h: number, tamanho = 64): Uint8Array {
+  const b = new Uint8Array(tamanho);
+  b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+  new DataView(b.buffer).setUint32(16, w);
+  new DataView(b.buffer).setUint32(20, h);
+  return b;
+}
+function jpeg(w: number, h: number): Uint8Array {
+  // SOI, um APP0 de 16 bytes, uma DHT (C4, que NÃO é SOF) e então o SOF2.
+  const b = [0xff, 0xd8, 0xff, 0xe0, 0, 16, ...new Array(14).fill(0), 0xff, 0xc4, 0, 4, 0, 0,
+    0xff, 0xc2, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, ...new Array(12).fill(0)];
+  return new Uint8Array(b);
+}
+function webp(chunk: "VP8 " | "VP8L" | "VP8X", w: number, h: number): Uint8Array {
+  const b = new Uint8Array(40);
+  const txt = (i: number, s: string) => b.set([...s].map((c) => c.charCodeAt(0)), i);
+  txt(0, "RIFF"); txt(8, "WEBP"); txt(12, chunk);
+  if (chunk === "VP8 ") { b.set([0x9d, 0x01, 0x2a, w & 255, w >> 8, h & 255, h >> 8], 23); }
+  if (chunk === "VP8L") {
+    const v = (w - 1) | ((h - 1) << 14);
+    b.set([0x2f, v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >> 24) & 255], 20);
+  }
+  if (chunk === "VP8X") { b.set([(w - 1) & 255, (w - 1) >> 8, 0, (h - 1) & 255, (h - 1) >> 8, 0], 24); }
+  return b;
+}
+const noCorpo = (linha: string) => imagensDoCorpo([{ n: 7, l: linha }]);
+const umaImagem = (src = "./grafico.png") => noCorpo(`![${ALT}](${src} "${LEGENDA}")`);
+
+describe("imagem: dimensões pelo cabeçalho (sem dependência)", () => {
+  it("PNG, JPEG (pula tabela e APP0 até o SOF) e os três WebP", () => {
+    expect(lerDimensoes(png(720, 1160))).toEqual({ formato: "png", width: 720, height: 1160 });
+    expect(lerDimensoes(jpeg(1200, 800))).toEqual({ formato: "jpeg", width: 1200, height: 800 });
+    expect(lerDimensoes(webp("VP8 ", 640, 480))).toEqual({ formato: "webp", width: 640, height: 480 });
+    expect(lerDimensoes(webp("VP8L", 360, 580))).toEqual({ formato: "webp", width: 360, height: 580 });
+    expect(lerDimensoes(webp("VP8X", 3000, 2000))).toEqual({ formato: "webp", width: 3000, height: 2000 });
+  });
+
+  it("lixo, SVG e arquivo cortado: null (não se adivinha dimensão)", () => {
+    expect(lerDimensoes(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="10"/>'))).toBeNull();
+    expect(lerDimensoes(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).toBeNull();
+    expect(lerDimensoes(new Uint8Array([0xff, 0xd8, 0x00, 0x00, 0, 0, 0, 0, 0, 0, 0]))).toBeNull();
+    expect(lerDimensoes(new Uint8Array(0))).toBeNull();
+  });
+
+  it("as fixtures PNG reais têm as dimensões que o pacote editorial descreve", () => {
+    const p = imagensDasFixtures()["rotina-de-registro-em-uma-frase"];
+    expect(lerDimensoes(p["diagrama-da-frase.png"])).toEqual({ formato: "png", width: 720, height: 1160 });
+    expect(lerDimensoes(p["diagrama-da-frase-360.png"])).toEqual({ formato: "png", width: 360, height: 580 });
+  });
+});
+
+describe("imagem: o texto", () => {
+  it("forma certa: sem erro, com alt e legenda lidos", () => {
+    const [img] = umaImagem();
+    expect(img).toMatchObject({ n: 7, alt: ALT, src: "./grafico.png", legenda: LEGENDA, sozinha: true });
+    expect(errosDaImagemNoTexto(img)).toEqual([]);
+  });
+
+  it("alt curto ou longo demais, legenda curta: erro", () => {
+    expect(errosDaImagemNoTexto(noCorpo(`![gráfico](./g.png "${LEGENDA}")`)[0]).join(" ")).toMatch(/alt com 7 caracteres/);
+    expect(errosDaImagemNoTexto(noCorpo(`![${"a".repeat(251)}](./g.png "${LEGENDA}")`)[0]).join(" ")).toMatch(/no máximo 250/);
+    expect(errosDaImagemNoTexto(noCorpo(`![${ALT}](./g.png "Crédito")`)[0]).join(" ")).toMatch(/falta a legenda/);
+  });
+
+  it.each([
+    ["https://exemplo.com/g.png", /URL externa/],
+    ["./diagrama.svg", /SVG não é servido/],
+    ["./outra-pasta/g.png", /na pasta do próprio post/],
+    ["../outro-post/g.png", /na pasta do próprio post/],
+    ["./Grafico.PNG", /na pasta do próprio post/],
+    ["./g.gif", /na pasta do próprio post/],
+  ])("src %s: recusado", (src, msg) => {
+    expect(errosDaImagemNoTexto(umaImagem(src)[0]).join(" ")).toMatch(msg);
+  });
+});
+
+describe("imagem: os arquivos da pasta do post", () => {
+  const conferir = (pasta: Record<string, Uint8Array> | undefined, imgs = umaImagem()) =>
+    conferirImagens("um-post", imgs, pasta);
+
+  it("com a variante -360: srcset do mais estreito ao mais largo, e as duas copiadas para a pasta do artigo", () => {
+    const r = conferir({ "grafico.png": png(720, 1160), "grafico-360.png": png(360, 580) });
+    expect(r.erros).toEqual([]);
+    expect(r.imagens["./grafico.png"]).toEqual({
+      src: "/blog/um-post/grafico.png", width: 720, height: 1160,
+      variantes: [{ src: "/blog/um-post/grafico-360.png", width: 360 }, { src: "/blog/um-post/grafico.png", width: 720 }],
+    });
+    expect(r.copias).toEqual({ "blog/um-post/grafico.png": "grafico.png", "blog/um-post/grafico-360.png": "grafico-360.png" });
+  });
+
+  it("sem variante: srcset só com a própria", () => {
+    const r = conferir({ "grafico.png": png(720, 1160) });
+    expect(r.erros).toEqual([]);
+    expect(r.imagens["./grafico.png"].variantes).toEqual([{ src: "/blog/um-post/grafico.png", width: 720 }]);
+  });
+
+  it("arquivo ausente ou pasta ausente: erro, com o caminho", () => {
+    expect(conferir({}).erros.join(" ")).toMatch(/content\/blog\/img\/um-post\/grafico.png não existe/);
+    expect(conferir(undefined).erros.join(" ")).toMatch(/não existe/);
+  });
+
+  it("acima de 500 KB: erro", () => {
+    expect(conferir({ "grafico.png": png(720, 1160, LIMITE_BYTES + 1) }).erros.join(" ")).toMatch(/o limite é 500 KB/);
+    expect(conferir({ "grafico.png": png(720, 1160, LIMITE_BYTES) }).erros).toEqual([]);
+  });
+
+  it("extensão que não bate com o formato real, ou arquivo ilegível: erro", () => {
+    expect(conferir({ "grafico.png": jpeg(720, 1160) }).erros.join(" ")).toMatch(/é JPEG com extensão .png/);
+    expect(conferir({ "grafico.png": new Uint8Array(100) }).erros.join(" ")).toMatch(/não é um PNG, JPEG ou WebP legível/);
+  });
+
+  it("variante com largura errada, outra proporção, ou ilegível: erro", () => {
+    expect(conferir({ "grafico.png": png(720, 1160), "grafico-360.png": png(400, 644) }).erros.join(" ")).toMatch(/400 px de largura; precisa de 360/);
+    expect(conferir({ "grafico.png": png(720, 1160), "grafico-360.png": png(360, 360) }).erros.join(" ")).toMatch(/não tem a proporção/);
+    expect(conferir({ "grafico.png": png(361, 581), "grafico-360.png": png(360, 579) }).erros).toEqual([]); // 1 px de folga
+    expect(conferir({ "grafico.png": png(360, 580), "grafico-360.png": png(360, 580) }).erros.join(" ")).toMatch(/não é mais estreita/);
+  });
+
+  it("arquivo na pasta que o texto não usa: erro (nada entra em dist/ sem estar no post)", () => {
+    const r = conferir({ "grafico.png": png(720, 1160), "rascunho.png": png(10, 10) });
+    expect(r.erros).toEqual(["um-post.md: content/blog/img/um-post/rascunho.png não é usado por nenhuma imagem do post (a pasta publica só o que o texto mostra)"]);
+  });
+
+  it("a mesma imagem duas vezes no texto: uma entrada, um arquivo", () => {
+    const r = conferir({ "grafico.png": png(720, 1160) }, [...umaImagem(), ...umaImagem()]);
+    expect(r.erros).toEqual([]);
+    expect(Object.keys(r.copias)).toEqual(["blog/um-post/grafico.png"]);
+  });
+});
+
 // ─── 2. A coleção ───────────────────────────────────────────────────────
 
 describe("a coleção de fixtures", () => {
   it("passa inteira, ordenada do mais novo (slug desempata)", () => {
-    const { posts, erros: e } = checarColecao(fixtures(), lerIndice(indiceDasFixtures()), HOJE);
+    const { posts, erros: e } = checarColecao(fixtures(), lerIndice(indiceDasFixtures()), HOJE, imagensDasFixtures());
     expect(e).toEqual([]);
     expect(posts.map((p) => p.slug)).toEqual([
       "mercado-no-orcamento-do-mes", "privacidade-do-conselheiro", "rotina-de-registro-em-uma-frase",
@@ -238,8 +389,16 @@ describe("o INDICE", () => {
     expect(novo.some((l) => l.slug === "removido")).toBe(true);
   });
 
+  it("pasta de imagem sem post, ou post com imagem sem a pasta: erro", () => {
+    const img = { ...imagensDasFixtures(), "post-que-nao-existe": { "a.png": png(10, 10) } };
+    expect(checarColecao(fixtures(), lerIndice(indiceDasFixtures()), HOJE, img).erros)
+      .toEqual(["content/blog/img/post-que-nao-existe/: não há post com esse slug"]);
+    expect(checarColecao(fixtures(), lerIndice(indiceDasFixtures()), HOJE).erros.join(" "))
+      .toMatch(/rotina-de-registro-em-uma-frase\.md: .*diagrama-da-frase\.png não existe/);
+  });
+
   it("o INDICE das fixtures está em dia com elas (o mesmo check do build)", () => {
-    const posts = checarColecao(fixtures(), lerIndice(indiceDasFixtures()), HOJE).posts;
+    const posts = checarColecao(fixtures(), lerIndice(indiceDasFixtures()), HOJE, imagensDasFixtures()).posts;
     expect(gerarIndice(atualizarIndice(lerIndice(indiceDasFixtures()), posts))).toBe(indiceDasFixtures());
   });
 });
@@ -254,7 +413,7 @@ describe("sitemap e RSS", () => {
   });
 
   it("com posts: as 5 de sempre + /blog/ + cada post, lastmod com data real (modificação se houver)", () => {
-    const { posts } = checarColecao(fixtures(), lerIndice(indiceDasFixtures()), HOJE);
+    const { posts } = checarColecao(fixtures(), lerIndice(indiceDasFixtures()), HOJE, imagensDasFixtures());
     const xml = gerarSitemap(posts);
     expect((xml.match(/<loc>/g) ?? []).length).toBe(5 + 1 + 3);
     expect(xml).toContain("<loc>https://ascende.site/blog/</loc>\n    <lastmod>2026-09-20</lastmod>");
@@ -265,7 +424,7 @@ describe("sitemap e RSS", () => {
 
   it("RSS: um item por post, datas RFC 822 do dia real, título escapado", () => {
     expect(dataRfc822("2026-10-14")).toBe("Wed, 14 Oct 2026 00:00:00 -0300");
-    const { posts } = checarColecao(fixtures(), lerIndice(indiceDasFixtures()), HOJE);
+    const { posts } = checarColecao(fixtures(), lerIndice(indiceDasFixtures()), HOJE, imagensDasFixtures());
     const feed = gerarFeed(posts);
     expect((feed.match(/<item>/g) ?? []).length).toBe(3);
     expect(feed).toContain("<guid isPermaLink=\"true\">https://ascende.site/blog/privacidade-do-conselheiro/</guid>");
@@ -293,27 +452,42 @@ describe("o pipeline", () => {
   });
 
   it("com as fixtures: listagem, um index.html por post, feed, tema e sitemap", () => {
-    const out = gerarBlog({ arquivos: fixtures(), indice: indiceDasFixtures(), hoje: HOJE, ctx: CTX, templates: falsos });
+    const out = gerarBlog({ arquivos: fixtures(), indice: indiceDasFixtures(), imagens: imagensDasFixtures(), hoje: HOJE, ctx: CTX, templates: falsos });
     expect(out.erros).toEqual([]);
     expect(Object.keys(out.arquivos).sort()).toEqual([
       "blog/feed.xml", "blog/index.html",
       "blog/mercado-no-orcamento-do-mes/index.html", "blog/privacidade-do-conselheiro/index.html",
+      "blog/rotina-de-registro-em-uma-frase/diagrama-da-frase-360.png",
+      "blog/rotina-de-registro-em-uma-frase/diagrama-da-frase.png",
       "blog/rotina-de-registro-em-uma-frase/index.html", "blog/tema.js", "sitemap.xml",
     ]);
+    // Os BYTES do arquivo, sem conversão: o que está em content/ é o que vai ao ar.
+    const pasta = imagensDasFixtures()["rotina-de-registro-em-uma-frase"];
+    expect(out.arquivos["blog/rotina-de-registro-em-uma-frase/diagrama-da-frase.png"]).toEqual(pasta["diagrama-da-frase.png"]);
+    expect(out.posts.find((p) => p.slug === "rotina-de-registro-em-uma-frase")!.imagens).toEqual({
+      "./diagrama-da-frase.png": {
+        src: "/blog/rotina-de-registro-em-uma-frase/diagrama-da-frase.png", width: 720, height: 1160,
+        variantes: [
+          { src: "/blog/rotina-de-registro-em-uma-frase/diagrama-da-frase-360.png", width: 360 },
+          { src: "/blog/rotina-de-registro-em-uma-frase/diagrama-da-frase.png", width: 720 },
+        ],
+      },
+    });
+    expect(out.posts.find((p) => p.slug === "mercado-no-orcamento-do-mes")!.imagens).toEqual({});
     expect(out.arquivos["blog/mercado-no-orcamento-do-mes/index.html"])
       .toBe("ARTIGO:mercado-no-orcamento-do-mes:rotina-de-registro-em-uma-frase");
   });
 
   it("um erro na coleção não publica NADA — nem os posts certos", () => {
     const quebrado = [...fixtures(), { nome: "ruim.md", texto: "sem frontmatter" }];
-    const out = gerarBlog({ arquivos: quebrado, indice: indiceDasFixtures(), hoje: HOJE, ctx: CTX, templates: falsos });
+    const out = gerarBlog({ arquivos: quebrado, indice: indiceDasFixtures(), imagens: imagensDasFixtures(), hoje: HOJE, ctx: CTX, templates: falsos });
     expect(out.erros.length).toBeGreaterThan(0);
     expect(out.arquivos).toEqual({});
   });
 
   it("com os templates DE VERDADE (src/blog/render.tsx): HTML completo, sem script inline executável", () => {
-    const out = gerarBlog({ arquivos: fixtures(), indice: indiceDasFixtures(), hoje: HOJE, ctx: CTX, templates: render });
-    const artigo = out.arquivos["blog/mercado-no-orcamento-do-mes/index.html"];
+    const out = gerarBlog({ arquivos: fixtures(), indice: indiceDasFixtures(), imagens: imagensDasFixtures(), hoje: HOJE, ctx: CTX, templates: render });
+    const artigo = out.arquivos["blog/mercado-no-orcamento-do-mes/index.html"] as string;
     expect(artigo.startsWith("<!doctype html>")).toBe(true);
     expect(artigo).toContain('<link rel="canonical" href="https://ascende.site/blog/mercado-no-orcamento-do-mes/"/>');
     expect(artigo).toContain('href="/assets/index-teste.css"');
@@ -324,6 +498,19 @@ describe("o pipeline", () => {
     const scripts = [...artigo.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]);
     for (const s of scripts) expect(s).toMatch(/type="application\/ld\+json"|src="\/blog\/tema\.js"/);
     expect(out.arquivos["blog/tema.js"]).toBe(render.TEMA_JS);
+  });
+
+  it("com os templates DE VERDADE: a imagem sai como <figure> com width/height, srcset e lazy", () => {
+    const out = gerarBlog({ arquivos: fixtures(), indice: indiceDasFixtures(), imagens: imagensDasFixtures(), hoje: HOJE, ctx: CTX, templates: render });
+    const artigo = out.arquivos["blog/rotina-de-registro-em-uma-frase/index.html"] as string;
+    const img = artigo.match(/<img\b[^>]*>/)![0];
+    expect(img).toContain('src="/blog/rotina-de-registro-em-uma-frase/diagrama-da-frase.png"');
+    expect(img).toContain('width="720"');
+    expect(img).toContain('height="1160"');
+    expect(img).toContain("diagrama-da-frase-360.png 360w");
+    expect(img).toContain('loading="lazy"');
+    expect(img).toContain('alt="Diagrama de fixture: uma frase dividida em gasto, treino e refeição."');
+    expect(artigo).toMatch(/<figure\b[\s\S]*<figcaption[^>]*>Diagrama de fixture do pipeline\. Crédito: Ascende\.<\/figcaption>/);
   });
 
   it("o CSS vem dos <link rel=stylesheet> do index.html da SPA", () => {
@@ -356,7 +543,7 @@ describe("as travas que o blog depende e que moram em outros arquivos", () => {
 
   it("content/blog não tem fixture nem post de teste: só o que é para publicar", () => {
     const nomes = readdirSync(join(raiz, "content", "blog"));
-    const daFixture = readdirSync(PASTA).filter((n) => n !== "INDICE.md");
+    const daFixture = readdirSync(PASTA).filter((n) => n !== "INDICE.md" && n !== "img");
     for (const n of daFixture) expect(nomes).not.toContain(n);
   });
 });

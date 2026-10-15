@@ -113,7 +113,7 @@ consultor financeiro — então não existe campo para dizer que existe.
 ## 6. Corpo do texto
 
 - Sem `# ` no corpo: o H1 vem do `title`. Seções com `##`, subseções `###`, sem pular nível;
-  `####` ou mais e imagens são recusados pelo check (o template não os desenha).
+  `####` ou mais é recusado pelo check (o template não desenha).
 - A resposta curta aparece nos primeiros parágrafos; o detalhe vem depois.
 - Todo número, preço, recomendação de saúde ou dado de mercado tem fonte em `sources`, citada no
   trecho em que aparece. Preferência: órgãos públicos e fontes primárias (IBGE, DIEESE, Ministério da
@@ -123,9 +123,8 @@ consultor financeiro — então não existe campo para dizer que existe.
   dívida grave, sofrimento emocional), o texto diz isso com clareza — como o próprio produto faz.
 - Sem conteúdo fictício: nada de depoimento, "caso de usuário", print fabricado ou de tela que não
   existe, número de usuários ou resultado médio. O Ascende ainda não tem esses dados publicados; se
-  um dia tiver, entram com fonte. Captura da tela real é permitida (quando o pipeline aceitar
-  imagem — hoje não aceita), com dado de demonstração — nunca a vida de uma pessoa real, nem
-  anonimizada.
+  um dia tiver, entram com fonte. Captura da tela real é permitida, com dado de demonstração —
+  nunca a vida de uma pessoa real, nem anonimizada (ver "Imagem", abaixo).
 - Número de exercício explicitamente hipotético não tem fonte e não precisa — mas exige rótulo no
   início e no fim do bloco, e a pessoa do exemplo nunca tem nome (com nome, vira "caso de usuário").
 - `accessed` significa "li o trecho citado nesta data", não "a URL respondeu". Página que carrega por
@@ -168,6 +167,22 @@ produto não resolve **não ganha CTA no texto** — fica sem, e a ausência é 
 existe para vender. (O bloco institucional fixo do template, depois do artigo, não é CTA do texto:
 descreve o app sem promessa de resultado e carrega o link de `productPath`.)
 
+### Imagem
+
+- Opcional. Entra quando mostra o que o texto explica (diagrama, captura da tela real com dado de
+  demonstração) — nunca enfeite, banco de imagem ou foto de pessoa.
+- Só arquivo local em `content/blog/img/<slug>/`, PNG, JPEG ou WebP, até 500 KB. Nada de SVG, de
+  hotlink ou de imagem de terceiro sem licença declarada.
+- Sozinha na linha: `![alt](./nome.png "Legenda. Crédito: Ascende.")`.
+- **alt** (20–250): descreve o que a imagem mostra para quem não a vê; não repete a legenda nem
+  começa com "imagem de".
+- **legenda** (10–200): obrigatória, termina com o crédito. Imagem com número segue a regra das
+  fontes: o número tem fonte em `sources`, citada no texto.
+- Diagrama não leva número nem afirmação que o texto não sustente.
+- Texto que importa não mora só na imagem: o que ela diz também está no parágrafo.
+- Variante `nome-360.png` (360 px, mesma proporção) recomendada para o celular.
+- O `og:image` continua `/icon-512.png`; a imagem do corpo não vira capa nem `image` no JSON-LD.
+
 ## 7. Links internos
 
 Todo post publicado tem, no mínimo:
@@ -209,6 +224,8 @@ Ao publicar um post novo, revise os 1–3 posts mais próximos do mesmo cluster 
   `{"@type":"Organization","name":"Ascende","url":"https://ascende.site/"}`, `isPartOf` o Blog.
   Mais um `BreadcrumbList` (Ascende → Blog → título). Proibido: `Person`, `reviewedBy`,
   `aggregateRating`, `image` inventada.
+- Imagem do corpo: `<figure>` com `<img src width height srcset sizes alt loading="lazy"
+  decoding="async">` e `<figcaption>` com a legenda; arquivo servido de `/blog/<slug>/`.
 
 **Listagem — `https://ascende.site/blog/`**
 
@@ -242,6 +259,7 @@ Antes do commit `post(blog): <slug>`:
       não tem CTA no texto.
 - [ ] Toda afirmação de produto foi conferida abrindo o app em produção.
 - [ ] Links internos da §7 presentes; `related` só com posts publicados.
+- [ ] Imagem (se houver): local, alt descritivo, legenda com crédito, texto também no parágrafo.
 - [ ] `npm run blog:check` passa; `npm run blog:indice` atualizado; build passa.
 - [ ] Depois do deploy: a URL responde 200 com o artigo no HTML (sem JS), canonical certa, e aparece
       no `https://ascende.site/sitemap.xml`.
