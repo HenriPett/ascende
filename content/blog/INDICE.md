@@ -12,4 +12,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 |---|---|---|---|---|
 | lista-de-compras-semanal-orcamento | como organizar a lista de compras semanal dentro do orçamento | alimentacao-orcamento | 2026-10-14 |  |
 | como-dar-contexto-ia-sem-expor-dados | como dar contexto à IA para organizar a rotina sem expor dados pessoais | ia-privacidade | 2026-10-15 |  |
+| registro-de-habitos-consistencia | como fazer um registro de hábitos e acompanhar a consistência | rotina-integrada | 2026-10-15 |  |
 | revisao-semanal-rotina-checklist | como revisar a semana e decidir o que cabe na próxima | rotina-integrada | 2026-10-15 |  |
