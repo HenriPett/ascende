@@ -13,7 +13,7 @@ para agente. **O que** escrever, com que título, que fontes e que links está e
 ## O caminho, do texto à URL
 
 ```
-texto pesquisado → content/blog/<slug>.md → npm run blog:indice → npm run blog:check
+texto pesquisado → content/blog/<slug>.md → (imagem? pedir ao Astra) → npm run blog:indice → npm run blog:check
    → npm run build → (checks) → commit "post(blog): <slug>" → push para main
    → Netlify publica → conferir a URL em produção
 ```
@@ -51,6 +51,11 @@ recusados nominalmente, porque o Ascende não tem autor-pessoa, revisão profiss
 Organization "Ascende", fixo no template.
 
 #### Imagem no corpo
+
+**Pedir a imagem ao Astra** (papel "Criação de Imagens do Blog"), com o texto do post já pronto: ele cria a partir
+do molde em `docs/blog/imagens/` e entrega `nome.png` + `nome-360.png`, o alt e a legenda. A imagem passa pela Prisma,
+pelo Farol e pela Fiel antes de ir para `content/blog/img/<slug>/`. Regras de conteúdo (texto ≥ 24 px no arquivo de
+720, tudo o que a imagem diz também no texto) estão no [`EDITORIAL.md`](./EDITORIAL.md), §6 "Imagem".
 
 Só imagem **local**, na pasta do próprio post: `content/blog/img/<slug>/<nome>.png` (ou `.jpg`, `.webp`). No corpo,
 **sozinha na linha**, com alt e legenda:

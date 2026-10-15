@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>Molde editorial Ascende</title>
+<style>
+@font-face {
+  font-family: "Sora Variable";
+  src: url("../../../../node_modules/@fontsource-variable/sora/files/sora-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 800;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 720px; height: 840px; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; color: hsl(235 12% 17%); background: hsl(46 55% 98%); }
+.sheet { width: 720px; height: 840px; padding: 46px 52px 44px; position: relative; overflow: hidden; }
+.brand { display: flex; align-items: center; gap: 10px; font: 650 24px/1.2 "Sora Variable", sans-serif; letter-spacing: -.025em; }
+.brand-mark { width: 32px; height: 32px; flex: none; }
+h1 { margin: 70px 0 0; max-width: 610px; font: 700 42px/1.19 "Sora Variable", sans-serif; letter-spacing: -.035em; }
+.intro { margin: 20px 0 0; font-size: 27px; line-height: 1.38; }
+.steps { margin-top: 43px; border-top: 2px solid hsl(45 22% 76%); }
+.step { display: grid; grid-template-columns: 75px 1fr; padding: 26px 0 28px; border-bottom: 2px solid hsl(45 22% 76%); }
+.number { font: 700 31px/1.2 "Sora Variable", sans-serif; color: hsl(40 90% 30%); }
+.step h2 { margin: 0; font: 650 30px/1.25 "Sora Variable", sans-serif; letter-spacing: -.025em; }
+.step p { margin: 7px 0 0; font-size: 26px; line-height: 1.28; }
+</style>
+<main class="sheet" aria-label="Uma revisão em três perguntas">
+  <div class="brand"><svg class="brand-mark" viewBox="0 0 64 64" fill="none" aria-hidden="true"><defs><linearGradient id="logo-gold" x1="8" y1="52" x2="56" y2="8" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#E39A2E"/><stop offset="1" stop-color="#F8C842"/></linearGradient></defs><circle cx="44" cy="10" r="6" fill="url(#logo-gold)"/><path d="M8 50 L26 28 L36 40 L56 16" stroke="url(#logo-gold)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Ascende</div>
+  <h1>Uma revisão em três perguntas</h1>
+  <p class="intro">Um jeito de organizar a próxima ação.</p>
+  <section class="steps" aria-label="Três perguntas">
+    <div class="step"><span class="number">01</span><div><h2>Observe</h2><p>O que aconteceu de fato?</p></div></div>
+    <div class="step"><span class="number">02</span><div><h2>Escolha</h2><p>O que cabe agora?</p></div></div>
+    <div class="step"><span class="number">03</span><div><h2>Combine</h2><p>Qual é o próximo passo?</p></div></div>
+  </section>
+</main>
+</html>

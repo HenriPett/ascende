@@ -169,6 +169,15 @@ descreve o app sem promessa de resultado e carrega o link de `productPath`.)
 
 ### Imagem
 
+- **Quem faz:** as imagens dos próximos posts são criadas pelo especialista **Astra** (papel "Criação de
+  Imagens do Blog"), a partir do texto do post pronto, e revisadas pela **Prisma** (design), pelo
+  **Farol** (marca) e pela **Fiel** (alegações) antes de entrar em `content/blog/img/<slug>/`.
+- **Molde:** `docs/blog/imagens/` (em criação pelo Astra) — formatos, cores, tipografia e exportação
+  (arquivo de 720 px + variante de 360 px). Imagem nova parte do molde.
+- **Legibilidade (regra da Prisma):** texto dentro da imagem com **≥ 24 px no arquivo de 720 px** de
+  largura (≈ 12 px na tela de 360).
+- **Tudo o que a imagem diz também está no texto do post.** O alt resume a imagem; não substitui o
+  texto.
 - Opcional. Entra quando mostra o que o texto explica (diagrama, captura da tela real com dado de
   demonstração) — nunca enfeite, banco de imagem ou foto de pessoa.
 - Só arquivo local em `content/blog/img/<slug>/`, PNG, JPEG ou WebP, até 500 KB. Nada de SVG, de
@@ -179,7 +188,6 @@ descreve o app sem promessa de resultado e carrega o link de `productPath`.)
 - **legenda** (10–200): obrigatória, termina com o crédito. Imagem com número segue a regra das
   fontes: o número tem fonte em `sources`, citada no texto.
 - Diagrama não leva número nem afirmação que o texto não sustente.
-- Texto que importa não mora só na imagem: o que ela diz também está no parágrafo.
 - Variante `nome-360.png` (360 px, mesma proporção) recomendada para o celular.
 - O `og:image` continua `/icon-512.png`; a imagem do corpo não vira capa nem `image` no JSON-LD.
 
@@ -225,7 +233,7 @@ Ao publicar um post novo, revise os 1–3 posts mais próximos do mesmo cluster 
   Mais um `BreadcrumbList` (Ascende → Blog → título). Proibido: `Person`, `reviewedBy`,
   `aggregateRating`, `image` inventada.
 - Imagem do corpo: `<figure>` com `<img src width height srcset sizes alt loading="lazy"
-  decoding="async">` e `<figcaption>` com a legenda; arquivo servido de `/blog/<slug>/`.
+decoding="async">` e `<figcaption>` com a legenda; arquivo servido de `/blog/<slug>/`.
 
 **Listagem — `https://ascende.site/blog/`**
 
@@ -259,7 +267,9 @@ Antes do commit `post(blog): <slug>`:
       não tem CTA no texto.
 - [ ] Toda afirmação de produto foi conferida abrindo o app em produção.
 - [ ] Links internos da §7 presentes; `related` só com posts publicados.
-- [ ] Imagem (se houver): local, alt descritivo, legenda com crédito, texto também no parágrafo.
+- [ ] Imagem (se houver): criada pelo Astra a partir do molde `docs/blog/imagens/` e revisada por
+      Prisma, Farol e Fiel; texto na imagem ≥ 24 px no arquivo de 720; todo o conteúdo dela também
+      no texto (o alt resume, não substitui); local, alt descritivo, legenda com crédito.
 - [ ] `npm run blog:check` passa; `npm run blog:indice` atualizado; build passa.
 - [ ] Depois do deploy: a URL responde 200 com o artigo no HTML (sem JS), canonical certa, e aparece
       no `https://ascende.site/sitemap.xml`.
