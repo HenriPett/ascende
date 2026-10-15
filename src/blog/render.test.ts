@@ -310,3 +310,14 @@ describe("itálico com sublinhado", () => {
     expect(h).toContain("<em>fim</em>");
   });
 });
+
+describe("listas do artigo quebram palavra longa", () => {
+  const md = (c: string, modo: Record<string, boolean>) => renderToStaticMarkup(createElement(Markdown, { content: c, ...modo }));
+  it("ul e ol com break-words e hyphens-auto só no artigo", () => {
+    const c = "- desnecessariamente\n\n1. desnecessariamente";
+    const a = md(c, { artigo: true });
+    expect(a).toMatch(/<ul class="[^"]*break-words hyphens-auto/);
+    expect(a).toMatch(/<ol class="[^"]*break-words hyphens-auto/);
+    for (const modo of [{}, { doc: true }]) expect(md(c, modo)).not.toContain("hyphens-auto");
+  });
+});
