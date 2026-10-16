@@ -35,10 +35,8 @@ A nota do Procon-MG usa o quilo e o litro como referência e prevê 100 g ou 100
 
 Exemplo hipotético, com preços e produtos inventados. Duas embalagens do mesmo alimento têm estas etiquetas:
 
-| Embalagem | Preço | Por quilo |
-|---|---:|---:|
-| A · 500 g | R$ 9,00 | R$ 18,00 |
-| B · 900 g | R$ 14,00 | ≈ R$ 15,56 |
+- **A, 500 g:** R$ 9,00 — R$ 18,00 por quilo.
+- **B, 900 g:** R$ 14,00 — cerca de R$ 15,56 por quilo (valor arredondado).
 
 Na A, R$ 9,00 ÷ 0,5 kg = R$ 18,00/kg. Na B, R$ 14,00 ÷ 0,9 kg ≈ R$ 15,56/kg. A B custa menos por quilo, mas exige R$ 5,00 a mais no caixa e traz 400 g a mais.
 
