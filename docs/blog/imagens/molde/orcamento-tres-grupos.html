@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>O mês em três grupos — Ascende</title>
+<style>
+@font-face {
+  font-family: "Sora Variable";
+  src: url("../../../../node_modules/@fontsource-variable/sora/files/sora-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 800;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 720px; height: 980px; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; color: hsl(235 12% 17%); background: hsl(46 55% 98%); }
+.sheet { width: 720px; height: 980px; padding: 46px 52px 44px; overflow: hidden; }
+.brand { display: flex; align-items: center; gap: 10px; font: 650 24px/1.2 "Sora Variable", sans-serif; letter-spacing: -.025em; }
+.brand-mark { width: 32px; height: 32px; flex: none; }
+h1 { margin: 55px 0 0; font: 700 42px/1.19 "Sora Variable", sans-serif; letter-spacing: -.035em; }
+.intro { margin: 17px 0 0; font-size: 27px; line-height: 1.33; }
+.groups { margin-top: 40px; border-top: 2px solid hsl(45 22% 76%); }
+.group { padding: 21px 0 22px; border-bottom: 2px solid hsl(45 22% 76%); }
+.group h2 { margin: 0; font: 650 30px/1.25 "Sora Variable", sans-serif; letter-spacing: -.025em; }
+.group p { margin: 7px 0 0; font-size: 26px; line-height: 1.3; }
+.fiction { margin-top: 18px !important; font: 700 24px/1.25 "Sora Variable", sans-serif !important; color: hsl(40 90% 30%); letter-spacing: .01em; }
+.figures { margin-top: 15px; padding-left: 0; list-style: none; }
+.figures li { margin-top: 9px; font-size: 26px; line-height: 1.3; }
+.figures strong { font-weight: 700; }
+</style>
+<main class="sheet" aria-label="O mês em três grupos">
+  <div class="brand"><svg class="brand-mark" viewBox="0 0 64 64" fill="none" aria-hidden="true"><defs><linearGradient id="logo-gold" x1="8" y1="52" x2="56" y2="8" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#E39A2E"/><stop offset="1" stop-color="#F8C842"/></linearGradient></defs><circle cx="44" cy="10" r="6" fill="url(#logo-gold)"/><path d="M8 50 L26 28 L36 40 L56 16" stroke="url(#logo-gold)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Ascende</div>
+  <h1>O mês em três grupos</h1>
+  <p class="intro">Previsto, ocorrido e próxima decisão.</p>
+  <section class="groups" aria-label="Três grupos do orçamento">
+    <div class="group"><h2>Contas conhecidas</h2><p>Anote o valor esperado e a data da próxima conferência.</p></div>
+    <div class="group"><h2>Gastos variáveis</h2><p>Comece com uma estimativa provisória.</p><p class="fiction">EXEMPLO HIPOTÉTICO</p><ul class="figures"><li><strong>Alimentação em casa prevista:</strong> R$ 800</li><li><strong>Ocorrido:</strong> R$ 920</li><li><strong>Próxima decisão:</strong><br>ajustar a categoria ou outra parte do quadro</li></ul></div>
+    <div class="group"><h2>Imprevistos</h2><p>Uma linha própria, com data e motivo.</p></div>
+  </section>
+</main>
+</html>
