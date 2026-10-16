@@ -15,3 +15,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | registro-de-habitos-consistencia | como fazer um registro de hábitos e acompanhar a consistência | rotina-integrada | 2026-10-15 |  |
 | revisao-semanal-rotina-checklist | como revisar a semana e decidir o que cabe na próxima | rotina-integrada | 2026-10-15 |  |
 | orcamento-mes-despesas-variaveis | como organizar o orçamento do mês quando as despesas variam | alimentacao-orcamento | 2026-10-16 |  |
+| preco-por-quilo-comparar-embalagens | como comparar o preço por quilo e o valor final de embalagens no mercado | alimentacao-orcamento | 2026-10-16 |  |
