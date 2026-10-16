@@ -38,7 +38,7 @@ Exemplo hipotético, com preços e produtos inventados. Duas embalagens do mesmo
 - **A, 500 g:** R$ 9,00 — R$ 18,00 por quilo.
 - **B, 900 g:** R$ 14,00 — cerca de R$ 15,56 por quilo (valor arredondado).
 
-Na A, R$ 9,00 ÷ 0,5 kg = R$ 18,00/kg. Na B, R$ 14,00 ÷ 0,9 kg ≈ R$ 15,56/kg. A B custa menos por quilo, mas exige R$ 5,00 a mais no caixa e traz 400 g a mais.
+Na A, R$ 9,00 ÷ 0,5 kg = R$ 18,00/kg. Na B, R$ 14,00 ÷ 0,9 kg ≈ R$ 15,56/kg. A B custa menos por quilo, mas exige R$ 5,00 a mais no caixa e traz 400 g a mais.
 
 Se a compra de hoje tem limite de R$ 10,00 para esse item, a B não cabe — passa R$ 4,00 do limite —, apesar do preço proporcional menor. Se a quantidade extra não será usada, o cálculo por quilo também não resolve a decisão sozinho. Fim do exemplo hipotético.
 
