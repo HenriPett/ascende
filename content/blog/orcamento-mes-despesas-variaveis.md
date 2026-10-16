@@ -33,11 +33,11 @@ Ao lado de cada categoria, faça duas colunas: **previsto** e **ocorrido**. Acre
 
 ## Exemplo hipotético: quando a alimentação em casa muda
 
-Exemplo hipotético, com valores ilustrativos. Uma pessoa prevê R$ 800 para alimentação em casa no mês. Ao fechar o mês, as compras somam R$ 920.
+Exemplo hipotético, com valores ilustrativos. Uma pessoa prevê R$ 800 para alimentação em casa no mês. Ao fechar o mês, as compras somam R$ 920.
 
 Em vez de concluir automaticamente que “faltou disciplina”, ela anota se antecipou compras do mês seguinte, se recebeu visitas ou se os preços observados mudaram. Na próxima previsão, decide se ajusta o valor da categoria ou outra parte do quadro — sem cortar refeições necessárias só para fazer o número fechar. Fim do exemplo hipotético.
 
-![Três grupos do orçamento: contas conhecidas, gastos variáveis e imprevistos. Exemplo hipotético de alimentação em casa com R$ 800 previstos, R$ 920 ocorridos e uma decisão de ajuste.](./orcamento-tres-grupos.webp "Exemplo hipotético, com valores ilustrativos. Diagrama original, 2026. Crédito: Ascende.")
+![Três grupos do orçamento: contas conhecidas, gastos variáveis e imprevistos. Exemplo hipotético de alimentação em casa com R$ 800 previstos, R$ 920 ocorridos e uma decisão de ajuste.](./orcamento-tres-grupos.webp "Exemplo hipotético, com valores ilustrativos. Diagrama original, 2026. Crédito: Ascende.")
 
 Se o problema é decidir o que comprar com o dinheiro disponível, use o guia de [lista de compras semanal dentro do orçamento](/blog/lista-de-compras-semanal-orcamento/). Este artigo cuida do quadro mensal; aquele cuida da ida ao mercado.
 
