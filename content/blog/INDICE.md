@@ -18,4 +18,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | orcamento-mes-despesas-variaveis | como organizar o orçamento do mês quando as despesas variam | alimentacao-orcamento | 2026-10-16 |  |
 | preco-por-quilo-comparar-embalagens | como comparar o preço por quilo e o valor final de embalagens no mercado | alimentacao-orcamento | 2026-10-16 |  |
 | atividade-fisica-semana-imprevisivel | como escolher atividade física possível quando a rotina muda na semana | rotina-integrada | 2026-10-19 |  |
+| rotulo-nutricional-porcao-100g | como comparar rótulo nutricional por porção e por 100 g ou 100 ml | alimentacao-orcamento | 2026-10-19 |  |
 | sono-turnos-horarios-variaveis | como organizar o sono quando o horário de trabalho muda durante a semana | rotina-integrada | 2026-10-19 |  |
