@@ -17,3 +17,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | marmitas-semana-porcionar-guardar | como porcionar e guardar as marmitas da semana com segurança | alimentacao-orcamento | 2026-10-16 |  |
 | orcamento-mes-despesas-variaveis | como organizar o orçamento do mês quando as despesas variam | alimentacao-orcamento | 2026-10-16 |  |
 | preco-por-quilo-comparar-embalagens | como comparar o preço por quilo e o valor final de embalagens no mercado | alimentacao-orcamento | 2026-10-16 |  |
+| sono-turnos-horarios-variaveis | como organizar o sono quando o horário de trabalho muda durante a semana | rotina-integrada | 2026-10-19 |  |
