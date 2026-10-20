@@ -50,6 +50,31 @@
           "@type": "Offer",
           "price": "0",
           "priceCurrency": "BRL"
+        },
+        "publisher": { "@id": "https://ascende.site/#organization" }
+      }
+    </script>
+    <!-- Quem publica o Ascende. O endereço é a sede publicada na Política de
+         Privacidade (src/lib/legal.ts, "Identificação da Controladora") — muda
+         lá, muda aqui; o teste src/prerender/prerender.test.ts confere. Sem
+         contactPoint: não há e-mail nem telefone público de atendimento (o
+         canal é o feedback dentro do app), e inventar um seria pior que não
+         ter. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "@id": "https://ascende.site/#organization",
+        "name": "Ascende",
+        "url": "https://ascende.site/",
+        "logo": "https://ascende.site/icon-512.png",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "Rua Angelo Torinelli, 53, Sala 01, Vila Nova",
+          "addressLocality": "Jaraguá do Sul",
+          "addressRegion": "SC",
+          "postalCode": "89259-200",
+          "addressCountry": "BR"
         }
       }
     </script>
