@@ -11,7 +11,9 @@
 // com outro nome.
 import { checarColecao, type ArquivoDePost, type PastasDeImagem } from "@/lib/blog/checagem";
 import { lerIndice } from "@/lib/blog/indice";
+import { artigoEmMarkdown, listagemEmMarkdown } from "@/lib/blog/markdown";
 import { gerarFeed, gerarSitemap } from "@/lib/blog/sitemap";
+import { gerarLlmsTxt } from "@/lib/agentes/llms";
 import type { ContextoDoBlog, PostDoBlog } from "@/lib/blog/tipos";
 
 /** A interface dos templates. Devolvem o DOCUMENTO inteiro (com <!doctype>). */
@@ -41,6 +43,9 @@ export function gerarBlog(entrada: {
   templates: Templates;
   /** content/blog/img/: slug → (nome → bytes). */
   imagens?: PastasDeImagem;
+  /** src/lib/agentes/llms.txt: o /llms.txt sai daqui, com um link por post
+   *  na seção "## Optional". */
+  llmsBase?: string;
 }): SaidaDoBlog {
   const pastas = entrada.imagens ?? {};
   const { posts, erros, copias } = checarColecao(entrada.arquivos, lerIndice(entrada.indice ?? ""), entrada.hoje, pastas);
@@ -50,6 +55,7 @@ export function gerarBlog(entrada: {
   if (erros.length) return { arquivos: {}, posts: [], erros };
 
   const arquivos: SaidaDoBlog["arquivos"] = { "sitemap.xml": gerarSitemap(posts) };
+  if (entrada.llmsBase !== undefined) arquivos["llms.txt"] = gerarLlmsTxt(entrada.llmsBase, posts);
   if (posts.length === 0) return { arquivos, posts, erros };
 
   const porSlug = new Map(posts.map((p) => [p.slug, p]));
@@ -57,7 +63,9 @@ export function gerarBlog(entrada: {
   for (const p of posts) {
     const relacionados = p.related.map((s) => porSlug.get(s)!).filter(Boolean);
     arquivos[`blog/${p.slug}/index.html`] = entrada.templates.renderArtigo(p, relacionados, entrada.ctx);
+    arquivos[`blog/${p.slug}/index.md`] = artigoEmMarkdown(p);
   }
+  arquivos["blog/index.md"] = listagemEmMarkdown(posts);
   arquivos["blog/feed.xml"] = gerarFeed(posts);
   arquivos[entrada.templates.CAMINHO_DO_TEMA.replace(/^\//, "")] = entrada.templates.TEMA_JS;
   // As imagens vão para a pasta DO ARTIGO (dist/blog/<slug>/), ao lado do

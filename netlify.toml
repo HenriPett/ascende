@@ -5,18 +5,67 @@
 [build.environment]
   NODE_VERSION = "20"
 
-# SPA: todas as rotas caem no index.html (React Router cuida do resto)
+# ─── Rotas ─────────────────────────────────────────────────────────
 #
-# O BLOG DEPENDE DESTA REGRA NÃO TER `force = true`. Sem `force`, o Netlify
-# serve o arquivo que EXISTE antes de aplicar a regra ("shadowing"): o build
-# grava dist/blog/index.html e dist/blog/<slug>/index.html (scripts/blog.mjs),
-# e é esse HTML estático — completo, indexável sem JS — que sai para /blog/ e
-# /blog/<slug>/. Com `force = true` todo artigo viraria o shell da SPA. O mesmo
-# vale para /sitemap.xml e /blog/feed.xml, também gerados no build.
+# NÃO HÁ CATCH-ALL. Antes, `/* → /index.html 200` fazia qualquer endereço
+# responder 200 com o shell da SPA — inclusive os que não existem (um "soft
+# 404" para buscador e agente). Agora:
+#
+# • As páginas públicas são ARQUIVOS pré-renderizados no build
+#   (scripts/prerender.mjs): / → index.html, /privacidade → privacidade.html,
+#   /termos, /aviso-legal, /recusas, /sobre. O Netlify serve o arquivo que
+#   existe sem regra nenhuma. O blog idem (scripts/blog.mjs): /blog/ e
+#   /blog/<slug>/ são dist/blog/**/index.html; /sitemap.xml, /llms.txt e
+#   /blog/feed.xml também são gerados.
+# • A SPA autenticada é reescrita (200, o endereço não muda, a ?query vai
+#   junto) para o shell vazio, dist/app-shell.html. SÓ as rotas que o App.tsx
+#   declara fora das pré-renderizadas: /app/*, /auth/*, /onboarding.
+#   Rota nova de topo no App.tsx precisa de regra aqui — o teste
+#   src/prerender/rotas.test.ts amarra as duas listas e quebra se divergirem.
+# • Todo o resto cai no 404.html da casa, com status 404 (o Netlify faz isso
+#   sozinho quando nenhuma regra casa e o arquivo não existe).
+# • Nenhuma regra tem `force = true`: arquivo que existe vence a regra.
+
+# Aliases em inglês das páginas de confiança.
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from = "/about"
+  to = "/sobre"
+  status = 301
+
+[[redirects]]
+  from = "/privacy"
+  to = "/privacidade"
+  status = 301
+
+# A SPA. `/app` e `/app/*` são regras separadas: o splat exige a barra.
+[[redirects]]
+  from = "/app"
+  to = "/app-shell.html"
   status = 200
+
+[[redirects]]
+  from = "/app/*"
+  to = "/app-shell.html"
+  status = 200
+
+[[redirects]]
+  from = "/auth"
+  to = "/app-shell.html"
+  status = 200
+
+[[redirects]]
+  from = "/auth/*"
+  to = "/app-shell.html"
+  status = 200
+
+[[redirects]]
+  from = "/onboarding"
+  to = "/app-shell.html"
+  status = 200
+
+# Markdown para agentes (Accept: text/markdown): a edge function
+# netlify/edge-functions/markdown.ts declara o próprio `path` e
+# `excludedPath` (sem bloco [[edge_functions]] aqui).
 
 # ─── Headers de segurança ────────────────────────────────────────
 [[headers]]

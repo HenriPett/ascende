@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { syncAnalytics } from "@/lib/analytics";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -14,8 +14,8 @@ import Landing from "@/pages/Landing";
 import Auth from "@/pages/Auth";
 const AuthCallback = lazy(() => import("@/pages/AuthCallback"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
-const Legal = lazy(() => import("@/pages/Legal"));
-const Recusas = lazy(() => import("@/pages/Recusas"));
+// Legal, Recusas e Sobre: chunks com preload (pré-render), ver src/paginasPublicas.ts.
+import { Legal, Recusas, Sobre } from "@/paginasPublicas";
 const NotFound = lazy(() => import("@/pages/NotFound"));
 // As páginas de /app vivem no registro de rotas: é ele que o teste usa para
 // provar que nenhuma rota antiga sumiu ou virou redirect (src/lib/routes.ts).
@@ -59,11 +59,14 @@ function AnalyticsGate() {
   return null;
 }
 
-export default function App() {
+/** A árvore inteira com o roteador recebido: BrowserRouter no navegador,
+ *  StaticRouter no pré-render (src/prerender/entrada.tsx). Uma árvore só —
+ *  o HTML do build é o mesmo que o navegador monta. */
+export function AppComRoteador({ Roteador }: { Roteador: (p: { children: ReactNode }) => ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <BrowserRouter>
+        <Roteador>
           <AnalyticsGate />
           {/* Guarda o `?convite=` antes que o redirecionamento para /auth ou
               /onboarding leve a URL embora. Ver ConviteEmTransito.tsx. */}
@@ -77,6 +80,7 @@ export default function App() {
             <Route path="/termos" element={<Legal doc="termos" />} />
             <Route path="/aviso-legal" element={<Legal doc="aviso-legal" />} />
             <Route path="/recusas" element={<Recusas />} />
+            <Route path="/sobre" element={<Sobre />} />
             <Route
               path="/onboarding"
               element={<RequireAuth><Onboarding /></RequireAuth>}
@@ -103,9 +107,13 @@ export default function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>
-        </BrowserRouter>
+        </Roteador>
         <Toaster position="top-center" richColors />
       </TooltipProvider>
     </QueryClientProvider>
   );
+}
+
+export default function App() {
+  return <AppComRoteador Roteador={BrowserRouter} />;
 }

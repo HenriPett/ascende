@@ -11,12 +11,24 @@
  *
  * Ao trocar a estratégia, suba o VERSION: os caches antigos são apagados no
  * activate e o SW novo assume na hora (skipWaiting + clients.claim).
+ *
+ * v2: o shell da SPA é /app-shell.html. O /index.html passou a ser a home
+ * PRÉ-RENDERIZADA (scripts/prerender.mjs), e as páginas públicas são HTML
+ * próprio — guardar qualquer navegação como "o shell" faria o app abrir,
+ * offline, com o texto da política de privacidade até o React montar. Só a
+ * navegação da SPA (/app, /auth, /onboarding — as rotas que o netlify.toml
+ * reescreve para o shell) atualiza o cache do shell.
  */
 
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL_CACHE = `ascende-shell-${VERSION}`;
 const ASSET_CACHE = `ascende-assets-${VERSION}`;
-const SHELL_URL = "/index.html";
+const SHELL_URL = "/app-shell.html";
+
+/** As rotas que o netlify.toml reescreve para o app-shell. */
+function ehRotaDaSpa(pathname) {
+  return ["/app", "/auth", "/onboarding"].some((r) => pathname === r || pathname.startsWith(`${r}/`));
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -45,16 +57,20 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-/** Rede primeiro, cache como rede de segurança. Guarda uma cópia do shell. */
+/** Rede primeiro, cache como rede de segurança. Só a resposta de uma rota da
+ *  SPA é o shell — é só ela que atualiza a cópia guardada. */
 async function networkFirst(request) {
+  const daSpa = ehRotaDaSpa(new URL(request.url).pathname);
   try {
     const response = await fetch(request);
-    if (response && response.ok) {
+    if (daSpa && response && response.ok) {
       const copy = response.clone();
       caches.open(SHELL_CACHE).then((cache) => cache.put(SHELL_URL, copy)).catch(() => {});
     }
     return response;
   } catch (err) {
+    // Sem rede, qualquer navegação abre o shell (como antes): o React
+    // desenha a página da URL a partir dos assets em cache.
     const cached = await caches.match(SHELL_URL);
     if (cached) return cached;
     throw err;

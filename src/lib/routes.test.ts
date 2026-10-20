@@ -21,6 +21,7 @@ import {
   FROZEN_EXTERNAL_PUBLIC_PATHS, NAV, APP_BASE, appPath,
 } from "@/lib/routes";
 import { isPublicPath } from "@/lib/analytics";
+import { lerRegras, resolver } from "@/prerender/netlify";
 
 /**
  * Espelha EXATAMENTE como o App.tsx monta as rotas de /app: um pai "/app" com
@@ -321,15 +322,19 @@ describe("alvos da barra", () => {
 /* ═══ Achados fora de /app, mesmo risco ══════════════════════════════ */
 
 describe("links externos que não são /app", () => {
-  it("o fallback de SPA da CDN existe (sem ele, TODO deep link morre antes do React)", () => {
-    // /* -> /index.html com status 200. Se alguém trocar por 301 ou remover, a
-    // pessoa recebe 404 do Netlify em /app/prosperidade e o React nem roda —
-    // quebra mais que qualquer rota individual, e de uma vez.
-    const netlify = readFileSync("netlify.toml", "utf8");
-    const bloco = netlify.slice(netlify.indexOf("[[redirects]]"));
-    expect(bloco).toMatch(/from\s*=\s*"\/\*"/);
-    expect(bloco).toMatch(/to\s*=\s*"\/index\.html"/);
-    expect(bloco).toMatch(/status\s*=\s*200/);
+  it("o fallback de SPA da CDN cobre todo deep link de /app (sem ele, o React nem roda)", () => {
+    // Sem o catch-all de antes, /app/* tem regra própria para o shell, 200.
+    // Se alguém trocar por 301 ou remover, a pessoa recebe 404 do Netlify em
+    // /app/prosperidade — quebra mais que qualquer rota individual, e de uma
+    // vez. As rotas de topo são conferidas em src/prerender/rotas.test.ts.
+    const regras = lerRegras(readFileSync("netlify.toml", "utf8"));
+    const arquivos = new Set(["index.html", "app-shell.html", "404.html"]);
+    for (const r of APP_ROUTES) {
+      const url = r.path === "" ? "/app" : `/app/${r.path.replace(/:[^/]+/g, "x").replace(/\*$/, "x")}`;
+      const res = resolver(url, regras, arquivos);
+      expect(res.tipo === "regra" && res.regra.to, url).toBe("/app-shell.html");
+      expect(res.status, url).toBe(200);
+    }
   });
 
   it("os templates aprovados pela Meta apontam para rota que existe", () => {
