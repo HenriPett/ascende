@@ -18,8 +18,9 @@ export default function Legal({ doc }: { doc: string }) {
     <div className="min-h-dvh bg-background bg-ether">
       <header className="sticky top-0 z-40 glass border-x-0 border-t-0 rounded-none">
         <div className="container flex items-center justify-between h-14">
-          <Link to="/" aria-label="Ascende — início"><Logo size="sm" /></Link>
-          <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
+          {/* Alvos de 44 pt: eram ~20 (a altura do texto e do logo). */}
+          <Link to="/" aria-label="Ascende — início" className="inline-flex items-center min-h-11"><Logo size="sm" /></Link>
+          <Link to="/" className="inline-flex items-center min-h-11 text-sm text-muted-foreground hover:text-foreground">
             Voltar ao início
           </Link>
         </div>
@@ -47,7 +48,7 @@ export default function Legal({ doc }: { doc: string }) {
         </nav>
 
         <article className="rounded-2xl border bg-card p-5 sm:p-8 text-sm">
-          <Markdown content={current.content} doc />
+          <Markdown content={current.content} doc pagina />
         </article>
 
         <p className="text-xs text-muted-foreground mt-6 text-center">
