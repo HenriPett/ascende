@@ -133,3 +133,46 @@ export function paginaSemApp(html: string): string {
 
 export const canonicaDe = (rota: string) => (rota === "/" ? `${SITE_URL}/` : `${SITE_URL}${rota}`);
 
+
+const LD_JSON = /<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g;
+
+/** Os blocos JSON-LD de `html` que NÃO são JSON. O texto de <script> não
+ *  decodifica entidades: um `&quot;` do renderToStaticMarkup quebra o bloco
+ *  para quem lê sem JS (o pré-render recusa publicar assim). */
+export function jsonLdInvalidos(html: string): string[] {
+  const out: string[] = [];
+  for (const m of html.matchAll(LD_JSON)) {
+    try { JSON.parse(m[1]); } catch { out.push(m[1].slice(0, 80)); }
+  }
+  return out;
+}
+
+export interface PerguntaFaq { pergunta: string; resposta: string }
+
+/** As perguntas e respostas do FAQPage do markup. Na página, o acordeão
+ *  fechado não monta as respostas — no HTML sem JS elas só existem aqui. */
+export function faqDoMarkup(markup: string): PerguntaFaq[] {
+  for (const m of markup.matchAll(LD_JSON)) {
+    const d = JSON.parse(m[1]);
+    if (d["@type"] !== "FAQPage") continue;
+    return (d.mainEntity as { name: string; acceptedAnswer: { text: string } }[])
+      .map((q) => ({ pergunta: q.name, resposta: q.acceptedAnswer.text }));
+  }
+  return [];
+}
+
+export const TITULO_DO_FAQ = "Perguntas diretas, respostas diretas";
+
+/** O FAQ entra no index.md logo abaixo do título da seção, como `###`
+ *  pergunta + resposta. O título sumiu da Landing → erro (o FAQ não pode
+ *  sair do .md em silêncio). */
+export function comFaq(md: string, faq: PerguntaFaq[], titulo = TITULO_DO_FAQ): string {
+  if (!faq.length) return md;
+  const linha = `## ${titulo}`;
+  const i = md.split("\n").indexOf(linha);
+  if (i < 0) throw new Error(`pré-render: o index.md não tem "${linha}" para receber o FAQ`);
+  const linhas = md.split("\n");
+  const blocos = faq.map((f) => `### ${f.pergunta}\n\n${f.resposta}`).join("\n\n");
+  linhas.splice(i + 1, 0, "", blocos);
+  return linhas.join("\n");
+}

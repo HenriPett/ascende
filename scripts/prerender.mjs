@@ -51,7 +51,7 @@ try {
   }
   const p = await vite.ssrLoadModule("/src/prerender/paginas.ts");
   const { renderizarRota, renderizar404 } = await vite.ssrLoadModule("/src/prerender/entrada.tsx");
-  const { htmlParaMarkdown } = await vite.ssrLoadModule("/src/lib/agentes/htmlParaMarkdown.ts");
+  const { htmlParaMarkdown, linksAbsolutos } = await vite.ssrLoadModule("/src/lib/agentes/htmlParaMarkdown.ts");
   const { PRIVACIDADE, TERMOS, AVISO_LEGAL } = await vite.ssrLoadModule("/src/lib/legal.ts");
   const { SOBRE } = await vite.ssrLoadModule("/src/lib/sobre.ts");
   const { TEMA_JS } = await vite.ssrLoadModule("/src/blog/render.tsx");
@@ -70,8 +70,12 @@ try {
     if (!markup.includes("<h1")) throw new Error(`${pg.rota}: o pré-render saiu sem <h1>`);
     let html = p.comTema(p.comConteudo(shell, markup));
     if (pg.cabeca) html = p.semJsonLd(p.aplicarCabeca(html, { ...pg.cabeca, canonical: p.canonicaDe(pg.rota) }));
+    const quebrados = p.jsonLdInvalidos(html);
+    if (quebrados.length) throw new Error(`${pg.rota}: JSON-LD que não é JSON: ${quebrados.join(" | ")}`);
     escrever(pg.arquivo, html);
-    const md = fonteMd[pg.rota]?.trim() ?? htmlParaMarkdown(markup, SITE_URL).trim();
+    const md = fonteMd[pg.rota] !== undefined
+      ? linksAbsolutos(fonteMd[pg.rota].trim(), SITE_URL)
+      : p.comFaq(htmlParaMarkdown(markup, SITE_URL).trim(), p.faqDoMarkup(markup));
     escrever(pg.md, `${md}\n\nURL: ${p.canonicaDe(pg.rota)}\n`);
   }
 

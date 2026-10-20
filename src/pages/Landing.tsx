@@ -12,6 +12,7 @@ import Logo from "@/components/core/Logo";
 import { BLOG_TEM_POSTS } from "@/blog/temPosts";
 import { consumirMontagemDoPrerender } from "@/lib/montagem";
 import SiteFooter from "@/components/core/SiteFooter";
+import { jsonParaScript } from "@/blog/formato";
 
 /* ─────────────────────────────────────────────────────────────────
    Demo animado da captura: a frase é "digitada" e vira registros
@@ -794,9 +795,12 @@ export default function Landing() {
       {/* ─── Rodapé ─── */}
       <SiteFooter />
 
-      {/* SEO: marcação estruturada do FAQ acima (conteúdo espelhado manualmente) */}
-      <script type="application/ld+json">
-        {JSON.stringify({
+      {/* SEO: marcação estruturada do FAQ acima (conteúdo espelhado manualmente).
+          `dangerouslySetInnerHTML`, como no blog: como filho, o pré-render
+          (renderToStaticMarkup) escaparia as aspas em &quot; e o JSON-LD do
+          HTML servido sem JS deixaria de ser JSON. jsonParaScript neutraliza
+          `</script>`. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonParaScript({
           "@context": "https://schema.org",
           "@type": "FAQPage",
           mainEntity: [
@@ -849,8 +853,7 @@ export default function Landing() {
               },
             },
           ],
-        })}
-      </script>
+        }) }} />
     </div>
   );
 }

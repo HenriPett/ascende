@@ -12,8 +12,10 @@ vi.mock("@/integrations/supabase/client", () => import("@/prerender/supabaseAuse
 
 import { renderizar404, renderizarRota } from "@/prerender/entrada";
 import {
-  aplicarCabeca, canonicaDe, comConteudo, comTema, PAGINAS_PRE_RENDERIZADAS, paginaSemApp, semJsonLd,
+  aplicarCabeca, canonicaDe, comConteudo, comFaq, comTema, faqDoMarkup, jsonLdInvalidos, PAGINAS_PRE_RENDERIZADAS,
+  paginaSemApp, semJsonLd, TITULO_DO_FAQ,
 } from "@/prerender/paginas";
+import { htmlParaMarkdown } from "@/lib/agentes/htmlParaMarkdown";
 import { PAGINAS_PUBLICAS } from "@/lib/blog/sitemap";
 import { PRIVACIDADE } from "@/lib/legal";
 import { SOBRE } from "@/lib/sobre";
@@ -38,6 +40,28 @@ describe("cada página pública pré-renderizada", () => {
     expect(texto(await renderizarRota("/privacidade"))).toContain("Identificação da Controladora");
     expect(texto(await renderizarRota("/sobre"))).toContain("Quem opera o Ascende");
     expect(texto(await renderizarRota("/recusas"))).toContain("Nunca venderemos seus dados");
+  });
+
+  it("todo JSON-LD do HTML pré-renderizado é JSON (o texto de <script> não decodifica &quot;)", async () => {
+    for (const p of PAGINAS_PRE_RENDERIZADAS) {
+      const html = comConteudo(INDEX, await renderizarRota(p.rota));
+      expect(jsonLdInvalidos(html), p.rota).toEqual([]);
+    }
+    const home = await renderizarRota("/");
+    expect(home).toContain('"@type":"FAQPage"');
+    expect(jsonLdInvalidos('<script type="application/ld+json">{&quot;a&quot;:1}</script>')).toHaveLength(1);
+  });
+
+  it("index.md tem o FAQ inteiro (o acordeão fechado não monta as respostas) e títulos com <br> inteiros", async () => {
+    const home = await renderizarRota("/");
+    const faq = faqDoMarkup(home);
+    expect(faq.length).toBeGreaterThanOrEqual(6);
+    const md = comFaq(htmlParaMarkdown(home, "https://ascende.site"), faq);
+    const secao = md.slice(md.indexOf(`## ${TITULO_DO_FAQ}`));
+    for (const f of faq) expect(secao).toContain(`### ${f.pergunta}\n\n${f.resposta}`);
+    expect(md).toMatch(/^## Batalhas: para o que rouba seu dinheiro e sua energia\.$/m);
+    expect(md).not.toMatch(/^- •/m);
+    expect(() => comFaq("# x\n", faq)).toThrow(/FAQ/);
   });
 
   it("as páginas pré-renderizadas SÃO as do sitemap (uma rota pública nova entra nas duas listas)", () => {

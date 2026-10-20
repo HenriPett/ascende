@@ -65,7 +65,12 @@
 
 # Markdown para agentes (Accept: text/markdown): a edge function
 # netlify/edge-functions/markdown.ts declara o próprio `path` e
-# `excludedPath` (sem bloco [[edge_functions]] aqui).
+# `excludedPath` (sem bloco [[edge_functions]] aqui). Pedido direto, o .md
+# sai com o tipo certo:
+[[headers]]
+  for = "/*.md"
+  [headers.values]
+    Content-Type = "text/markdown; charset=utf-8"
 
 # ─── Headers de segurança ────────────────────────────────────────
 [[headers]]

@@ -90,7 +90,14 @@ function blocos(n: No | string, base: string, out: string[]): void {
   if (typeof n === "string") { const t = inline(n, base).trim(); if (t) out.push(t); return; }
   if (DESCARTAR.has(n.tag) || escondido(n)) return;
   const h = n.tag.match(/^h([1-6])$/);
-  if (h) { const t = inline(n, base).trim(); if (t) out.push(`${"#".repeat(Number(h[1]))} ${t}`); return; }
+  if (h) {
+    // Título é UMA linha em Markdown: o <br> de diagramação ("Batalhas: para
+    // o que rouba<br>seu dinheiro…") vira espaço, senão o resto sairia como
+    // parágrafo.
+    const t = inline(n, base).replace(/\s*\n\s*/g, " ").trim();
+    if (t) out.push(`${"#".repeat(Number(h[1]))} ${t}`);
+    return;
+  }
   if (n.tag === "p" || n.tag === "figcaption" || n.tag === "summary" || n.tag === "dt") {
     const t = inline(n, base).trim().replace(/ *\n */g, "  \n");
     if (t) out.push(t);
@@ -112,6 +119,8 @@ function blocos(n: No | string, base: string, out: string[]): void {
       // Numeração desenhada à mão dentro do <li> de um <ol> ("1", "2"…) já é
       // a do Markdown: sem isso sairia "1. 1".
       if (n.tag === "ol" && /^\d+\.?$/.test(dentro[0] ?? "")) dentro.shift();
+      // E o marcador desenhado no texto ("• Captura por frase") já é o "- ".
+      if (dentro[0]) dentro[0] = dentro[0].replace(/^[•·▪◦‣–—-]\s+/, "");
       if (!dentro.length) continue;
       const marca = n.tag === "ol" ? `${i++}. ` : "- ";
       itens.push(marca + dentro.join("\n\n").split("\n").map((l, j) => (j && l ? " ".repeat(marca.length) + l : l)).join("\n"));
@@ -132,6 +141,12 @@ function blocos(n: No | string, base: string, out: string[]): void {
 
 /** `base`: origem para tornar absolutos os links internos (`/recusas` →
  *  `https://ascende.site/recusas`), porque o Markdown sai do contexto do site. */
+/** Links internos do Markdown escrito à mão (`](/recusas)`) em URL
+ *  absoluta, como os convertidos — o .md sai do contexto do site. */
+export function linksAbsolutos(md: string, base: string): string {
+  return md.replace(/\]\(\s*\/(?!\/)/g, `](${base}/`);
+}
+
 export function htmlParaMarkdown(html: string, base: string): string {
   const out: string[] = [];
   blocos(arvore(html), base, out);
