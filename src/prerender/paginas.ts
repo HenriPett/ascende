@@ -48,7 +48,7 @@ export const PAGINAS_PRE_RENDERIZADAS: readonly PaginaPreRenderizada[] = [
     rota: "/recusas", arquivo: "recusas.html", md: "recusas.md",
     cabeca: {
       title: "O que o Ascende recusa",
-      description: "Os nãos públicos do Ascende: não vender dados, não aceitar anúncios, não usar notificação de culpa — e onde cada um está no produto.",
+      description: "Os nãos públicos do Ascende: não vender dados, não aceitar anúncios, não usar notificação de culpa — cada um com a razão por trás dele.",
     },
   },
   {
