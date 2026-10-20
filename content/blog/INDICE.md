@@ -20,5 +20,6 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | atividade-fisica-semana-imprevisivel | como escolher atividade física possível quando a rotina muda na semana | rotina-integrada | 2026-10-19 |  |
 | rotulo-nutricional-porcao-100g | como comparar rótulo nutricional por porção e por 100 g ou 100 ml | alimentacao-orcamento | 2026-10-19 |  |
 | sono-turnos-horarios-variaveis | como organizar o sono quando o horário de trabalho muda durante a semana | rotina-integrada | 2026-10-19 |  |
+| assinaturas-cobrancas-recorrentes-revisar | como revisar assinaturas e cancelar a renovação no canal que faz a cobrança | alimentacao-orcamento | 2026-10-20 |  |
 | frutas-hortalicas-usar-primeiro-guardar | como decidir quais frutas e hortaliças usar primeiro depois das compras | alimentacao-orcamento | 2026-10-20 |  |
 | permissoes-apps-saude-financas | como revisar permissões e uso de dados em aplicativos de saúde e finanças | ia-privacidade | 2026-10-20 |  |
