@@ -7,8 +7,10 @@
 // build a partir dele. O arquivo estático saiu de public/ para não existirem
 // duas verdades sobre o que o Google deve ler.
 //
-// Com 0 posts o sitemap é exatamente o de antes: as mesmas 5 URLs, com as
-// mesmas frequências e prioridades. Nenhuma entrada de blog aparece.
+// Com 0 posts o sitemap é o das páginas públicas (as 5 de antes do blog e
+// /sobre, de 20/10/2026), com as mesmas frequências e prioridades. Nenhuma
+// entrada de blog aparece. Cada página pública é também pré-renderizada
+// (src/prerender/paginas.ts) — o teste confere que as duas listas batem.
 import { DESCRICAO_DO_BLOG, SITE_URL, type PostDoBlog } from "@/lib/blog/tipos";
 
 export interface PaginaPublica {
@@ -17,12 +19,13 @@ export interface PaginaPublica {
   priority: string;
 }
 
-/** As páginas públicas indexáveis, na ordem do sitemap de antes. Rota pública
+/** As páginas públicas indexáveis, na ordem do sitemap. Rota pública
  *  nova (fora de /app, /onboarding e /auth, que o robots.txt fecha) entra
  *  aqui — e só aqui. */
 export const PAGINAS_PUBLICAS: readonly PaginaPublica[] = [
   { caminho: "/", changefreq: "weekly", priority: "1.0" },
   { caminho: "/recusas", changefreq: "monthly", priority: "0.6" },
+  { caminho: "/sobre", changefreq: "monthly", priority: "0.5" },
   { caminho: "/privacidade", changefreq: "monthly", priority: "0.3" },
   { caminho: "/termos", changefreq: "monthly", priority: "0.3" },
   { caminho: "/aviso-legal", changefreq: "monthly", priority: "0.3" },

@@ -128,15 +128,21 @@ function Figura({ img, alt, legenda }: { img: ImagemDoPost; alt: string; legenda
   );
 }
 
+/* `pagina` (com `doc`): as páginas públicas de texto — Legal e Sobre — que
+   saem PRÉ-RENDERIZADAS no build. Lá o `#` precisa ser <h1>/<h2>/<h3> de
+   verdade: é a estrutura que buscador, agente e leitor de tela leem. As
+   classes são as do modo doc, então nada muda na tela; e o texto é do
+   repositório, então os links `[texto](href)` funcionam (no /sobre eles
+   apareciam como texto literal). Planos e chat seguem com <p>. */
 export function Markdown({
-  content, doc = false, artigo = false, imagens = {},
-}: { content: string; doc?: boolean; artigo?: boolean; imagens?: Record<string, ImagemDoPost> }) {
+  content, doc = false, artigo = false, pagina = false, imagens = {},
+}: { content: string; doc?: boolean; artigo?: boolean; pagina?: boolean; imagens?: Record<string, ImagemDoPost> }) {
   const lines = content.replace(/\r/g, "").split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
   let key = 0;
   const ids = new Map<string, number>();
-  const il = (t: string) => inline(t, artigo);
+  const il = (t: string) => inline(t, artigo || pagina);
 
   // Classes por modo: chat (compacto), documento (planos) e artigo (blog —
   // a especificação de leitura da Prisma: corpo 17/27, h2 22/28, h3 20/25).
@@ -257,6 +263,17 @@ export function Markdown({
           ? <h2 key={key++} id={id} className={cls.h12}>{il(texto)}</h2>
           : <h3 key={key++} id={id} className={cls.h3}>{il(texto)}</h3>
       );
+      i++;
+      continue;
+    }
+    if (h && pagina) {
+      const nivel = h[1].length;
+      const Tag = nivel === 1 ? "h1" : nivel === 2 ? "h2" : "h3";
+      // `tracking-normal`: o index.css aperta todo h1/h2/h3 (-0.02em), e no
+      // modo doc estes títulos eram <p> com espaçamento normal. Sem isto o
+      // título ficava mais apertado que antes (Sentinela) — e a promessa do
+      // modo é zero mudança visual.
+      blocks.push(<Tag key={key++} className={`${nivel <= 2 ? cls.h12 : cls.h3} tracking-normal`}>{il(h[2])}</Tag>);
       i++;
       continue;
     }

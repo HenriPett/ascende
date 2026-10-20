@@ -136,7 +136,8 @@ try {
     const templates = temPost
       ? await vite.ssrLoadModule("/src/blog/render.tsx")
       : { renderListagem: () => "", renderArtigo: () => "" };
-    const out = gerarBlog({ arquivos, indice: indiceTexto, hoje, ctx, templates, imagens });
+    const llmsBase = readFileSync(join(RAIZ, "src", "lib", "agentes", "llms.txt"), "utf8");
+    const out = gerarBlog({ arquivos, indice: indiceTexto, hoje, ctx, templates, imagens, llmsBase });
     if (out.erros.length) {
       console.error(`blog: o build NÃO publica — ${out.erros.length} erro(s):`);
       for (const e of out.erros) console.error(`  ✗ ${e}`);

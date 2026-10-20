@@ -17,6 +17,7 @@ import { atualizarIndice, gerarIndice, lerIndice } from "@/lib/blog/indice";
 import { dataRfc822, gerarFeed, gerarSitemap, PAGINAS_PUBLICAS } from "@/lib/blog/sitemap";
 import { cssDoIndex, gerarBlog, type Templates } from "@/lib/blog/pipeline";
 import * as render from "@/blog/render";
+import { casaRegra, lerRegras } from "@/prerender/netlify";
 
 const HOJE = "2026-10-14";
 const PASTA = join(__dirname, "fixtures", "posts");
@@ -406,16 +407,16 @@ describe("o INDICE", () => {
 // ─── 3. Sitemap e RSS ───────────────────────────────────────────────────
 
 describe("sitemap e RSS", () => {
-  it("com 0 posts o sitemap é BYTE A BYTE o public/sitemap.xml de antes (as 5 URLs)", () => {
+  it("com 0 posts o sitemap é BYTE A BYTE o das páginas públicas (as 5 de antes do blog + /sobre)", () => {
     const antes = readFileSync(join(__dirname, "fixtures", "sitemap-de-antes.xml"), "utf8");
     expect(gerarSitemap([])).toBe(antes);
-    expect(PAGINAS_PUBLICAS.map((p) => p.caminho)).toEqual(["/", "/recusas", "/privacidade", "/termos", "/aviso-legal"]);
+    expect(PAGINAS_PUBLICAS.map((p) => p.caminho)).toEqual(["/", "/recusas", "/sobre", "/privacidade", "/termos", "/aviso-legal"]);
   });
 
-  it("com posts: as 5 de sempre + /blog/ + cada post, lastmod com data real (modificação se houver)", () => {
+  it("com posts: as 6 páginas públicas + /blog/ + cada post, lastmod com data real (modificação se houver)", () => {
     const { posts } = checarColecao(fixtures(), lerIndice(indiceDasFixtures()), HOJE, imagensDasFixtures());
     const xml = gerarSitemap(posts);
-    expect((xml.match(/<loc>/g) ?? []).length).toBe(5 + 1 + 3);
+    expect((xml.match(/<loc>/g) ?? []).length).toBe(6 + 1 + 3);
     expect(xml).toContain("<loc>https://ascende.site/blog/</loc>\n    <lastmod>2026-09-20</lastmod>");
     expect(xml).toContain("<loc>https://ascende.site/blog/mercado-no-orcamento-do-mes/</loc>\n    <lastmod>2026-09-20</lastmod>");
     expect(xml).toContain("<loc>https://ascende.site/blog/rotina-de-registro-em-uma-frase/</loc>\n    <lastmod>2026-09-01</lastmod>");
@@ -444,7 +445,7 @@ const falsos: Templates = {
 };
 
 describe("o pipeline", () => {
-  it("A REGRA DO ZERO: sem post, só o sitemap das 5 — nada de blog/, feed ou listagem", () => {
+  it("A REGRA DO ZERO: sem post, só o sitemap das páginas públicas — nada de blog/, feed ou listagem", () => {
     const out = gerarBlog({ arquivos: [], indice: null, hoje: HOJE, ctx: CTX, templates: falsos });
     expect(out.erros).toEqual([]);
     expect(Object.keys(out.arquivos)).toEqual(["sitemap.xml"]);
@@ -455,11 +456,13 @@ describe("o pipeline", () => {
     const out = gerarBlog({ arquivos: fixtures(), indice: indiceDasFixtures(), imagens: imagensDasFixtures(), hoje: HOJE, ctx: CTX, templates: falsos });
     expect(out.erros).toEqual([]);
     expect(Object.keys(out.arquivos).sort()).toEqual([
-      "blog/feed.xml", "blog/index.html",
-      "blog/mercado-no-orcamento-do-mes/index.html", "blog/privacidade-do-conselheiro/index.html",
+      "blog/feed.xml", "blog/index.html", "blog/index.md",
+      "blog/mercado-no-orcamento-do-mes/index.html", "blog/mercado-no-orcamento-do-mes/index.md",
+      "blog/privacidade-do-conselheiro/index.html", "blog/privacidade-do-conselheiro/index.md",
       "blog/rotina-de-registro-em-uma-frase/diagrama-da-frase-360.png",
       "blog/rotina-de-registro-em-uma-frase/diagrama-da-frase.png",
-      "blog/rotina-de-registro-em-uma-frase/index.html", "blog/tema.js", "sitemap.xml",
+      "blog/rotina-de-registro-em-uma-frase/index.html", "blog/rotina-de-registro-em-uma-frase/index.md",
+      "blog/tema.js", "sitemap.xml",
     ]);
     // Os BYTES do arquivo, sem conversão: o que está em content/ é o que vai ao ar.
     const pasta = imagensDasFixtures()["rotina-de-registro-em-uma-frase"];
@@ -476,6 +479,32 @@ describe("o pipeline", () => {
     expect(out.posts.find((p) => p.slug === "mercado-no-orcamento-do-mes")!.imagens).toEqual({});
     expect(out.arquivos["blog/mercado-no-orcamento-do-mes/index.html"])
       .toBe("ARTIGO:mercado-no-orcamento-do-mes:rotina-de-registro-em-uma-frase");
+  });
+
+  it("Markdown para agentes: cada post com H1, data, corpo com links e imagens absolutos, e fontes; a listagem", () => {
+    const out = gerarBlog({ arquivos: fixtures(), indice: indiceDasFixtures(), imagens: imagensDasFixtures(), hoje: HOJE, ctx: CTX, templates: falsos });
+    const md = out.arquivos["blog/rotina-de-registro-em-uma-frase/index.md"] as string;
+    const p = out.posts.find((x) => x.slug === "rotina-de-registro-em-uma-frase")!;
+    expect(md.startsWith(`# ${p.title}\n\n> ${p.description}\n\nPublicado em ${p.datePublished}`)).toBe(true);
+    expect(md).toContain("](https://ascende.site/blog/rotina-de-registro-em-uma-frase/diagrama-da-frase.png ");
+    expect(md).not.toMatch(/\]\(\.\//);
+    expect(md).not.toMatch(/\]\(\/(?!\/)/);
+    expect(md).toContain("## Fontes\n\n- [");
+    expect(md.trimEnd().endsWith(`URL: ${p.url}`)).toBe(true);
+    const lista = out.arquivos["blog/index.md"] as string;
+    expect(lista.startsWith("# Blog do Ascende\n\n> ")).toBe(true);
+    expect(lista.indexOf(out.posts[0].url)).toBeLessThan(lista.indexOf(out.posts[2].url));
+  });
+
+  it("/llms.txt sai do pipeline com um link por post (do mais novo) — e sem post, sem a seção Optional", () => {
+    const base = readFileSync(join(__dirname, "..", "agentes", "llms.txt"), "utf8");
+    const out = gerarBlog({ arquivos: fixtures(), indice: indiceDasFixtures(), imagens: imagensDasFixtures(), hoje: HOJE, ctx: CTX, templates: falsos, llmsBase: base });
+    const txt = out.arquivos["llms.txt"] as string;
+    const ultimos = txt.trimEnd().split("\n").slice(-3);
+    expect(ultimos).toEqual(out.posts.map((p) => `- [${p.title}](${p.url}): ${p.description}`));
+    const vazio = gerarBlog({ arquivos: [], indice: null, hoje: HOJE, ctx: CTX, templates: falsos, llmsBase: base });
+    expect(Object.keys(vazio.arquivos).sort()).toEqual(["llms.txt", "sitemap.xml"]);
+    expect(vazio.arquivos["llms.txt"]).not.toContain("## Optional");
   });
 
   it("um erro na coleção não publica NADA — nem os posts certos", () => {
@@ -523,11 +552,16 @@ describe("o pipeline", () => {
 
 describe("as travas que o blog depende e que moram em outros arquivos", () => {
   const raiz = join(__dirname, "..", "..", "..");
-  it("o Netlify não força o catch-all (senão todo artigo viraria o shell da SPA)", () => {
-    const toml = readFileSync(join(raiz, "netlify.toml"), "utf8");
-    const regra = toml.slice(toml.indexOf("[[redirects]]"), toml.indexOf("[[headers]]"));
-    expect(regra).toContain('from = "/*"');
-    expect(regra).not.toMatch(/^\s*force\s*=\s*true/m);
+  it("nenhuma regra do Netlify alcança /blog nem força (o HTML estático do blog é o que sai)", () => {
+    // Com o catch-all, era a falta de `force` que salvava o blog. Sem
+    // catch-all (src/prerender/rotas.test.ts), a trava é: nenhuma regra casa
+    // um caminho do blog, e nenhuma regra força por cima de arquivo.
+    const regras = lerRegras(readFileSync(join(raiz, "netlify.toml"), "utf8"));
+    expect(regras.length).toBeGreaterThan(0);
+    for (const r of regras) expect(r.force, r.from).toBe(false);
+    for (const c of ["/blog", "/blog/", "/blog/um-post/", "/blog/feed.xml", "/sitemap.xml", "/llms.txt"]) {
+      expect(regras.find((r) => casaRegra(r.from, c))?.from, c).toBeUndefined();
+    }
   });
 
   it("o service worker não intercepta /blog (não grava artigo no lugar do shell da SPA)", () => {

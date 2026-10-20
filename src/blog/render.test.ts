@@ -3,6 +3,7 @@
 // content/blog e nunca chegam ao dist de produção.
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StaticRouter } from "react-router-dom/server";
@@ -319,5 +320,34 @@ describe("listas do artigo quebram palavra longa", () => {
     expect(a).toMatch(/<ul class="[^"]*break-words hyphens-auto/);
     expect(a).toMatch(/<ol class="[^"]*break-words hyphens-auto/);
     for (const modo of [{}, { doc: true }]) expect(md(c, modo)).not.toContain("hyphens-auto");
+  });
+});
+
+/* ── Modo `pagina` (Legal e Sobre pré-renderizados): títulos reais, mesmo visual ── */
+describe("o markdown das páginas públicas de texto", () => {
+  const md = (c: string, modo: Record<string, boolean>) => renderToStaticMarkup(createElement(Markdown, { content: c, ...modo }));
+  const c = "# Política\n\n## 1. Dados\n\n### Detalhe\n\nVeja a [lista](/recusas).";
+
+  it("# → h1, ## → h2, ### → h3, com as MESMAS classes do modo doc", () => {
+    const pg = md(c, { doc: true, pagina: true });
+    const doc = md(c, { doc: true });
+    expect(pg).toMatch(/<h1 class="[^"]+">Política<\/h1>/);
+    expect(pg).toMatch(/<h2 class="[^"]+">1\. Dados<\/h2>/);
+    expect(pg).toMatch(/<h3 class="[^"]+">Detalhe<\/h3>/);
+    const classes = (h: string) => [...h.matchAll(/class="([^"]+)"/g)].map((m) => m[1]).slice(0, 3);
+    // As mesmas do doc + `tracking-normal`, que desfaz o aperto que o
+    // index.css dá a todo h1/h2/h3 (no doc eles eram <p>, sem aperto).
+    expect(classes(pg)).toEqual(classes(doc).map((c) => `${c} tracking-normal`));
+    const css = readFileSync(new URL("../index.css", import.meta.url), "utf8");
+    expect(css).toMatch(/h1, h2, h3 \{ letter-spacing: -0\.02em; \}/);
+    expect(pg).toContain('<a href="/recusas"');
+  });
+
+  it("planos (doc) e chat continuam com <p> e sem link", () => {
+    for (const modo of [{ doc: true }, {}]) {
+      const h = md(c, modo);
+      expect(h).not.toMatch(/<h[123]/);
+      expect(h).not.toContain("<a ");
+    }
   });
 });

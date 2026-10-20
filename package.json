@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/blog.mjs build --out dist",
+    "build": "vite build && node scripts/prerender.mjs --out dist && node scripts/blog.mjs build --out dist",
     "blog:check": "node scripts/blog.mjs check",
     "blog:indice": "node scripts/blog.mjs indice",
-    "blog:preview": "BLOG_CONTENT_DIR=src/lib/blog/fixtures/posts vite build --outDir dist-preview && node scripts/blog.mjs build --content src/lib/blog/fixtures/posts --out dist-preview",
+    "blog:preview": "BLOG_CONTENT_DIR=src/lib/blog/fixtures/posts vite build --outDir dist-preview && node scripts/prerender.mjs --out dist-preview && node scripts/blog.mjs build --content src/lib/blog/fixtures/posts --out dist-preview",
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc -b",

@@ -10,7 +10,9 @@ import {
 } from "lucide-react";
 import Logo from "@/components/core/Logo";
 import { BLOG_TEM_POSTS } from "@/blog/temPosts";
+import { consumirMontagemDoPrerender } from "@/lib/montagem";
 import SiteFooter from "@/components/core/SiteFooter";
+import { jsonParaScript } from "@/blog/formato";
 
 /* ─────────────────────────────────────────────────────────────────
    Demo animado da captura: a frase é "digitada" e vira registros
@@ -234,6 +236,10 @@ function TryItDemo() {
 }
 
 export default function Landing() {
+  // Por cima do pré-render, o herói já entrou na pintura do HTML: animar de
+  // novo na troca do #root era vê-lo assentar duas vezes (ver lib/montagem.ts).
+  // Inicializador do estado, não render: a marca é lida e consumida uma vez.
+  const [animarEntrada] = useState(() => (consumirMontagemDoPrerender() ? "" : "animate-fade-up"));
   return (
     <div className="min-h-dvh bg-background bg-ether overflow-x-clip">
       {/* ─── Topo ─── */}
@@ -267,22 +273,22 @@ export default function Landing() {
           aria-hidden
         />
         <div className="container relative pt-16 pb-14 md:pt-24 md:pb-20 text-center">
-          <p className="text-xs font-semibold tracking-[0.28em] uppercase text-gold-ink mb-5 animate-fade-up">
+          <p className={`text-xs font-semibold tracking-[0.28em] uppercase text-gold-ink mb-5 ${animarEntrada}`}>
             O único app que vê a sua vida inteira
           </p>
           {/* [B3] Sem <br /> fixo: em 390px ele forçava uma terceira linha e
               deixava "dividida" sozinha no meio do bloco. `text-balance` deixa o
               navegador distribuir as linhas — duas no celular, duas no desktop. */}
-          <h1 className="font-display text-[2.6rem] leading-[1.05] md:text-7xl font-semibold tracking-tight text-balance max-w-4xl mx-auto animate-fade-up">
+          <h1 className={`font-display text-[2.6rem] leading-[1.05] md:text-7xl font-semibold tracking-tight text-balance max-w-4xl mx-auto ${animarEntrada}`}>
             A vida não é dividida em aplicativos.
           </h1>
-          <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto animate-fade-up">
+          <p className={`mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto ${animarEntrada}`}>
             Sua dieta depende do seu salário. Seu gasto por impulso depende do seu sono.
             O Ascende junta corpo, dinheiro, alimentação e mente num lugar só — e a IA
             monta o plano do seu corpo dentro do orçamento que você tem de verdade.
             Você conta o dia numa frase; ela registra o resto.
           </p>
-          <div className="mt-7 flex justify-center animate-fade-up">
+          <div className={`mt-7 flex justify-center ${animarEntrada}`}>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3.5 py-1.5 text-xs font-medium">
               <MessageCircle className="w-3.5 h-3.5 text-gold" />
               {/* Este selo ocupa a última linha antes do CTA — o lugar de maior
@@ -293,14 +299,14 @@ export default function Landing() {
               Nem precisa abrir o app: dá para registrar o dia pelo WhatsApp
             </span>
           </div>
-          <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up">
+          <div className={`mt-5 flex flex-col sm:flex-row items-center justify-center gap-3 ${animarEntrada}`}>
             <Button asChild size="lg" className="px-9 h-12 text-base">
               <Link to="/auth?intent=signup">Começar minha subida <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
             </Button>
             <span className="text-xs text-muted-foreground">Conta grátis em 2 minutos · sem cartão de crédito</span>
           </div>
 
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground animate-fade-up">
+          <div className={`mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground ${animarEntrada}`}>
             <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-gold-ink" /> Grátis para sempre no essencial</span>
             <span className="inline-flex items-center gap-1.5"><Lock className="w-3.5 h-3.5 text-gold-ink" /> Seus dados nunca são vendidos</span>
             <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-gold-ink" /> Sem anúncios. Nunca.</span>
@@ -789,9 +795,12 @@ export default function Landing() {
       {/* ─── Rodapé ─── */}
       <SiteFooter />
 
-      {/* SEO: marcação estruturada do FAQ acima (conteúdo espelhado manualmente) */}
-      <script type="application/ld+json">
-        {JSON.stringify({
+      {/* SEO: marcação estruturada do FAQ acima (conteúdo espelhado manualmente).
+          `dangerouslySetInnerHTML`, como no blog: como filho, o pré-render
+          (renderToStaticMarkup) escaparia as aspas em &quot; e o JSON-LD do
+          HTML servido sem JS deixaria de ser JSON. jsonParaScript neutraliza
+          `</script>`. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonParaScript({
           "@context": "https://schema.org",
           "@type": "FAQPage",
           mainEntity: [
@@ -844,8 +853,7 @@ export default function Landing() {
               },
             },
           ],
-        })}
-      </script>
+        }) }} />
     </div>
   );
 }

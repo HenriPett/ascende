@@ -94,7 +94,7 @@ Recusa, com motivo e linha:
 | **intenção repetida** — entre os posts **ou contra o histórico** (sem acento, caixa ou pontuação) | é o que impede a duplicata: o mesmo assunto com outro título |
 | post publicado cujo arquivo sumiu, ou `datePublished` de post publicado reescrito | URL que já saiu não some nem muda de dia em silêncio |
 | post fora do INDICE, ou INDICE desatualizado | rode o passo 2 |
-| `related` ou link interno que não resolve | só `/blog/`, `/blog/<slug>/` que existe, `/`, `/recusas`, `/privacidade`, `/termos`, `/aviso-legal` (com `#âncora`, se quiser) |
+| `related` ou link interno que não resolve | só `/blog/`, `/blog/<slug>/` que existe, `/`, `/recusas`, `/sobre`, `/privacidade`, `/termos`, `/aviso-legal` (com `#âncora`, se quiser) |
 | link externo que não é `https://` | |
 | `# ` no corpo, título que pula nível, `####` ou mais | o template desenha só `##` e `###` |
 | imagem fora da linha própria, sem alt descritivo (20–250) ou sem legenda (10–200), externa, SVG, ou fora de `./<nome>.(png\|jpg\|webp)` | é desenhada como `<figure>`; o alt é para quem não vê, a legenda leva o crédito |

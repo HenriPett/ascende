@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- A Sora (títulos) chega junto com o HTML, não depois do CSS. Com o
+         pré-render, a primeira pintura já é a página: se a fonte chegasse
+         depois (font-display: swap), o título era desenhado na fonte do
+         sistema e trocava em seguida — a Sentinela mediu um texto descendo
+         3 px aos ~25 ms (CLS 0,0059). Só o subconjunto latin: o português
+         inteiro (ç, ã, é…) está nele; o latin-ext continua sob demanda. O
+         Vite resolve este caminho para o MESMO arquivo com hash que o CSS
+         usa — sem download duplicado. `crossorigin` é obrigatório em preload
+         de fonte, senão o navegador baixa de novo. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@fontsource-variable/sora/files/sora-latin-wght-normal.woff2" />
     <meta name="theme-color" content="#FDFBF7" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0D0D0F" media="(prefers-color-scheme: dark)" />
     <title>Ascende — O app que vê a sua vida inteira</title>
@@ -45,11 +55,38 @@
         "url": "https://ascende.site/",
         "description": "O único app que vê a sua vida inteira: corpo, dinheiro, alimentação e mente no mesmo lugar, com uma IA que conecta os pontos.",
         "applicationCategory": "LifestyleApplication",
-        "operatingSystem": "Web, iOS (PWA)",
+        "operatingSystem": "Web",
         "offers": {
           "@type": "Offer",
+          "name": "Plano gratuito",
           "price": "0",
-          "priceCurrency": "BRL"
+          "priceCurrency": "BRL",
+          "description": "O essencial é grátis para sempre. O Ascende+, por assinatura, amplia os recursos de inteligência artificial; os valores atuais estão na página inicial."
+        },
+        "publisher": { "@id": "https://ascende.site/#organization" }
+      }
+    </script>
+    <!-- Quem publica o Ascende. O endereço é a sede publicada na Política de
+         Privacidade (src/lib/legal.ts, "Identificação da Controladora") — muda
+         lá, muda aqui; o teste src/prerender/prerender.test.ts confere. Sem
+         contactPoint: não há e-mail nem telefone público de atendimento (o
+         canal é o feedback dentro do app), e inventar um seria pior que não
+         ter. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "@id": "https://ascende.site/#organization",
+        "name": "Ascende",
+        "url": "https://ascende.site/",
+        "logo": "https://ascende.site/icon-512.png",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "Rua Angelo Torinelli, 53, Sala 01, Vila Nova",
+          "addressLocality": "Jaraguá do Sul",
+          "addressRegion": "SC",
+          "postalCode": "89259-200",
+          "addressCountry": "BR"
         }
       }
     </script>
