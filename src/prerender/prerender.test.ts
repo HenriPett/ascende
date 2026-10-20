@@ -122,6 +122,13 @@ describe("JSON-LD da home", () => {
     expect(json).not.toMatch(/contactPoint|email|telephone/i);
   });
 
+  it("a oferta de preço 0 é o plano gratuito, não o produto inteiro; sem app nativo", () => {
+    const app = blocos.find((b) => b["@type"] === "SoftwareApplication");
+    expect(app.offers).toMatchObject({ "@type": "Offer", name: "Plano gratuito", price: "0" });
+    expect(app.offers.description).toMatch(/Ascende\+, por assinatura/);
+    expect(app.operatingSystem).toBe("Web");
+  });
+
   it("o endereço é a sede publicada na Política de Privacidade (e no /sobre)", () => {
     const a = org.address;
     expect(a["@type"]).toBe("PostalAddress");
