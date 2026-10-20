@@ -3,6 +3,7 @@
 // content/blog e nunca chegam ao dist de produção.
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StaticRouter } from "react-router-dom/server";
@@ -334,7 +335,11 @@ describe("o markdown das páginas públicas de texto", () => {
     expect(pg).toMatch(/<h2 class="[^"]+">1\. Dados<\/h2>/);
     expect(pg).toMatch(/<h3 class="[^"]+">Detalhe<\/h3>/);
     const classes = (h: string) => [...h.matchAll(/class="([^"]+)"/g)].map((m) => m[1]).slice(0, 3);
-    expect(classes(pg)).toEqual(classes(doc));
+    // As mesmas do doc + `tracking-normal`, que desfaz o aperto que o
+    // index.css dá a todo h1/h2/h3 (no doc eles eram <p>, sem aperto).
+    expect(classes(pg)).toEqual(classes(doc).map((c) => `${c} tracking-normal`));
+    const css = readFileSync(new URL("../index.css", import.meta.url), "utf8");
+    expect(css).toMatch(/h1, h2, h3 \{ letter-spacing: -0\.02em; \}/);
     expect(pg).toContain('<a href="/recusas"');
   });
 

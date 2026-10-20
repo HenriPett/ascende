@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- A Sora (títulos) chega junto com o HTML, não depois do CSS. Com o
+         pré-render, a primeira pintura já é a página: se a fonte chegasse
+         depois (font-display: swap), o título era desenhado na fonte do
+         sistema e trocava em seguida — a Sentinela mediu um texto descendo
+         3 px aos ~25 ms (CLS 0,0059). Só o subconjunto latin: o português
+         inteiro (ç, ã, é…) está nele; o latin-ext continua sob demanda. O
+         Vite resolve este caminho para o MESMO arquivo com hash que o CSS
+         usa — sem download duplicado. `crossorigin` é obrigatório em preload
+         de fonte, senão o navegador baixa de novo. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@fontsource-variable/sora/files/sora-latin-wght-normal.woff2" />
     <meta name="theme-color" content="#FDFBF7" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0D0D0F" media="(prefers-color-scheme: dark)" />
     <title>Ascende — O app que vê a sua vida inteira</title>

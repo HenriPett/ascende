@@ -269,7 +269,11 @@ export function Markdown({
     if (h && pagina) {
       const nivel = h[1].length;
       const Tag = nivel === 1 ? "h1" : nivel === 2 ? "h2" : "h3";
-      blocks.push(<Tag key={key++} className={nivel <= 2 ? cls.h12 : cls.h3}>{il(h[2])}</Tag>);
+      // `tracking-normal`: o index.css aperta todo h1/h2/h3 (-0.02em), e no
+      // modo doc estes títulos eram <p> com espaçamento normal. Sem isto o
+      // título ficava mais apertado que antes (Sentinela) — e a promessa do
+      // modo é zero mudança visual.
+      blocks.push(<Tag key={key++} className={`${nivel <= 2 ? cls.h12 : cls.h3} tracking-normal`}>{il(h[2])}</Tag>);
       i++;
       continue;
     }
