@@ -49,32 +49,52 @@ export function qualidade(accept: string | null, midia: string): number {
 }
 
 /** Markdown só quando o cliente PEDE Markdown pelo nome, com q > 0 e não
- *  abaixo do HTML. `*\/*` e `text/*` sozinhos são navegador e curl: HTML. No
- *  empate explícito (`text/markdown, text/html`), quem pediu Markdown pelo
- *  nome quer Markdown. */
+ *  abaixo do HTML. Vale o q da faixa NOMEADA: `text/markdown;q=0, *\/*` é
+ *  recusa explícita (o curinga não devolve o Markdown que o cliente recusou).
+ *  `*\/*` e `text/*` sozinhos são navegador e curl: HTML. No empate explícito
+ *  (`text/markdown, text/html`), quem pediu Markdown pelo nome quer Markdown. */
 export function prefereMarkdown(accept: string | null): boolean {
   if (!accept) return false;
-  const nomeado = lerAccept(accept).some((f) => f.tipo === "text" && MARKDOWN.includes(`text/${f.sub}`));
-  if (!nomeado) return false;
-  const qMd = Math.max(...MARKDOWN.map((m) => qualidade(accept, m)));
+  const nomeadas = lerAccept(accept).filter((f) => f.tipo === "text" && MARKDOWN.includes(`text/${f.sub}`));
+  if (!nomeadas.length) return false;
+  const qMd = Math.max(...nomeadas.map((f) => f.q));
   return qMd > 0 && qMd >= qualidade(accept, "text/html");
 }
 
-/** O .md que responde por `pathname`, ou `null` quando não é página (tem
- *  extensão: /llms.txt, /sitemap.xml, /icon-512.png — esses seguem como são).
- *  O blog usa barra final (/blog/<slug>/ → /blog/<slug>/index.md); as páginas
- *  da raiz, não (/privacidade → /privacidade.md). */
-export function markdownDoCaminho(pathname: string): string | null {
-  let caminho: string;
-  try { caminho = decodeURIComponent(pathname); } catch { return null; }
-  if (!caminho.startsWith("/") || caminho.includes("..")) return null;
-  const ultimo = caminho.split("/").pop() ?? "";
-  if (ultimo.includes(".")) return null;
-  if (caminho === "/") return "/index.md";
-  if (caminho === "/blog" || caminho.startsWith("/blog/")) {
-    return `${caminho.endsWith("/") ? caminho : `${caminho}/`}index.md`;
-  }
-  return `${caminho.replace(/\/+$/, "")}.md`;
+/** As páginas da raiz que têm versão em Markdown — as pré-renderizadas
+ *  (src/prerender/paginas.ts; o teste confere que as listas batem). */
+export const PAGINAS_EM_MARKDOWN: readonly string[] = ["/", "/privacidade", "/termos", "/aviso-legal", "/recusas", "/sobre"];
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** Para onde vai um pedido de Markdown:
+ *  - `md`: o .md do build, SEMPRE um caminho deste mapa — uma página de
+ *    PAGINAS_EM_MARKDOWN, /blog/ ou /blog/<slug>/;
+ *  - `arquivo`: o caminho tem extensão (/llms.txt, /sitemap.xml) e segue
+ *    para o Netlify como é;
+ *  - `desconhecido`: todo o resto → 404 em Markdown, sem buscar nada.
+ *
+ *  SEGURANÇA: o caminho decodificado nunca é concatenado cru numa URL. Um
+ *  `%2F%2Fevil.example%2Fx` decodifica para `//evil.example/x`, que o
+ *  `new URL` leria como OUTRO host — a edge buscaria e serviria conteúdo de
+ *  terceiro com o canonical do Ascende. Por isso: barra dupla, `\`, `@`,
+ *  `..`, `%` que sobre, controle e espaço são `desconhecido`, e o alvo é
+ *  montado a partir do mapa, não do pedido. */
+export type DestinoMarkdown = { tipo: "md"; alvo: string } | { tipo: "arquivo" } | { tipo: "desconhecido" };
+
+export function destinoMarkdown(pathname: string): DestinoMarkdown {
+  const desconhecido = { tipo: "desconhecido" } as const;
+  let c: string;
+  try { c = decodeURIComponent(pathname); } catch { return desconhecido; }
+  // eslint-disable-next-line no-control-regex
+  if (!c.startsWith("/") || c.includes("//") || c.includes("..") || /[\\@%?#\s\u0000-\u001f\u007f]/.test(c)) return desconhecido;
+  const ultimo = c.split("/").pop() ?? "";
+  if (/\.[a-z0-9]+$/i.test(ultimo)) return { tipo: "arquivo" };
+  const sem = c === "/" ? "/" : c.replace(/\/$/, "");
+  if (PAGINAS_EM_MARKDOWN.includes(sem)) return { tipo: "md", alvo: sem === "/" ? "/index.md" : `${sem}.md` };
+  const blog = sem.match(/^\/blog(?:\/([^/]+))?$/);
+  if (blog && !blog[1]) return { tipo: "md", alvo: "/blog/index.md" };
+  if (blog && SLUG.test(blog[1])) return { tipo: "md", alvo: `/blog/${blog[1]}/index.md` };
+  return desconhecido;
 }
 
 export const PAGINA_404_MD = "/404.md";
@@ -108,9 +128,11 @@ export async function negociar(
 ): Promise<Response> {
   const url = new URL(req.url);
   const leitura = req.method === "GET" || req.method === "HEAD";
-  const alvo = leitura && prefereMarkdown(req.headers.get("accept")) ? markdownDoCaminho(url.pathname) : null;
+  const destino: DestinoMarkdown = leitura && prefereMarkdown(req.headers.get("accept"))
+    ? destinoMarkdown(url.pathname)
+    : { tipo: "arquivo" };
 
-  if (!alvo) {
+  if (destino.tipo === "arquivo") {
     const r = await proximo();
     // Toda página que PODE sair em Markdown varia por Accept — inclusive a
     // resposta HTML, senão um cache guardaria uma e serviria para o outro.
@@ -118,22 +140,31 @@ export async function negociar(
   }
 
   const head = req.method === "HEAD";
-  const r = await buscar(new URL(alvo, url));
-  if (r.ok) {
-    const canonica = new URL(url.pathname, url).toString();
-    return respostaMarkdown(await r.text(), 200, canonica, head);
-  }
-  await r.body?.cancel();
-  const nf = await buscar(new URL(PAGINA_404_MD, url));
-  const corpo = nf.ok ? await nf.text() : SE_NEM_O_404_EXISTIR;
+  /** Só arquivo da MESMA origem do pedido — a segunda trava, depois do mapa. */
+  const daOrigem = async (caminho: string): Promise<Response | null> => {
+    const alvo = new URL(caminho, url.origin);
+    if (alvo.origin !== url.origin) return null;
+    const r = await buscar(alvo);
+    if (r.ok) return r;
+    await r.body?.cancel();
+    return null;
+  };
+
+  const r = destino.tipo === "md" ? await daOrigem(destino.alvo) : null;
+  if (r) return respostaMarkdown(await r.text(), 200, new URL(url.pathname, url.origin).toString(), head);
+  const nf = await daOrigem(PAGINA_404_MD);
+  const corpo = nf ? await nf.text() : SE_NEM_O_404_EXISTIR;
   return respostaMarkdown(corpo.trim() ? corpo : SE_NEM_O_404_EXISTIR, 404, null, head);
 }
 
 /** Onde a edge NÃO roda: arquivos (assets com hash, imagens, sw.js, os
- *  próprios .md, llms.txt, sitemap) e a SPA autenticada, que não tem versão
- *  em Markdown e não deve pagar a edge em cada navegação. */
+ *  próprios .md, llms.txt, sitemap), a SPA autenticada, que não tem versão
+ *  em Markdown e não deve pagar a edge em cada navegação, e os aliases 301. */
 export const CAMINHOS_EXCLUIDOS = [
   "/assets/*",
+  // As origens dos 301 do netlify.toml: a edge roda antes dos redirects, e
+  // pedir Markdown de /about daria 404 em vez de levar a /sobre.
+  "/about", "/privacy",
   "/app", "/app/*", "/auth", "/auth/*", "/onboarding", "/onboarding/*",
   "/*.md", "/*.txt", "/*.xml", "/*.js", "/*.css", "/*.json", "/*.webmanifest",
   "/*.png", "/*.jpg", "/*.webp", "/*.svg", "/*.ico", "/*.woff2",

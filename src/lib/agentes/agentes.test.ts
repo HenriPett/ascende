@@ -7,9 +7,9 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  CAMINHOS_EXCLUIDOS, markdownDoCaminho, negociar, prefereMarkdown, qualidade,
+  CAMINHOS_EXCLUIDOS, destinoMarkdown, negociar, prefereMarkdown, qualidade,
 } from "@/lib/agentes/negociacao";
-import { htmlParaMarkdown } from "@/lib/agentes/htmlParaMarkdown";
+import { htmlParaMarkdown, linksAbsolutos } from "@/lib/agentes/htmlParaMarkdown";
 import { gerarLlmsTxt } from "@/lib/agentes/llms";
 
 const RAIZ = join(__dirname, "..", "..", "..");
@@ -38,12 +38,16 @@ describe("Accept: qualidade e preferência (RFC 9110, q-values)", () => {
     ["", false],
     [null, false],
     ["text/markdown;q=abc, text/html", false], // q inválido conta como 0
+    ["text/markdown;q=0, */*", false], // recusa explícita: o curinga não a desfaz
+    ["text/markdown;q=0, text/*", false],
+    ["text/markdown;q=0.5, text/html;q=0.9, */*", false], // prefere HTML
+    ["text/x-markdown;q=0, text/markdown", true],
   ])("%s → markdown? %s", (accept, esperado) => {
     expect(prefereMarkdown(accept)).toBe(esperado);
   });
 });
 
-describe("o .md de cada caminho", () => {
+describe("o .md de cada caminho (só o mapa conhecido)", () => {
   it.each([
     ["/", "/index.md"],
     ["/privacidade", "/privacidade.md"],
@@ -53,14 +57,24 @@ describe("o .md de cada caminho", () => {
     ["/blog/", "/blog/index.md"],
     ["/blog/um-post/", "/blog/um-post/index.md"],
     ["/blog/um-post", "/blog/um-post/index.md"],
-    ["/nao-existe", "/nao-existe.md"],
   ])("%s → %s", (caminho, md) => {
-    expect(markdownDoCaminho(caminho)).toBe(md);
+    expect(destinoMarkdown(caminho)).toEqual({ tipo: "md", alvo: md });
   });
 
-  it("arquivo (com extensão) e caminho estranho seguem como são", () => {
-    for (const c of ["/llms.txt", "/sitemap.xml", "/icon-512.png", "/blog/feed.xml", "/a/../b", "/%E0%A4%A"]) {
-      expect(markdownDoCaminho(c), c).toBeNull();
+  it("arquivo (com extensão) segue como é", () => {
+    for (const c of ["/llms.txt", "/sitemap.xml", "/icon-512.png", "/blog/feed.xml"]) {
+      expect(destinoMarkdown(c), c).toEqual({ tipo: "arquivo" });
+    }
+  });
+
+  it("fora do mapa, ou estranho, é desconhecido (404 em Markdown, sem buscar nada)", () => {
+    for (const c of [
+      "/nao-existe", "/app", "/privacidade/x", "/blog/Um_Post/", "/blog/a/b/",
+      "//evil.example/x", "/%2F%2Fevil.example%2Fx", "/%2f%2fevil.example", "/%5Cevil.example%2Fx", "/\\evil.example",
+      "/@evil.example", "/%40evil.example", "/a/../b", "/%2E%2E/x", "/privacidade%3F", "/privacidade%23x",
+      "/%252F%252Fevil.example", "/%E0%A4%A", "/x%00", "/ privacidade", "https://evil.example/x",
+    ]) {
+      expect(destinoMarkdown(c), c).toEqual({ tipo: "desconhecido" });
     }
   });
 });
@@ -97,6 +111,21 @@ describe("negociar (a edge function inteira)", () => {
     expect(r.status).toBe(404);
     expect(r.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
     expect(await r.text()).toBe(site["/404.md"]);
+  });
+
+  it("REGRESSÃO (proxy aberto): nenhum caminho faz a edge buscar fora da própria origem", async () => {
+    const pedidos: string[] = [];
+    const espiao = async (u: URL) => { pedidos.push(u.toString()); return buscar(u); };
+    for (const c of ["/%2F%2Fevil.example%2Fx", "/%5Cevil.example%2Fx", "/%5C%5Cevil.example/x", "/%2F%2F127.0.0.1%2Fadmin",
+      "/@evil.example/x", "/%40evil.example", "/..%2F..%2Fx", "/%252F%252Fevil.example", "/blog/%2F%2Fevil.example/"]) {
+      const r = await negociar(req(c, "text/markdown"), html, espiao);
+      expect(r.status, c).toBe(404);
+      expect(r.headers.get("link"), c).toBeNull();
+      expect(await r.text(), c).toBe(site["/404.md"]);
+    }
+    expect(pedidos.length).toBeGreaterThan(0);
+    for (const p of pedidos) expect(new URL(p).origin, p).toBe("https://ascende.site");
+    expect(new Set(pedidos)).toEqual(new Set(["https://ascende.site/404.md"]));
   });
 
   it("sem nem o 404.md, ainda responde 404 em Markdown não vazio", async () => {
@@ -143,7 +172,7 @@ describe("a edge function", () => {
   });
 
   it("não roda na SPA autenticada, nos assets nem nos próprios .md", () => {
-    for (const c of ["/app", "/app/*", "/auth", "/auth/*", "/onboarding", "/assets/*", "/*.md", "/*.txt"]) {
+    for (const c of ["/app", "/app/*", "/auth", "/auth/*", "/onboarding", "/assets/*", "/*.md", "/*.txt", "/about", "/privacy"]) {
       expect(CAMINHOS_EXCLUIDOS).toContain(c);
     }
   });
@@ -175,6 +204,16 @@ describe("HTML pré-renderizado → Markdown", () => {
     expect(htmlParaMarkdown(html, B)).toBe(
       "[Começar](https://ascende.site/auth) Conta grátis\n\n1. ## Nunca vender\n\n   Detalhe.\n\nAviso.\n",
     );
+  });
+
+  it("<br> dentro de título vira espaço (título é uma linha); '•' desenhado no <li> não duplica o marcador", () => {
+    expect(htmlParaMarkdown("<h2>Batalhas: para o que rouba<br/>seu dinheiro.</h2><ul><li>• Captura</li><li>· Outra</li></ul>", B))
+      .toBe("## Batalhas: para o que rouba seu dinheiro.\n\n- Captura\n- Outra\n");
+  });
+
+  it("Markdown escrito à mão ganha links absolutos (e externo fica como está)", () => {
+    expect(linksAbsolutos("Veja [recusas](/recusas), [início](/) e [IBGE](https://ibge.gov.br/) e [x](//cdn.x)", B))
+      .toBe("Veja [recusas](https://ascende.site/recusas), [início](https://ascende.site/) e [IBGE](https://ibge.gov.br/) e [x](//cdn.x)");
   });
 
   it("entidades e texto solto entre blocos", () => {

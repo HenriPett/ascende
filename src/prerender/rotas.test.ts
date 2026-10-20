@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { lerRegras, resolver } from "@/prerender/netlify";
 import { PAGINA_404, PAGINAS_PRE_RENDERIZADAS } from "@/prerender/paginas";
 import { APP_ROUTES, FROZEN_EXTERNAL_PUBLIC_PATHS } from "@/lib/routes";
-import { CAMINHOS_EXCLUIDOS } from "@/lib/agentes/negociacao";
+import { CAMINHOS_EXCLUIDOS, PAGINAS_EM_MARKDOWN } from "@/lib/agentes/negociacao";
 
 const RAIZ = join(__dirname, "..", "..");
 const TOML = readFileSync(join(RAIZ, "netlify.toml"), "utf8");
@@ -75,8 +75,12 @@ describe("rotas do App.tsx × netlify.toml", () => {
     expect(resolver("/sobre", regras, ARQUIVOS).tipo).toBe("arquivo");
   });
 
-  it("a edge do Markdown não roda onde a SPA mora (toda regra para o shell está excluída)", () => {
-    for (const r of regras.filter((x) => x.to === "/app-shell.html")) expect(CAMINHOS_EXCLUIDOS, r.from).toContain(r.from);
+  it("a edge do Markdown não roda onde a SPA mora nem nos aliases 301 (a edge vem antes dos redirects)", () => {
+    for (const r of regras.filter((x) => x.to === "/app-shell.html" || x.status === 301)) expect(CAMINHOS_EXCLUIDOS, r.from).toContain(r.from);
+  });
+
+  it("o mapa de Markdown da edge é exatamente o das páginas pré-renderizadas", () => {
+    expect([...PAGINAS_EM_MARKDOWN].sort()).toEqual([...PRE].sort());
   });
 
   it("o service worker guarda como shell só o /app-shell.html, e só das rotas da SPA", () => {
