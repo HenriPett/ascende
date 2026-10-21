@@ -24,4 +24,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | frutas-hortalicas-usar-primeiro-guardar | como decidir quais frutas e hortaliças usar primeiro depois das compras | alimentacao-orcamento | 2026-10-20 |  |
 | permissoes-apps-saude-financas | como revisar permissões e uso de dados em aplicativos de saúde e finanças | ia-privacidade | 2026-10-20 |  |
 | compras-parceladas-orcamento-proximos-meses | como visualizar compras parceladas já assumidas no orçamento dos próximos meses | alimentacao-orcamento | 2026-10-21 |  |
+| historico-sono-treino-conferir-importacao | como importar histórico de saúde e conferir sono e treino antes de gravar | rotina-integrada | 2026-10-21 |  |
 | tempo-sentado-trabalho-pausas-movimento | como organizar oportunidades de movimento durante períodos de trabalho sentado | rotina-integrada | 2026-10-21 |  |
