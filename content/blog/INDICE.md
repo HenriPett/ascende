@@ -27,3 +27,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | historico-sono-treino-conferir-importacao | como importar histórico de saúde e conferir sono e treino antes de gravar | rotina-integrada | 2026-10-21 |  |
 | tempo-sentado-trabalho-pausas-movimento | como organizar oportunidades de movimento durante períodos de trabalho sentado | rotina-integrada | 2026-10-21 |  |
 | notificacoes-celular-interrupcoes-rotina | como escolher quais notificações no celular podem interromper a rotina | rotina-integrada | 2026-10-22 |  |
+| validade-alimentos-abertos-rotulo-uso | como conferir a validade dos alimentos após abertos e organizar seu uso em casa | alimentacao-orcamento | 2026-10-22 |  |
