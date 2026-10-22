@@ -26,5 +26,6 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | compras-parceladas-orcamento-proximos-meses | como visualizar compras parceladas já assumidas no orçamento dos próximos meses | alimentacao-orcamento | 2026-10-21 |  |
 | historico-sono-treino-conferir-importacao | como importar histórico de saúde e conferir sono e treino antes de gravar | rotina-integrada | 2026-10-21 |  |
 | tempo-sentado-trabalho-pausas-movimento | como organizar oportunidades de movimento durante períodos de trabalho sentado | rotina-integrada | 2026-10-21 |  |
+| agua-rotina-acesso-registro | como organizar o acesso à água e registrar o que bebe na rotina | rotina-integrada | 2026-10-22 |  |
 | notificacoes-celular-interrupcoes-rotina | como escolher quais notificações no celular podem interromper a rotina | rotina-integrada | 2026-10-22 |  |
 | validade-alimentos-abertos-rotulo-uso | como conferir a validade dos alimentos após abertos e organizar seu uso em casa | alimentacao-orcamento | 2026-10-22 |  |
