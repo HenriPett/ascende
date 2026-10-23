@@ -29,4 +29,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | agua-rotina-acesso-registro | como organizar o acesso à água e registrar o que bebe na rotina | rotina-integrada | 2026-10-22 |  |
 | notificacoes-celular-interrupcoes-rotina | como escolher quais notificações no celular podem interromper a rotina | rotina-integrada | 2026-10-22 |  |
 | validade-alimentos-abertos-rotulo-uso | como conferir a validade dos alimentos após abertos e organizar seu uso em casa | alimentacao-orcamento | 2026-10-22 |  |
+| comer-com-atencao-momento-refeicao | como organizar tempo e ambiente para comer com atenção entre as tarefas da rotina | rotina-integrada | 2026-10-23 |  |
 | fatura-fechamento-vencimento-periodo-compras | como conferir fechamento e vencimento da fatura e identificar em qual ciclo entram as compras | alimentacao-orcamento | 2026-10-23 |  |
