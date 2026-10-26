@@ -32,5 +32,6 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | calorias-foto-conferir-estimativa-ia | como conferir uma estimativa de calorias por foto antes de registrar a refeição com IA | ia-privacidade | 2026-10-23 |  |
 | comer-com-atencao-momento-refeicao | como organizar tempo e ambiente para comer com atenção entre as tarefas da rotina | rotina-integrada | 2026-10-23 |  |
 | fatura-fechamento-vencimento-periodo-compras | como conferir fechamento e vencimento da fatura e identificar em qual ciclo entram as compras | alimentacao-orcamento | 2026-10-23 |  |
+| diario-sono-registrar-horarios | como fazer um diário do sono distinguindo horários, estimativas e contexto da rotina | rotina-integrada | 2026-10-26 |  |
 | lista-ingredientes-ordem-rotulo | como ler a lista de ingredientes e entender o que a ordem dos nomes informa no rótulo | alimentacao-orcamento | 2026-10-26 |  |
 | renda-irregular-entradas-vencimentos | como organizar renda irregular distinguindo recebimentos e previsões antes dos vencimentos | alimentacao-orcamento | 2026-10-26 |  |
