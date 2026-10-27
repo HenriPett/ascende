@@ -35,3 +35,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | diario-sono-registrar-horarios | como fazer um diário do sono distinguindo horários, estimativas e contexto da rotina | rotina-integrada | 2026-10-26 |  |
 | lista-ingredientes-ordem-rotulo | como ler a lista de ingredientes e entender o que a ordem dos nomes informa no rótulo | alimentacao-orcamento | 2026-10-26 |  |
 | renda-irregular-entradas-vencimentos | como organizar renda irregular distinguindo recebimentos e previsões antes dos vencimentos | alimentacao-orcamento | 2026-10-26 |  |
+| desinstalar-app-conta-dados | desinstalar um app apaga os dados e a conta ou exige uma solicitação ao serviço | ia-privacidade | 2026-10-27 |  |
