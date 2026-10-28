@@ -38,4 +38,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | alimentos-safra-calendario-compras | como usar um calendário de alimentos da safra e conferir oferta e preço local antes das compras | alimentacao-orcamento | 2026-10-27 |  |
 | delivery-custo-total-pedido | como comparar o custo total de um pedido de delivery antes de confirmar a compra | alimentacao-orcamento | 2026-10-27 |  |
 | desinstalar-app-conta-dados | desinstalar um app apaga os dados e a conta ou exige uma solicitação ao serviço | ia-privacidade | 2026-10-27 |  |
+| conferir-cupom-fiscal-supermercado | como conferir o cupom fiscal do supermercado e separar o gasto pago de uma divergência pendente | alimentacao-orcamento | 2026-10-28 |  |
 | despesas-anuais-planejar-vencimentos | como planejar despesas anuais distinguindo valor previsto, saldo separado e tempo até o vencimento | alimentacao-orcamento | 2026-10-28 |  |
