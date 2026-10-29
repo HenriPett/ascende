@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { LogoMark } from "@/components/core/Logo";
 import SiteFooter from "@/components/core/SiteFooter";
 import { Markdown } from "@/components/core/Markdown";
-import { DESCRICAO_DO_BLOG, type PostDoBlog } from "@/lib/blog/tipos";
+import { AUTOR_DO_BLOG, DESCRICAO_DO_BLOG, SITE_URL, type PostDoBlog } from "@/lib/blog/tipos";
 import { dataPorExtenso, foiAtualizado, minutosDeLeitura, ROTULO_DO_CLUSTER } from "./formato";
 
 /** O mesmo anel de foco do app — o padrão do navegador some no fundo creme. */
@@ -105,6 +105,33 @@ function Meta({ post, cluster = false }: { post: PostDoBlog; cluster?: boolean }
   );
 }
 
+const LINK_DO_TEXTO =
+  "text-foreground underline underline-offset-2 decoration-[hsl(var(--gold-text))] hover:decoration-2 rounded-sm ";
+
+/** "Por Henrique Pett, fundador do Ascende" — o nome leva à seção do autor
+ *  no /sobre. O nome e o cargo vêm de AUTOR_DO_BLOG (uma constante só); o
+ *  cargo entra em minúscula porque aqui ele é aposto, não título. O link tem
+ *  alvo de 44 pt: na linha da byline ele é o único controle, não uma palavra
+ *  no meio de um parágrafo. Nada além do que é fato — sem "especialista",
+ *  sem foto, sem credencial. */
+// O link é RELATIVO, como os outros links internos das páginas (a URL
+// absoluta da constante serve ao JSON-LD e ao feed): assim o preview e a
+// produção levam ao mesmo lugar.
+const LINK_DO_AUTOR = AUTOR_DO_BLOG.url.replace(SITE_URL, "") || "/";
+
+function Byline({ prefixo = "Por" }: { prefixo?: string }) {
+  const cargo = AUTOR_DO_BLOG.cargo.charAt(0).toLowerCase() + AUTOR_DO_BLOG.cargo.slice(1);
+  return (
+    <>
+      {prefixo}{" "}
+      <a href={LINK_DO_AUTOR} className={"inline-flex items-center min-h-11 " + LINK_DO_TEXTO + FOCO}>
+        {AUTOR_DO_BLOG.nome}
+      </a>
+      , {cargo}
+    </>
+  );
+}
+
 /* ═══ LISTAGEM — /blog/ ═══════════════════════════════════════════════════ */
 
 export function Listagem({ posts }: { posts: PostDoBlog[] }) {
@@ -121,6 +148,11 @@ export function Listagem({ posts }: { posts: PostDoBlog[] }) {
         <p className="mt-3 text-lg text-muted-foreground text-pretty">
           {DESCRICAO_DO_BLOG}
         </p>
+        {/* A autoria na listagem fica AQUI, uma vez: todos os posts têm o
+            mesmo autor, e repeti-la em cada cartão era ruído — além de que o
+            cartão é um link só, e um link de autor dentro dele seria link
+            dentro de link. */}
+        <p className="mt-1 text-footnote text-muted-foreground"><Byline prefixo="Escrito por" /></p>
         <ol className="mt-8 space-y-3" aria-label="Artigos, do mais recente ao mais antigo">
           {posts.map((p) => (
             <li key={p.slug}>
@@ -169,7 +201,27 @@ export function Artigo({ post, relacionados }: { post: PostDoBlog; relacionados:
               hierarquia se invertia (Lince). O hífen segura a largura. */}
           <h1 className="mt-2 font-display font-semibold text-[min(1.75rem,64px)] leading-tight md:text-4xl text-balance break-words hyphens-auto">{post.title}</h1>
           <p className="mt-3 text-lg text-muted-foreground text-pretty">{post.description}</p>
-          <p className="mt-4 text-footnote text-muted-foreground"><Meta post={post} /></p>
+          <p className="mt-2 text-footnote text-muted-foreground"><Byline /></p>
+          {/* `mt-1`: com Texto Maior a byline quebra em duas linhas, e sem o
+              respiro o fim dela ("fundador do Ascende") colava na data. */}
+          <p className="mt-1 text-footnote text-muted-foreground"><Meta post={post} /></p>
+
+          {/* EM RESUMO: a resposta direta à pergunta do post, antes do texto
+              longo — para quem lê com pressa e para quem resume (buscador,
+              assistente). Só existe quando o post tem `resumo`; nunca um bloco
+              vazio. Um <h2> de verdade: é uma seção, e o leitor de tela a acha
+              pela lista de títulos. O id não colide com as âncoras do corpo,
+              que saem do texto dos títulos. Cartão neutro, sem ouro; o respiro dele em
+              px (como a margem da coluna), para o texto não perder largura
+              justo com o Texto Maior. */}
+          {post.resumo.length > 0 && (
+            <section aria-labelledby="resumo-do-post" className="mt-8 rounded-lg border bg-card p-[20px]">
+              <h2 id="resumo-do-post" className="font-semibold text-title3">Em resumo</h2>
+              <ul className="mt-3 list-disc pl-5 space-y-2 text-body leading-[1.6] text-pretty break-words hyphens-auto">
+                {post.resumo.map((frase) => <li key={frase}>{frase}</li>)}
+              </ul>
+            </section>
+          )}
 
           <div className="mt-8 text-body leading-[1.6] text-foreground">
             <Markdown content={post.corpo} artigo imagens={post.imagens} />
