@@ -41,4 +41,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | conferir-cupom-fiscal-supermercado | como conferir o cupom fiscal do supermercado e separar o gasto pago de uma divergência pendente | alimentacao-orcamento | 2026-10-28 |  |
 | despesas-anuais-planejar-vencimentos | como planejar despesas anuais distinguindo valor previsto, saldo separado e tempo até o vencimento | alimentacao-orcamento | 2026-10-28 |  |
 | exportar-dados-app-conferir-copia | como exportar dados de um aplicativo e conferir o escopo e a leitura da cópia recebida | ia-privacidade | 2026-10-28 |  |
+| peso-alimento-cru-cozido-registro | como conferir peso cru ou cozido estado de preparo e parte comestível antes de registrar uma refeição | alimentacao-orcamento | 2026-10-29 |  |
 | relatorio-tempo-uso-celular | como interpretar o relatório de tempo de uso do celular considerando período aparelho indicadores e contexto | rotina-integrada | 2026-10-29 |  |
