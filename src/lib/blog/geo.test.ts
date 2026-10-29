@@ -214,6 +214,8 @@ describe("as páginas pré-renderizadas: WebPage/AboutPage + BreadcrumbList", ()
       const [wp, trilha, ...resto] = jsonLdDaPagina(pg(rota)) as Record<string, unknown>[];
       expect(wp).toMatchObject({ "@type": "WebPage", name: pg(rota).cabeca!.title, description: pg(rota).cabeca!.description, url: `https://ascende.site${rota}` });
       expect((trilha.itemListElement as { item: string }[]).map((i) => i.item)).toEqual(["https://ascende.site/", `https://ascende.site${rota}`]);
+      // Nome sem a marca: "Ascende › Política de Privacidade", não "… — Ascende".
+      expect((trilha.itemListElement as { name: string }[])[1].name).not.toMatch(/Ascende$/);
       expect(resto).toEqual([]);
     }
   });
