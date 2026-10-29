@@ -14,7 +14,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { StaticRouter } from "react-router-dom/server";
 import type { ReactNode } from "react";
-import { DESCRICAO_DO_BLOG, type ContextoDoBlog, type PostDoBlog } from "@/lib/blog/tipos";
+import { AUTOR_DO_BLOG, DESCRICAO_DO_BLOG, type ContextoDoBlog, type PostDoBlog } from "@/lib/blog/tipos";
+import { textoPlano } from "@/lib/blog/faq";
 import { Artigo, Listagem } from "./paginas";
 import { foiAtualizado, jsonParaScript } from "./formato";
 
@@ -61,6 +62,18 @@ const ORGANIZACAO = {
   name: "Ascende",
   url: "https://ascende.site/",
   logo: { "@type": "ImageObject", url: OG_IMAGE },
+} as const;
+
+/** O autor de todo post (AUTOR_DO_BLOG): Person com o que é FATO — nome,
+ *  cargo, a seção /sobre#autor e onde trabalha. Sem sameAs, foto, credencial
+ *  ou "revisado por" (docs/blog/EDITORIAL.md §4). O publisher continua a
+ *  Organization. */
+const AUTOR = {
+  "@type": "Person",
+  name: AUTOR_DO_BLOG.nome,
+  jobTitle: AUTOR_DO_BLOG.cargo,
+  url: AUTOR_DO_BLOG.url,
+  worksFor: ORGANIZACAO,
 } as const;
 
 interface Cabeca {
@@ -143,6 +156,7 @@ export function renderListagem(posts: PostDoBlog[], ctx: ContextoDoBlog): string
           "@type": "BlogPosting",
           headline: p.title,
           url: p.url,
+          author: { "@type": "Person", name: AUTOR_DO_BLOG.nome, url: AUTOR_DO_BLOG.url },
           datePublished: p.datePublished,
           ...(foiAtualizado(p) ? { dateModified: p.dateModified } : {}),
         })),
@@ -177,13 +191,27 @@ export function renderArtigo(post: PostDoBlog, relacionados: PostDoBlog[], ctx: 
           description: post.description,
           datePublished: post.datePublished,
           ...(modificado ? { dateModified: post.dateModified } : {}),
+          ...(post.resumo.length ? { abstract: post.resumo.join(" ") } : {}),
           inLanguage: "pt-BR",
           mainEntityOfPage: post.url,
           url: post.url,
-          author: ORGANIZACAO,
+          author: AUTOR,
           publisher: ORGANIZACAO,
           isPartOf: { "@type": "Blog", url: blog },
         },
+        // Gerado da seção "## Perguntas frequentes" (src/lib/blog/faq.ts):
+        // as mesmas perguntas e respostas que estão VISÍVEIS no artigo.
+        ...(post.faq.length ? [{
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          url: post.url,
+          inLanguage: "pt-BR",
+          mainEntity: post.faq.map((f) => ({
+            "@type": "Question",
+            name: f.pergunta,
+            acceptedAnswer: { "@type": "Answer", text: textoPlano(f.resposta) },
+          })),
+        }] : []),
         {
           "@context": "https://schema.org",
           "@type": "BreadcrumbList",

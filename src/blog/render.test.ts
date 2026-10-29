@@ -30,6 +30,8 @@ function post(slug: string, extra: Partial<PostDoBlog> = {}): PostDoBlog {
     caminho: `/blog/${slug}/`,
     url: `https://ascende.site/blog/${slug}/`,
     imagens: {},
+    resumo: [],
+    faq: [],
     ...extra,
   };
 }
@@ -75,22 +77,31 @@ describe("o artigo sai inteiro, indexável sem JS", () => {
     expect(h).toMatch(/<h1[^>]*>Fixture x<\/h1>/);
   });
 
-  it("JSON-LD verdadeiro: Organization como autor, sem pessoa, sem revisão, sem dateModified inventado", () => {
+  it("JSON-LD verdadeiro: autor Henrique Pett (Person, só fatos), publisher Organization, sem revisão, sem dateModified inventado", () => {
     const [bp, trilha] = jsonLd(html);
     expect(bp["@type"]).toBe("BlogPosting");
     expect(bp.headline).toBe("Fixture um");
     expect(bp.datePublished).toBe("2026-10-14");
     expect(bp).not.toHaveProperty("dateModified");
-    expect(bp.author).toEqual({
+    const org = {
       "@type": "Organization", name: "Ascende", url: "https://ascende.site/",
       logo: { "@type": "ImageObject", url: "https://ascende.site/icon-512.png" },
+    };
+    // Decisão do Henrique (29/10/2026): ele assina todo post. Só o que é
+    // fato — nada de sameAs, foto, credencial ou "especialista".
+    expect(bp.author).toEqual({
+      "@type": "Person", name: "Henrique Pett", jobTitle: "Fundador do Ascende",
+      url: "https://ascende.site/sobre#autor", worksFor: org,
     });
-    expect(bp.publisher).toEqual(bp.author);
+    expect(bp.publisher).toEqual(org);
+    expect(JSON.stringify(bp.author)).not.toMatch(/sameAs|image|hasCredential|knowsAbout|honorificPrefix/);
+    expect(bp).not.toHaveProperty("abstract"); // sem resumo, sem abstract
     expect(bp.mainEntityOfPage).toBe("https://ascende.site/blog/um/");
     expect(bp.isPartOf).toEqual({ "@type": "Blog", url: "https://ascende.site/blog/" });
     // `image` só existe como logo da Organization — nunca capa no BlogPosting.
     expect(bp).not.toHaveProperty("image");
-    expect(html).not.toMatch(/"Person"|reviewedBy|aggregateRating/);
+    expect(html).not.toMatch(/reviewedBy|aggregateRating|medicalReview/);
+    expect(html.match(/"Person"/g)).toHaveLength(1); // só o autor
     expect(trilha.itemListElement.map((i: { item: string }) => i.item)).toEqual([
       "https://ascende.site/", "https://ascende.site/blog/", "https://ascende.site/blog/um/",
     ]);

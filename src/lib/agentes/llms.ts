@@ -8,7 +8,7 @@
 // dos posts que passaram no blog:check — título, URL canônica e description,
 // do mais novo para o mais antigo. Sem post, sem blog: a seção sai inteira
 // (regra do zero do blog).
-import type { PostDoBlog } from "@/lib/blog/tipos";
+import { AUTOR_DO_BLOG, ASSINATURA_DO_AUTOR, type PostDoBlog } from "@/lib/blog/tipos";
 
 const SECAO_OPCIONAL = "\n## Optional\n";
 const escLink = (s: string) => s.replace(/([[\]\\])/g, "\\$1");
@@ -17,6 +17,8 @@ export function gerarLlmsTxt(base: string, posts: Pick<PostDoBlog, "title" | "ur
   const i = base.indexOf(SECAO_OPCIONAL);
   if (i < 0) throw new Error("llms.txt: a base precisa terminar com a seção '## Optional'");
   if (!posts.length) return base.slice(0, i).trimEnd() + "\n";
+  // O autor do blog, da constante única (AUTOR_DO_BLOG): só o fato.
+  const autor = `- [${ASSINATURA_DO_AUTOR}](${AUTOR_DO_BLOG.url}): autor de todos os posts do blog.`;
   const itens = posts.map((p) => `- [${escLink(p.title)}](${p.url}): ${p.description}`);
-  return `${base.trimEnd()}\n${itens.join("\n")}\n`;
+  return `${base.trimEnd()}\n${autor}\n${itens.join("\n")}\n`;
 }

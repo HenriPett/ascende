@@ -11,7 +11,7 @@
 // /sobre, de 20/10/2026), com as mesmas frequências e prioridades. Nenhuma
 // entrada de blog aparece. Cada página pública é também pré-renderizada
 // (src/prerender/paginas.ts) — o teste confere que as duas listas batem.
-import { DESCRICAO_DO_BLOG, SITE_URL, type PostDoBlog } from "@/lib/blog/tipos";
+import { AUTOR_DO_BLOG, DESCRICAO_DO_BLOG, SITE_URL, type PostDoBlog } from "@/lib/blog/tipos";
 
 export interface PaginaPublica {
   caminho: string;
@@ -68,7 +68,9 @@ export function dataRfc822(dia: string): string {
   return `${semana}, ${String(d).padStart(2, "0")} ${MESES[m - 1]} ${a} 00:00:00 -0300`;
 }
 
-/** RSS 2.0 de `dist/blog/feed.xml`. `posts` já ordenados do mais novo. */
+/** RSS 2.0 de `dist/blog/feed.xml`. `posts` já ordenados do mais novo.
+ *  O autor vai em `dc:creator`: o `<author>` do RSS exige e-mail, e não há
+ *  e-mail público para pôr. */
 export function gerarFeed(posts: PostDoBlog[]): string {
   const ultima = posts.map(ultimaData).sort().at(-1);
   const itens = posts.map((p) => `    <item>
@@ -77,10 +79,11 @@ export function gerarFeed(posts: PostDoBlog[]): string {
       <guid isPermaLink="true">${esc(p.url)}</guid>
       <pubDate>${dataRfc822(p.datePublished)}</pubDate>
       <description>${esc(p.description)}</description>
+      <dc:creator>${esc(AUTOR_DO_BLOG.nome)}</dc:creator>
     </item>
 `).join("");
   return `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel>
     <title>Blog do Ascende</title>
     <link>${SITE_URL}/blog/</link>
