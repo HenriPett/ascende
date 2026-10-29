@@ -1,8 +1,13 @@
 ---
 title: "Preço por quilo no mercado: como comparar embalagens"
 description: "Compare embalagens pelo preço por quilo ou litro, inclusive pelo peso drenado, e veja quando a mais barata por quilo não cabe na compra de hoje."
+resumo:
+  - "Ponha o preço das duas embalagens na mesma unidade, como quilo ou litro, e confira também o valor que sai do bolso hoje."
+  - "Em conservas que informam peso drenado, compare as duas por esse peso."
+  - "O menor preço por quilo não é automaticamente a melhor compra: veja se o total cabe e se a quantidade tem uso previsto."
 slug: preco-por-quilo-comparar-embalagens
 datePublished: 2026-10-16
+dateModified: 2026-10-29
 intent: "como comparar o preço por quilo e o valor final de embalagens no mercado"
 cluster: alimentacao-orcamento
 sources:
@@ -46,7 +51,7 @@ Se a compra de hoje tem limite de R$ 10,00 para esse item, a B não cabe — pa
 
 Essa é uma comparação entre opções semelhantes. Antes de usar a conta para trocar um produto por outro, confira o que está sendo vendido: composição, peso informado e forma de uso podem ser diferentes. O resultado matemático não diz se os dois itens atendem à mesma necessidade.
 
-## Confira o peso que realmente entra na comparação
+## Qual peso entra na comparação?
 
 Alguns alimentos em conserva informam **peso líquido** e **peso drenado**. O segundo indica o conteúdo sem o líquido de cobertura. Para mercadorias nas quais o peso drenado deve ser declarado, a nota técnica do Procon-MG orienta basear o preço por unidade no peso drenado. Comparar o peso líquido de uma lata com o drenado de outra distorce a conta.
 
@@ -61,5 +66,25 @@ Se houver promoção ou preço diferente por forma de pagamento, use na conta o 
 Anote três números: **preço da embalagem**, **quantidade** e **preço por unidade de medida**. Em seguida, pergunte se o valor total cabe na compra e se aquela quantidade tem uso previsto. Se a resposta for não, a embalagem proporcionalmente mais barata pode esperar. Não é preciso calcular todos os itens do mercado; comece pelos produtos que você compra com frequência e que aparecem em tamanhos diferentes.
 
 Para decidir o que precisa entrar no carrinho, use a [lista de compras semanal dentro do orçamento](/blog/lista-de-compras-semanal-orcamento/). Para situar essa compra no quadro maior, veja o [orçamento do mês quando as despesas variam](/blog/orcamento-mes-despesas-variaveis/). Este artigo cuida da comparação na gôndola; os outros ajudam a planejar a compra e acompanhar o mês.
+
+## Perguntas frequentes
+
+### Como calcular o preço por quilo de uma embalagem?
+
+Divida o preço da embalagem pelo peso em quilos; para converter gramas em quilos, divida por 1.000 (500 g são 0,5 kg). Para mililitros, faça o mesmo caminho até litros.
+
+### Por que algumas etiquetas mostram o preço por 100 g?
+
+A nota técnica do Procon-MG prevê 100 g ou 100 ml para embalagens com menos de 200 g ou 200 ml. Converta para a mesma unidade antes de comparar.
+
+### A embalagem com menor preço por quilo é sempre a melhor escolha?
+
+Não automaticamente. Ela pode exigir mais dinheiro no caixa do que cabe na compra de hoje ou trazer uma quantidade que não será usada.
+
+### Comparo conservas pelo peso líquido ou pelo peso drenado?
+
+Quando o peso drenado é informado, compare as duas opções por ele. Misturar o peso líquido de uma lata com o drenado de outra distorce a conta.
+
+---
 
 Este conteúdo é educativo e não substitui orientação financeira individualizada. Os exemplos não representam preços de mercado nem garantem economia.

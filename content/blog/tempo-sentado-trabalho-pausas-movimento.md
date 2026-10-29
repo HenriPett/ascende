@@ -2,8 +2,13 @@
 title: "Tempo sentado no trabalho: como organizar pausas de movimento"
 seoTitle: "Tempo sentado no trabalho: pausas de movimento"
 description: "Observe os blocos de tempo sentado no trabalho e organize oportunidades de movimento adequadas ao seu contexto, sem uma duração universal para as pausas."
+resumo:
+  - "Identifique os blocos do trabalho em que você fica sentado e as transições em que pode se mover com segurança, como o fim de uma tarefa ou reunião."
+  - "Escolha uma oportunidade que caiba no local e na tarefa e reveja o que funcionou."
+  - "Não há intervalo nem duração que sirva para todas as pessoas; a OMS orienta limitar o tempo sedentário e destaca que toda atividade física conta."
 slug: tempo-sentado-trabalho-pausas-movimento
 datePublished: 2026-10-21
+dateModified: 2026-10-29
 intent: "como organizar oportunidades de movimento durante períodos de trabalho sentado"
 cluster: rotina-integrada
 sources:
@@ -25,7 +30,7 @@ Para organizar pausas de movimento quando você passa tempo sentado no trabalho,
 
 A [ficha da Organização Mundial da Saúde sobre atividade física, de 2024](https://www.who.int/news-room/fact-sheets/detail/physical-activity), define comportamento sedentário como atividades de baixo gasto de energia realizadas acordado, sentado, reclinado ou deitado. Portanto, dormir e passar o expediente sentado são situações diferentes. A mesma ficha orienta limitar o tempo sedentário e destaca que toda atividade física conta. A [página oficial das diretrizes da OMS de 2020](https://www.who.int/publications/i/item/9789240015128) apresenta o escopo dessas recomendações por diferentes populações. Essas referências oferecem uma direção geral, sem transformar este texto em prescrição individual.
 
-## Observe onde o tempo sentado se concentra
+## Onde o tempo sentado se concentra?
 
 Em um dia que represente sua rotina, anote os blocos de trabalho: atendimento, reuniões, análise de documentos, deslocamento e tarefas administrativas. Você não precisa medir cada minuto. Uma descrição como “fiquei sentado durante a sequência de chamadas da manhã” já aponta um trecho que merece atenção.
 
@@ -80,3 +85,21 @@ Depois de experimentar, pergunte se a oportunidade era reconhecível, se o espa�
 Este roteiro não avalia sintomas, adaptações de posto ou restrições clínicas. Se você tem uma condição de saúde ou dúvida sobre movimento seguro para seu caso, procure orientação profissional. Uma pausa escolhida a partir de um artigo não substitui essa avaliação.
 
 Para começar, anote um bloco sentado e uma oportunidade possível no próximo dia de trabalho. A decisão sobre quando e como se mover depende das suas condições e do contexto do trabalho. Se uma barreira se repetir, leve-a à [revisão semanal da rotina](https://ascende.site/blog/revisao-semanal-rotina-checklist/) para pensar no que precisa mudar.
+
+## Perguntas frequentes
+
+### Existe um intervalo certo para pausas de quem trabalha sentado?
+
+Este roteiro não fixa duração nem frequência universal: a decisão depende das condições da pessoa e do trabalho. A OMS orienta limitar o tempo sedentário e destaca que toda atividade física conta.
+
+### Ficar em pé já resolve?
+
+Ficar em pé não deve ser a única definição de sucesso; o roteiro é sobre encontrar movimento possível. Para quem usa cadeira de rodas ou tem mobilidade reduzida, levantar não é uma medida apropriada de participação.
+
+### E se o trabalho não permite fazer pausas?
+
+Não atribua à pessoa uma pausa que o processo de trabalho não permite realizar. Registre a limitação e discuta com quem organiza o serviço, por exemplo combinando cobertura ou revendo a distribuição de tarefas.
+
+### Quando procurar orientação profissional?
+
+Se você tem uma condição de saúde ou dúvida sobre movimento seguro para o seu caso. Este roteiro não avalia sintomas, adaptações de posto ou restrições clínicas.

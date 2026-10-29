@@ -4,6 +4,11 @@ seoTitle: "Delivery: compare o custo total do pedido"
 description: "Confira itens, cobranças e desconto aplicado para comparar o valor final de pedidos de delivery, com exemplo hipotético e checklist antes de confirmar."
 slug: delivery-custo-total-pedido
 datePublished: 2026-10-27
+dateModified: 2026-10-29
+resumo:
+  - "Para comparar o custo total de um pedido de delivery, olhe o valor final a pagar pelo conjunto que você pretende receber, nas condições que realmente se aplicam à compra."
+  - "Confira itens, quantidades, adicionais, cobranças e desconto efetivamente aplicado: um preço destacado no cardápio ou um cupom disponível não responde, sozinho, quanto sairá do seu bolso."
+  - "Se o cupom não apareceu no resumo, mantenha-o como benefício não confirmado e não registre como custo final um valor que depende dessa redução."
 intent: "como comparar o custo total de um pedido de delivery antes de confirmar a compra"
 cluster: alimentacao-orcamento
 sources:
@@ -61,7 +66,7 @@ Se um adicional já está incorporado no preço do item, não some o mesmo valor
 
 Uma oferta de entrega gratuita também não responde se existem outros componentes. Confira o total, em vez de interpretar a ausência de uma cobrança como ausência de todas.
 
-## Leia as condições antes de contar com o desconto
+## O que conferir antes de contar com o desconto?
 
 O [Guia de Comércio Eletrônico do Procon-SP, na seção Preço](https://www.procon.sp.gov.br/wp-content/uploads/2024/08/Guia_de_Comercio_Eletronico.pdf), inclui descontos ligados ao prazo ou meio de pagamento e os custos adicionais entre as informações da transação. Portanto, compare a oferta nas condições que você consegue e pretende usar.
 
@@ -91,7 +96,7 @@ Essa comparação depende de o desconto de A estar efetivamente aplicado e de n�
 
 No exemplo fictício, itens de R$ 40, entrega de R$ 6 e serviço de R$ 2, com desconto aplicado de R$ 5, somam R$ 43. A conta ilustra a composição, sem estabelecer preços ou cobranças de qualquer serviço.
 
-## Recalcule antes de acrescentar algo para liberar um benefício
+## Vale acrescentar algo ao pedido para liberar um benefício?
 
 Se uma oferta exige aumentar o pedido, compare o total antes e depois da mudança. O desconto maior não informa, sozinho, se o desembolso diminuiu. Veja também se o item acrescentado tem uso desejado naquela compra.
 
@@ -123,3 +128,21 @@ O [Procon-SP orienta conferir o valor mostrado na máquina quando o pagamento é
 Para situar essa despesa entre as demais, veja o [orçamento do mês com despesas variáveis](/blog/orcamento-mes-despesas-variaveis/). A comparação de [preço por quilo](/blog/preco-por-quilo-comparar-embalagens/) responde a outra pergunta, sobre quantidades de embalagens. Já a [lista de compras semanal](/blog/lista-de-compras-semanal-orcamento/) ajuda no abastecimento da casa. Nenhuma dessas decisões exige considerar pedir comida como uma falha de planejamento.
 
 Se quiser guardar a despesa no [Ascende](/), a tela Prosperidade permite registrar manualmente um gasto com valor, categoria e descrição. Use o valor efetivamente ocorrido que você conferiu. O aplicativo guarda esse lançamento; a comparação das ofertas e a conferência do pedido continuam sendo feitas por você.
+
+## Perguntas frequentes
+
+### Entrega grátis significa que não há outras cobranças?
+
+Não necessariamente. Pode haver entrega, serviço, embalagem ou outro valor informado; uma oferta de entrega gratuita não responde se existem outros componentes, por isso confira o total em vez de interpretar a ausência de uma cobrança como ausência de todas.
+
+### O desconto do cupom vale sobre o total do pedido?
+
+Depende das condições visíveis do benefício. Confira se ele reduz o valor dos itens, a entrega ou outra parte identificada, e não aplique mentalmente um desconto ao total inteiro se a condição se refere apenas a um componente.
+
+### Uma cobrança com nome diferente no resumo é irregular?
+
+Não dá para concluir isso apenas pelo nome. O Decreto nº 7.962/2013 prevê a informação de despesas adicionais e restrições da oferta no comércio eletrônico, mas a existência, o nome e a forma de cobrança precisam ser conferidos no pedido concreto.
+
+### O que guardar depois de confirmar um pedido de delivery?
+
+Guarde a identificação do pedido, seu resumo e o comprovante disponível; o Procon-SP também recomenda guardar os comprovantes. Se houver uma divergência, reúna o que foi confirmado e procure o canal oficial do fornecedor.

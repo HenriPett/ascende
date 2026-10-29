@@ -2,8 +2,13 @@
 title: "Notificações no celular: escolha o que pode interromper sua rotina"
 seoTitle: "Notificações no celular: o que pode interromper"
 description: "Revise alertas, escolha o que pode esperar e teste ajustes de notificações e Foco sem presumir que contatos importantes continuarão passando."
+resumo:
+  - "Comece pelos alertas que realmente chegam e decida, para cada tipo, se ele precisa avisar na hora, se pode chegar em silêncio ou se dá para consultar depois."
+  - "Ajuste uma escolha por vez e confira os contatos que precisam continuar passando."
+  - "Teste o resultado num momento sem dependência crítica antes de usar um modo de silêncio durante um compromisso importante."
 slug: notificacoes-celular-interrupcoes-rotina
 datePublished: 2026-10-22
+dateModified: 2026-10-29
 intent: "como escolher quais notificações no celular podem interromper a rotina"
 cluster: rotina-integrada
 sources:
@@ -60,7 +65,7 @@ Use este quadro como proposta de organização. As decisões são suas; os nomes
 
 Também não é preciso tratar todos os avisos de um mesmo aplicativo da mesma forma. Quando há categorias separadas, você pode avaliar cada uma. Se a ferramenta não oferece essa distinção, confira as consequências antes de desligar todas as notificações dela.
 
-## No Android, diferencie silêncio de desativação
+## No Android, qual é a diferença entre silenciar e desativar?
 
 A [documentação do Android sobre notificações](https://support.google.com/android/answer/9079661?hl=pt-BR) indica **Configurações → Notificações → Notificações de apps** para escolher um aplicativo e rever seus avisos. Também é possível manter uma notificação pressionada e acessar suas configurações. O caminho e as categorias variam conforme o aparelho.
 
@@ -117,3 +122,21 @@ Leve uma pendência concreta à [revisão semanal da rotina](/blog/revisao-seman
 Por fim, silenciar avisos não explica quais dados um aplicativo acessa ou guarda. Para essa outra revisão, consulte [permissões de aplicativos de saúde e finanças](/blog/permissoes-apps-saude-financas/). Aqui, você está escolhendo como quer ser avisado.
 
 Comece por um tipo de notificação e uma situação real. Registre a mudança, teste o necessário e mantenha uma forma clara de voltar ao ajuste anterior. A revisão está completa quando você sabe o que mudou e como conferir se ainda faz sentido.
+
+## Perguntas frequentes
+
+### Uma notificação silenciosa some do celular?
+
+Não necessariamente. Em aparelhos Android que oferecem a opção Silenciosa, o aviso fica sem som e sem vibração, mas pode ser encontrado ao abrir o painel de notificações; desativar a notificação é outra escolha.
+
+### No Não Perturbe do iPhone, quem ainda consegue me chamar?
+
+Depende da configuração: a Apple orienta acessar Ajustes → Foco → Não Perturbe para personalizar pessoas e aplicativos permitidos. O nome do modo, sozinho, não informa quem conseguirá chamar sua atenção, então confira e teste antes de depender dele.
+
+### O que o Modo sem distrações do Android faz?
+
+Nos aparelhos que oferecem o recurso, os aplicativos escolhidos ficam pausados: durante a ativação, você não pode usá-los nem recebe suas notificações. É um efeito mais amplo que retirar o som de um aviso.
+
+### Por que o Não Perturbe volta a ligar sozinho no iPhone?
+
+Pode haver um agendamento ativo. A Apple orienta verificar os agendamentos em Ajustes → Foco → Não Perturbe para distinguir uma programação de uma escolha feita só para aquele momento.

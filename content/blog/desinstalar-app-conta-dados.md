@@ -3,6 +3,11 @@ title: "Desinstalar um app apaga a conta e os dados?"
 description: "Separe remoção do aplicativo, encerramento da conta, pedido sobre dados e cobranças para conferir o que você solicitou e o que o serviço confirmou."
 slug: desinstalar-app-conta-dados
 datePublished: 2026-10-27
+dateModified: 2026-10-29
+resumo:
+  - "Desinstalar um app não deve ser tomado como confirmação de que a conta e os dados foram apagados no serviço."
+  - "Remover o aplicativo do aparelho, sair da sessão, excluir a conta e pedir a eliminação de dados respondem a perguntas diferentes; procure o caminho oficial de cada ação."
+  - "A Apple avisa que apagar um app não cancela automaticamente suas assinaturas, então confira a contratação separadamente."
 intent: "desinstalar um app apaga os dados e a conta ou exige uma solicitação ao serviço"
 cluster: ia-privacidade
 sources:
@@ -45,7 +50,7 @@ Essa distinção também vale para um serviço acessado no navegador. Apagar um 
 
 Instalação, conta, dados e assinatura são referências distintas. Confira a explicação de cada ação: realizar uma delas não comprova, por si só, que todas as outras foram concluídas.
 
-## O que a remoção no aparelho informa
+## O que a remoção no aparelho informa?
 
 No iPhone ou iPad, o [Suporte da Apple orienta manter o app pressionado, escolher Remover App e depois Apagar App](https://support.apple.com/pt-br/101550). Essa é uma instrução para apagar o aplicativo do dispositivo. Ela não é uma confirmação emitida pelo serviço de que uma conta remota foi encerrada.
 
@@ -53,7 +58,7 @@ Se sua intenção é apenas liberar espaço ou deixar de usar o aplicativo naque
 
 Não use uma tentativa de entrar novamente como prova completa do destino dos dados. Uma tela de acesso recusado pode informar algo sobre o acesso, mas não descreve, sozinha, quais informações foram eliminadas, retidas ou encaminhadas para processamento.
 
-## Localize o canal oficial da conta e dos dados
+## Onde pedir a exclusão da conta e dos dados?
 
 Procure as configurações da conta, a política de privacidade e a ajuda do fornecedor. Descubra se existe uma opção para excluir a conta, uma opção separada para dados específicos ou um canal de atendimento para formular o pedido.
 
@@ -117,3 +122,21 @@ O fluxo atual tenta cancelar a assinatura vinculada ao Stripe antes de excluir a
 A [Política de Privacidade do Ascende](https://ascende.site/privacidade/) distingue o tratamento nos sistemas ativos, os ciclos técnicos de remoção de cópias de segurança e as retenções legais. Essa descrição deve ser consultada para entender os limites da exclusão, sem pressupor o apagamento instantâneo de todas as cópias. Os compromissos públicos da empresa estão também em [o que o Ascende recusa](https://ascende.site/recusas/).
 
 Antes de retirar o acesso local a um serviço, escolha a ação que corresponde à sua intenção, guarde o que deseja conservar e localize o canal específico de conta e dados. Termine a conferência sabendo o que pediu, o que foi confirmado e qual pendência ainda precisa acompanhar.
+
+## Perguntas frequentes
+
+### Apagar o app cancela a assinatura?
+
+Não automaticamente. A Apple avisa expressamente que apagar um app não cancela automaticamente suas assinaturas; identifique quem cobra e qual confirmação existe sobre a renovação.
+
+### Já desinstalei o app: ainda consigo pedir a exclusão da conta?
+
+Consulte a página oficial e a política do serviço para localizar um caminho pela web ou pelo atendimento. Para aplicativos distribuídos no Google Play, a documentação de Segurança dos dados explica que apps com criação de conta precisam oferecer um link na web para solicitar a exclusão da conta e dos dados associados.
+
+### Excluir a conta apaga todos os dados na hora?
+
+Não presuma o desaparecimento instantâneo de qualquer cópia existente. Se o serviço informar que parte dos dados continuará guardada, procure entender quais categorias, por qual motivo e sob quais condições; a ANPD ressalta que os direitos do titular não são absolutos e pode haver, por exemplo, obrigação legal de guardar dados.
+
+### O que fazer se o serviço não atender ao pedido de exclusão dos dados?
+
+A ANPD orienta solicitar primeiro o exercício do direito diretamente ao controlador; quando o pedido não é atendido ou a resposta é insatisfatória, a página explica o caminho de petição de titular à autoridade. Esse encaminhamento não equivale a uma promessa de exclusão imediata ou decisão favorável.

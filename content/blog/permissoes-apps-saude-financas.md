@@ -2,8 +2,13 @@
 title: "Permissões de aplicativos de saúde e finanças: o que revisar antes de aceitar"
 seoTitle: "Permissões de apps de saúde e finanças"
 description: "Separe permissões do celular, conexões de dados de saúde e a política do app para decidir o que autorizar e como rever o acesso depois."
+resumo:
+  - "Antes de aceitar, separe três camadas: a permissão do aparelho, a conexão de dados de saúde e a política de privacidade do app."
+  - "Pergunte para que serve o acesso agora, se dá para escolher menos acesso e onde rever a decisão depois."
+  - "Revogar uma permissão no aparelho não é o mesmo que pedir a exclusão dos dados já entregues."
 slug: permissoes-apps-saude-financas
 datePublished: 2026-10-20
+dateModified: 2026-10-29
 intent: "como revisar permissões e uso de dados em aplicativos de saúde e finanças"
 cluster: ia-privacidade
 sources:
@@ -65,3 +70,21 @@ Volte às três camadas: permissões do aparelho, conexões de dados que você e
 Se a preocupação é o contexto que você escreve em um assistente de IA, veja também [como reduzir dados pessoais ao dar contexto à IA](https://ascende.site/blog/como-dar-contexto-ia-sem-expor-dados/). Esse é outro tipo de escolha: decidir o que contar, além de decidir quais recursos e conexões autorizar.
 
 Uma autorização pode ser revista. O melhor registro da decisão é saber **o que foi permitido, para qual função e onde mudar depois**.
+
+## Perguntas frequentes
+
+### Onde vejo as permissões de um app no Android?
+
+Segundo a Ajuda do Google, em Configurações → Apps → aplicativo → Permissões. As opções disponíveis variam conforme a versão do sistema e o tipo de recurso.
+
+### E no iPhone, onde revejo o acesso dos apps?
+
+O guia da Apple orienta revisar em Ajustes → Privacidade e Segurança, escolhendo a categoria de informação. Uma autorização concedida ou negada pode ser alterada depois.
+
+### Retirar a permissão de um app na Conexão Saúde apaga os dados?
+
+Não. Segundo a Ajuda do Google, retirar uma permissão não apaga os dados já armazenados na Conexão Saúde, e apps terceiros podem ter feito cópias dos históricos a que tiveram acesso.
+
+### Importar um arquivo exportado dá ao novo app acesso à minha conta de origem?
+
+A importação manual não significa, por si só, acesso permanente à conta de origem: é você quem escolhe o arquivo e inicia o processo. Ainda assim, vale ler o que será aproveitado do arquivo e o que ficará guardado.

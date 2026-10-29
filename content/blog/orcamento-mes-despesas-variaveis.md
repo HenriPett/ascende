@@ -2,8 +2,13 @@
 title: "Orçamento do mês: como lidar com despesas que mudam"
 seoTitle: "Orçamento do mês com despesas variáveis"
 description: "Separe contas conhecidas, gastos variáveis e imprevistos num quadro mensal revisável, sem virar cobrança diária. Com base no método do Banco Central."
+resumo:
+  - "Comece pelo que você já sabe: quanto espera receber, quais contas têm vencimento e quais gastos podem mudar."
+  - "Separe contas conhecidas, gastos variáveis e imprevistos, com uma estimativa revisável para a parte incerta."
+  - "Compare previsto e ocorrido; o caderno do Banco Central sugere planejamento, registro, agrupamento e avaliação."
 slug: orcamento-mes-despesas-variaveis
 datePublished: 2026-10-16
+dateModified: 2026-10-29
 intent: "como organizar o orçamento do mês quando as despesas variam"
 cluster: alimentacao-orcamento
 sources:
@@ -41,10 +46,30 @@ Em vez de concluir automaticamente que “faltou disciplina”, ela anota se ant
 
 Se o problema é decidir o que comprar com o dinheiro disponível, use o guia de [lista de compras semanal dentro do orçamento](/blog/lista-de-compras-semanal-orcamento/). Este artigo cuida do quadro mensal; aquele cuida da ida ao mercado.
 
-## Revise sem recomeçar do zero
+## Como revisar o orçamento sem recomeçar do zero?
 
 No meio do período, confira o que já venceu e o que ainda vai vencer. Quando entrar uma despesa nova, atualize a previsão. No fim, compare previsto e ocorrido apenas nas categorias que mudaram uma decisão. O método do Banco Central também passa por registro e avaliação; ele não exige um aplicativo específico nem promete que o saldo ficará positivo.
 
 Se as contas essenciais já não cabem na renda ou uma dívida compromete necessidades básicas, um checklist não substitui orientação individual. Procure canais de orientação financeira e de renegociação adequados à sua situação.
+
+## Perguntas frequentes
+
+### O que fazer com uma conta que muda de valor todo mês?
+
+Anote o valor esperado e a data da próxima conferência. Ela pode ficar entre as contas conhecidas mesmo sem ser “fixa”, desde que você já consiga listá-la.
+
+### Onde entram impostos, seguros e matrícula escolar?
+
+São compromissos sazonais: inclua-os no mês em que vencem. O caderno do Banco Central lembra deles na etapa de planejamento.
+
+### Gastei mais do que previ. Isso quer dizer que faltou disciplina?
+
+Não necessariamente. A diferença entre previsto e ocorrido pode refletir preço, jornada de trabalho, mudança de renda ou necessidade da família; anote o motivo e decida se ajusta a próxima previsão.
+
+### E se as contas essenciais já não cabem na renda?
+
+Nesse caso, um checklist não substitui orientação individual. Procure canais de orientação financeira e de renegociação adequados à sua situação.
+
+---
 
 Este conteúdo é educativo e trata de organização pessoal. Não substitui orientação financeira individualizada.

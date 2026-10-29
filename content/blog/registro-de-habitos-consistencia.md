@@ -1,8 +1,13 @@
 ---
 title: "Registro de hábitos: como acompanhar a consistência"
 description: "Aprenda a fazer um registro de hábitos simples, distinguir dias não previstos de dados ausentes e acompanhar a consistência com um modelo para copiar."
+resumo:
+  - "Escolha uma ação concreta, defina quando ela está prevista e anote o que aconteceu em cada ocasião."
+  - "Use quatro marcações: feito, não feito, não previsto e sem registro."
+  - "Uma interrupção não apaga os registros anteriores: retome na próxima ocasião, sem preencher o passado por suposição."
 slug: registro-de-habitos-consistencia
 datePublished: 2026-10-15
+dateModified: 2026-10-29
 intent: como fazer um registro de hábitos e acompanhar a consistência
 cluster: rotina-integrada
 related:
@@ -23,7 +28,7 @@ Para fazer um registro de hábitos, escolha uma ação concreta, defina quando e
 
 O registro pode ajudar a responder perguntas pequenas: em quais situações consegui fazer o que havia combinado? O que costuma atrapalhar? Ainda faz sentido acompanhar isso? A proposta é guardar informações úteis para decidir o próximo passo, sem transformar cada dia em uma avaliação pessoal.
 
-## O que vale a pena registrar
+## O que vale a pena registrar?
 
 “Cuidar melhor da rotina” é uma intenção ampla. Para acompanhar algo, descreva uma ação que você consiga reconhecer depois: separar o material de uma aula, anotar uma despesa ou deixar os itens necessários para a manhã seguinte organizados.
 
@@ -74,7 +79,7 @@ Para começar, defina os três primeiros campos e registre a próxima ocasião. 
 
 Não é necessário anotar medidas de saúde para usar esse modelo. Alimentação, treino, sono e finanças podem aparecer como tarefas de organização que você já escolheu: conferir os utensílios de uma preparação, separar materiais ou guardar um comprovante. O quadro não define alimentação, exercícios, horários ideais de sono ou decisões financeiras.
 
-## Como ler o resultado sem confundir os números
+## Como ler o resultado sem confundir os números?
 
 Exemplo fictício: imagine que uma pessoa pretendia separar materiais em quatro noites de uma semana. Ela confirmou a ação em duas, sabe que não fez em uma e não lembra o que ocorreu na outra. As três noites restantes não estavam previstas.
 
@@ -86,7 +91,7 @@ No exemplo fictício da figura abaixo, segunda e sábado estão como “feito”
 
 Se quiser comparar períodos, confira se a ação e as ocasiões previstas continuam iguais. Uma mudança no trabalho, uma viagem ou um cancelamento pode alterar o contexto. Anote a mudança; não é preciso produzir uma nota única para resumir semanas diferentes.
 
-## O que fazer quando houver uma interrupção
+## O que fazer quando houver uma interrupção?
 
 Uma sequência interrompida não apaga os registros anteriores. Retome a anotação na próxima ocasião pertinente, sem preencher o passado por suposição ou criar compensações automáticas.
 
@@ -103,5 +108,25 @@ Ao consultar o registro, escolha uma informação que possa orientar uma mudanç
 Para levar essa observação ao planejamento, use nosso [checklist de revisão semanal da rotina](/blog/revisao-semanal-rotina-checklist/). Se a dificuldade estiver no preparo das compras, o guia de [lista de compras semanal dentro do orçamento](/blog/lista-de-compras-semanal-orcamento/) pode ajudar nessa etapa específica.
 
 Comece pela próxima ocasião e mantenha somente os campos que ajudam você a entender o que aconteceu. Para conhecer a proposta do app, visite o [Ascende](/).
+
+## Perguntas frequentes
+
+### Um dia sem registro conta como falha?
+
+Não. Quando você não lembra o que aconteceu, mantenha “sem registro”: um dado ausente não precisa virar automaticamente uma falha ou um acerto. Se souber depois o que ocorreu, pode completar.
+
+### Qual a diferença entre “não feito” e “não previsto”?
+
+“Não feito” é uma ocasião prevista em que você sabe que a ação não aconteceu. “Não previsto” é uma ocasião que não fazia parte do plano e, por isso, não precisa entrar como tarefa pendente.
+
+### Perder um dia atrapalha a formação de um hábito?
+
+No estudo de Lally e colaboradores, publicado em 2010, perder uma oportunidade de realizar o comportamento não afetou materialmente o processo observado de formação de hábitos. O estudo não estabelece um prazo universal nem garante o efeito de qualquer interrupção.
+
+### Acompanhar o progresso ajuda a alcançar objetivos?
+
+A meta-análise de Harkin e colaboradores, publicada em 2016, reuniu 138 estudos experimentais e encontrou, em média, melhora no alcance de objetivos com intervenções que incentivavam acompanhar o progresso. Isso não garante resultado individual.
+
+---
 
 Este conteúdo é educativo e trata de organização pessoal. Não substitui orientação individualizada de saúde ou finanças.

@@ -4,6 +4,11 @@ seoTitle: "Diário do sono: o que registrar e como conferir"
 description: "Separe horários, estimativas e informações ausentes num diário do sono simples, com contexto da rotina e sem transformar a anotação em diagnóstico."
 slug: diario-sono-registrar-horarios
 datePublished: 2026-10-26
+dateModified: 2026-10-29
+resumo:
+  - "Para fazer um diário do sono, anote os horários que consegue reconhecer, o que é apenas estimativa e as condições da rotina que ajudam a descrever aquele período."
+  - "Diferencie deitar de tentar dormir e o último despertar de sair da cama. Não precisa acompanhar o relógio durante a noite para preencher o registro."
+  - "O diário pode apoiar a conversa com um profissional de saúde, mas não calcula um diagnóstico nem é uma exigência para procurar ajuda."
 intent: "como fazer um diário do sono distinguindo horários, estimativas e contexto da rotina"
 cluster: rotina-integrada
 sources:
@@ -61,7 +66,7 @@ A diferença entre dois horários pode responder a uma pergunta de organização
 
 Deitar, tentar dormir, adormecer, acordar e levantar são referências diferentes. O esquema organiza os acontecimentos, sem estabelecer quanto tempo cada etapa deveria durar ou exigir que você identifique todas elas com precisão.
 
-## Preencha depois de acordar, aceitando estimativas
+## Devo preencher o diário do sono à noite ou depois de acordar?
 
 O [formulário de Oxford orienta preencher pela manhã e aceita estimativas](https://www.ouh.nhs.uk/media/dqrpr4p4/sleepdiary.pdf). Também desaconselha tentar registrar ou memorizar os despertares durante a noite, porque essa vigilância pode interferir no sono. Aqui, a ideia é recuperar o que você lembra ao acordar, sem criar uma tarefa noturna de medição.
 
@@ -75,7 +80,7 @@ Essas marcações são uma legenda editorial. “Sem informação” não signif
 
 Se acordou num contexto corrido e só consegue preencher depois, registre também essa circunstância quando for relevante. Uma estimativa feita mais tarde não precisa ganhar aparência de precisão só para a ficha ficar completa.
 
-## Acrescente o contexto que ajuda a descrever o dia
+## Que contexto do dia vale anotar no diário do sono?
 
 O [CDC inclui no diário horários de deitar, despertar, sonecas, exercício, bebidas com cafeína ou álcool e medicamentos](https://www.cdc.gov/sleep/about/index.html). São informações para conhecer a situação e apoiar a conversa profissional; anotá-las não exige mudar tratamento, consumo ou prática física por conta própria.
 
@@ -133,3 +138,21 @@ Leve o que conseguiu anotar e explique os campos estimados ou ausentes. Um relat
 Para manter a anotação sem cobrança de sequência perfeita, veja também [registro de hábitos e consistência](/blog/registro-de-habitos-consistencia/). Se já traz dados de outro aplicativo, o guia de [conferência do histórico de saúde importado](/blog/historico-sono-treino-conferir-importacao/) explica limites de datas e agrupamentos; uma importação não reproduz automaticamente os detalhes da sua ficha.
 
 Se quiser guardar uma parte desse acompanhamento no [Ascende](/), a tela Vitalidade permite registrar manualmente a duração do sono ou de uma soneca, quando os respectivos acompanhamentos estão ativos. Esse registro de duração não reúne todos os campos do diário proposto aqui e não determina quando você adormeceu nem avalia sintomas. Mantenha as observações que precisar na sua ficha e use-as para conferir a rotina ou conversar com um profissional.
+
+## Perguntas frequentes
+
+### Preciso anotar o horário exato em que adormeci?
+
+Não. Você não precisa saber o minuto exato de cada etapa, e o formulário de Oxford aceita estimativas; basta identificar a aproximação de memória como estimada.
+
+### Tempo na cama é o mesmo que tempo dormindo?
+
+Não. Ir para a cama, tentar dormir, adormecer, o último despertar e sair da cama são referências diferentes, e separá-las evita tomar todo o intervalo na cama como tempo efetivamente dormido.
+
+### O que anotar quando não lembro de uma parte da noite?
+
+Marque o campo como sem informação, sem copiar o horário habitual para completar a lacuna. Sem informação não significa que o acontecimento não ocorreu.
+
+### Preciso de um diário completo antes de procurar um profissional?
+
+Não. O CDC recomenda conversar com um profissional de saúde quando os problemas de sono são regulares; o registro pode apoiar essa conversa, mas não é uma exigência para procurar ajuda.

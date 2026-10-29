@@ -2,8 +2,13 @@
 title: "Revisão semanal da rotina: um checklist para planejar sem lotar a agenda"
 seoTitle: "Revisão semanal da rotina: checklist para planejar"
 description: "Um roteiro para revisar a semana: o que aconteceu, o espaço real na agenda, um destino para cada pendência e a próxima ação. Com modelo para copiar."
+resumo:
+  - "Confira o que aconteceu na semana, veja os compromissos dos próximos dias e escolha um ajuste que caiba no tempo disponível."
+  - "Dê a cada pendência um destino: agendar, combinar, adiar ou retirar."
+  - "Não é preciso dar nota a cada área nem acrescentar um novo hábito."
 slug: revisao-semanal-rotina-checklist
 datePublished: 2026-10-15
+dateModified: 2026-10-29
 intent: como revisar a semana e decidir o que cabe na próxima
 cluster: rotina-integrada
 sources:
@@ -99,5 +104,25 @@ Exemplo fictício: uma pessoa percebe que a aula de quarta conflita com um compr
 - Deixei combinado quando revisar novamente.
 
 Escolha um momento que funcione para você; não precisa ser domingo. Se faltar tempo, confira primeiro os próximos compromissos e prazos, e deixe o restante para outro momento. Na revisão seguinte, veja o que aconteceu com o ajuste escolhido. Essa informação já permite decidir se vale manter, adaptar ou abandonar a ideia.
+
+## Perguntas frequentes
+
+### Qual o melhor dia para fazer a revisão semanal?
+
+Escolha um momento que funcione para você; não precisa ser domingo. Se faltar tempo, confira primeiro os próximos compromissos e prazos, e deixe o restante para outro momento.
+
+### O que fazer com uma pendência que não cabe na semana?
+
+Dê a ela um destino: agendar, combinar com outra pessoa, adiar com uma data para reconsiderar ou retirar, se deixou de ser necessária. Antes de adiar algo combinado ou um prazo, confira se é preciso avisar alguém e quais são as consequências.
+
+### A revisão semanal precisa incluir um novo hábito?
+
+Não. Se a semana já estiver cheia, o resultado da revisão pode ser adiar uma tarefa ou combinar uma divisão de responsabilidades.
+
+### Este roteiro é o método GTD completo?
+
+Não. A revisão semanal do método GTD, da David Allen Company, inclui consultar a agenda passada e a futura; este roteiro é uma proposta editorial simplificada para a vida pessoal, não uma reprodução completa do método.
+
+---
 
 Este conteúdo é educativo e trata de organização pessoal. Não substitui orientação individualizada de saúde ou finanças.

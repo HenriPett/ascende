@@ -4,6 +4,11 @@ seoTitle: "Assinaturas: revise antes da próxima renovação"
 description: "Liste serviços, identifique quem cobra, confira a renovação e registre o cancelamento no canal correto, com orientações oficiais do Google e da Apple."
 slug: assinaturas-cobrancas-recorrentes-revisar
 datePublished: 2026-10-20
+dateModified: 2026-10-29
+resumo:
+  - "Para revisar cobranças recorrentes, liste os serviços contratados, descubra quem faz cada cobrança e confira a próxima renovação."
+  - "Depois, decida o que manter e cancele no canal responsável pela cobrança: Google Play, Apple ou o fornecedor identificado."
+  - "A revisão termina quando você registra a confirmação e sabe o que ainda precisa acompanhar."
 intent: "como revisar assinaturas e cancelar a renovação no canal que faz a cobrança"
 cluster: alimentacao-orcamento
 sources:
@@ -49,7 +54,7 @@ Este modelo é uma proposta de organização. Preencha com o que conseguiu confe
 
 Não trate data de fechamento da fatura, dia em que você pagou o cartão e renovação do serviço como se fossem a mesma informação. Procure especificamente o próximo ciclo da assinatura. Se o sistema não mostrar isso claramente, deixe uma tarefa objetiva: consultar o suporte oficial e confirmar a data e as condições.
 
-## Decida o que faz sentido manter agora
+## Como decidir quais assinaturas manter?
 
 Pergunte para que você usa cada serviço, se pretende continuar usando e se existe outra contratação cumprindo a mesma função. Uma assinatura pouco usada pode continuar necessária; uma muito usada pode ter deixado de caber no dinheiro disponível. A decisão depende da sua situação, não de uma quantidade ideal de aplicativos.
 
@@ -59,7 +64,7 @@ Se escolher manter, registre isso e deixe uma próxima conferência associada à
 
 Para colocar os compromissos que permanecerem no planejamento geral, veja o guia de [orçamento do mês com despesas variáveis](/blog/orcamento-mes-despesas-variaveis/).
 
-## Cancele onde a assinatura foi contratada e cobrada
+## Onde cancelar uma assinatura?
 
 ### Quando a cobrança é pelo Google Play
 
@@ -90,3 +95,21 @@ Se uma cobrança posterior não corresponder ao que foi confirmado, reúna o reg
 Retirar acesso a câmera, saúde ou outros dados é outra decisão. O guia de [permissões de aplicativos de saúde e finanças](/blog/permissoes-apps-saude-financas/) trata desses controles; uma alteração de permissão não é confirmação de cancelamento financeiro.
 
 Para encerrar, deixe as pendências de identificação e confirmação na sua [revisão semanal da rotina](/blog/revisao-semanal-rotina-checklist/). Escolha uma contratação, confira quem cobra e conclua a próxima ação possível. O objetivo é saber o que você decidiu e o que o fornecedor confirmou, antes de deixar a renovação seguir sem revisão.
+
+## Perguntas frequentes
+
+### Desinstalar o aplicativo cancela a assinatura?
+
+Não. A Ajuda do Google Play informa que desinstalar o aplicativo não cancela a assinatura; ela orienta acessar as assinaturas, selecionar o serviço, escolher Cancelar assinatura e seguir as instruções.
+
+### Como cancelar uma assinatura da Apple no iPhone?
+
+O Suporte da Apple indica Ajustes, seu nome, Assinaturas, a assinatura e Cancelar assinatura. Esse caminho atende às assinaturas cobradas pela Apple; quando a contratação foi feita por outro fornecedor, a Apple orienta contatar a empresa que cobra.
+
+### Depois de cancelar no Google Play, perco o acesso na hora?
+
+Segundo a Ajuda do Google Play, o acesso normalmente continua pelo período já pago. Em planos com compromisso de vários pagamentos, interromper a renovação não elimina os pagamentos restantes do plano atual.
+
+### Por que a assinatura não aparece na loja do celular?
+
+Ela pode estar em outra conta ou ser cobrada por outra empresa. Confira a conta usada na contratação e procure o recibo para identificar o responsável pelo faturamento.

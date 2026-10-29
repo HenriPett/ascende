@@ -2,6 +2,10 @@
 title: "Tempo de uso do celular: como interpretar o relatório"
 seoTitle: "Tempo de uso do celular: leia o relatório"
 description: "Confira período, aparelho e indicadores no relatório de tempo de uso do celular antes de comparar dias ou decidir um ajuste na rotina."
+resumo:
+  - "Antes de interpretar o relatório de tempo de uso do celular, confira o período, o aparelho e o que cada indicador mede."
+  - "Tempo de uso, ativações e notificações respondem a perguntas diferentes."
+  - "Acrescente o contexto que o gráfico não conhece: um total de horas não explica sozinho o que aconteceu no dia."
 slug: relatorio-tempo-uso-celular
 datePublished: 2026-10-29
 intent: "como interpretar o relatório de tempo de uso do celular considerando período aparelho indicadores e contexto"
@@ -132,3 +136,21 @@ Você pode encerrar a leitura com uma frase: “consultei este período, neste a
 Se quiser guardar uma captura para comparação pessoal, observe as informações de aplicativos, horários e hábitos que ela revela antes de compartilhá-la. A consulta pode continuar sendo sua: não há obrigação de enviar o relatório a outra pessoa ou a um aplicativo para validar a observação.
 
 O valor prático dessa leitura está na pergunta que ficou mais clara. Você pode manter o que funciona, testar uma mudança pequena ou reconhecer que os dados disponíveis ainda não permitem concluir. Um relatório descreve um recorte do uso do aparelho; a decisão sobre a rotina precisa considerar a vida que acontece em volta dele.
+
+## Perguntas frequentes
+
+### Onde fica o relatório de tempo de uso no Android?
+
+Segundo a ajuda do Android, o caminho é Configurações → Bem-estar Digital, tocando no gráfico para ver detalhes. Nomes, telas e etapas variam conforme o aparelho e a versão.
+
+### Posso comparar o uso de hoje com o de ontem?
+
+Com cuidado: “hoje” ainda pode estar em andamento, e o total parcial não representa o dia inteiro. Confira se os intervalos, as unidades e o tipo de resumo, média ou total, são compatíveis antes de comparar.
+
+### Muitas notificações significam muitas interrupções?
+
+Não necessariamente. O relatório conta avisos recebidos, o que não comprova quantos foram vistos nem quantas interrupções você percebeu.
+
+### Existe um número ideal de horas de uso do celular?
+
+Este texto não recomenda um total universal de horas para adultos, e a Samsung descreve o relatório semanal sem definir uma meta de tempo. A decisão precisa levar em conta a situação concreta e as opções do aparelho.

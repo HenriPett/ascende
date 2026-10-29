@@ -3,6 +3,11 @@ title: "Histórico de sono e treino: confira antes de importar"
 description: "Veja como preparar um arquivo de saúde, conferir datas, unidades e repetições e entender o que será gravado antes de confirmar a importação."
 slug: historico-sono-treino-conferir-importacao
 datePublished: 2026-10-21
+dateModified: 2026-10-29
+resumo:
+  - "Para importar histórico de saúde, confira de onde veio o arquivo, qual período ele contém e o que o aplicativo de destino reconheceu, comparando datas, unidades e repetições."
+  - "Ter um arquivo disponível para exportação não significa que qualquer outro aplicativo consiga aproveitar tudo o que existe nele."
+  - "As linhas lidas e os registros reconhecidos podem ter quantidades diferentes sem que isso prove perda de dados: uma linha pode ser só um trecho de sono ou parte de um treino."
 intent: "como importar histórico de saúde e conferir sono e treino antes de gravar"
 cluster: rotina-integrada
 sources:
@@ -64,7 +69,7 @@ No export do Saúde, o Ascende usa os trechos identificados como sono para compo
 
 Se um valor parecer incompatível com o registro de origem, deixe-o desmarcado enquanto investiga. Não é necessário confirmar um lote inteiro para aproveitar apenas a parte que você conseguiu verificar.
 
-## Duplicatas: compare a origem e o que já existe
+## Como evitar duplicatas ao importar dados de saúde?
 
 O [guia da Apple sobre gestão dos dados de saúde](https://support.apple.com/pt-br/108779) explica que o Saúde reúne informações de várias fontes e permite definir prioridades entre elas. Para conferir uma categoria no iPhone, o caminho descrito passa por **Explorar → categoria → subcategoria → Fontes de Dados e Acesso**. Ter várias fontes para o mesmo tipo de dado é um motivo para conferir a origem dos totais.
 
@@ -103,3 +108,21 @@ Trazer dados antigos pode servir para situar uma semana ou evitar recomeçar um 
 Nosso guia de [registro de hábitos e consistência](/blog/registro-de-habitos-consistencia/) ajuda a escolher o que vale acompanhar daqui para a frente. Para organizar o uso dessas anotações, o [checklist de revisão semanal](/blog/revisao-semanal-rotina-checklist/) parte do que aconteceu e do que cabe na próxima semana.
 
 Se quiser trazer um arquivo compatível para o [Ascende](/), a importação manual em Ajustes permite revisar os registros antes de gravá-los e consultar o recibo depois.
+
+## Perguntas frequentes
+
+### Exportar os dados do app Saúde cria uma conexão contínua com outro aplicativo?
+
+Não. O manual da Apple descreve a exportação em XML, e esse procedimento exporta os dados; ele não cria, por si só, uma conexão contínua com outro serviço.
+
+### Renomear o arquivo para .csv faz o aplicativo reconhecê-lo?
+
+Não. Renomear um arquivo para terminar em .csv não muda seu formato; depois da importação, confira o que o aplicativo de destino de fato reconheceu.
+
+### Tempo na cama é o mesmo que tempo dormido?
+
+Não. Tempo na cama e tempo dormido não devem ser lidos como a mesma medida; confira o rótulo antes de comparar os totais.
+
+### Um dia sem dados no histórico importado significa que nada aconteceu?
+
+Não necessariamente. Uma lacuna pode significar que você não registrou aquele dia, que a origem não o exportou ou que a leitura não o reconheceu; ela não conta, sozinha, o que aconteceu na sua vida.

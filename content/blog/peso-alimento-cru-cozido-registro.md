@@ -2,6 +2,10 @@
 title: "Peso do alimento cru ou cozido: o que conferir antes de registrar"
 seoTitle: "Peso cru ou cozido: confira o registro da refeição"
 description: "Confira estado de preparo, parte comestível e origem da quantidade ao registrar uma refeição, sem trocar peso cru por cozido como se fossem a mesma referência."
+resumo:
+  - "Antes de registrar, anote o que foi pesado, em qual estado (cru ou pronto) e com quais partes incluídas."
+  - "Peso cru e peso cozido são referências diferentes; não use um fator universal para trocar um pelo outro."
+  - "Quando não souber um detalhe, deixe isso visível no registro em vez de completar com uma suposição."
 slug: peso-alimento-cru-cozido-registro
 datePublished: 2026-10-29
 intent: "como conferir peso cru ou cozido estado de preparo e parte comestível antes de registrar uma refeição"
@@ -130,3 +134,21 @@ Antes de salvar, releia a anotação como se fosse consultá-la em outro dia. Vo
 Para quem organiza refeições com antecedência, essa identificação pode acompanhar a preparação e o porcionamento. Os cuidados de conservação e transporte são outro assunto, tratado no roteiro de [organização das marmitas](/blog/marmitas-semana-porcionar-guardar/); o estado descrito no registro não determina, sozinho, condições de segurança do alimento.
 
 Se você usa o registro de refeições do Ascende e o recurso estiver disponível na sua conta, pode acrescentar os detalhes conhecidos no campo de descrição antes da análise. Informe se a quantidade se refere ao alimento cru ou pronto e revise a proposta. Esse contexto não transforma a estimativa em uma medição nem garante equivalência com uma tabela de composição.
+
+## Perguntas frequentes
+
+### Posso registrar o peso cru como se fosse o da porção pronta?
+
+Não. Se você só conhece a quantidade inicial, registre-a como informação do preparo, sem transformá-la automaticamente em quantidade consumida.
+
+### Existe uma conta simples para converter cru em cozido?
+
+Este roteiro não usa fator de conversão. A TBCA explica que seus cálculos de preparações consideram método de preparo, mudanças de umidade e lipídios e pesos iniciais e finais; uma regra genérica pode dar aparência de certeza a uma suposição.
+
+### O peso deve incluir casca, osso ou sementes?
+
+Identifique o que estava sobre a balança. A documentação do USDA diferencia o alimento adquirido e sua parte comestível; se você não mediu o descarte, anote a condição em vez de calcular uma porcentagem.
+
+### O que escrever quando não sei como o alimento foi preparado?
+
+Separe observação de suposição, com anotações como “quantidade estimada” ou “preparo não confirmado”. Isso é mais útil numa consulta futura do que uma certeza inventada.
