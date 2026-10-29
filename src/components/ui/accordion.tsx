@@ -43,19 +43,70 @@ AccordionTrigger.displayName = AccordionPrimitive.Trigger.displayName;
 const AccordionContent = React.forwardRef<
   React.ElementRef<typeof AccordionPrimitive.Content>,
   Omit<React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Content>, "forceMount"> & { sempreNoDom?: boolean }
->(({ className, children, sempreNoDom = false, ...props }, ref) => (
-  <AccordionPrimitive.Content
-    ref={ref}
-    {...(sempreNoDom ? { forceMount: true as const } : {})}
-    className={cn(
-      "overflow-hidden text-sm transition-all data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down",
-      sempreNoDom && "duration-200 data-[state=closed]:h-0 data-[state=closed]:invisible",
-    )}
-    {...props}
-  >
-    <div className={cn("pb-4 pt-0", className)}>{children}</div>
-  </AccordionPrimitive.Content>
-));
+>(({ className, children, sempreNoDom = false, style, ...props }, ref) => {
+  /* E A ANIMAÇÃO SÓ DEPOIS DE MONTAR. No HTML pré-renderizado a resposta
+     chega `data-state=closed` — e com a classe do accordion-up ela RODAVA na
+     primeira pintura, antes do JS: a altura de partida é uma variável que só
+     o Radix preenche, então as seis respostas ocupavam a altura inteira por
+     ~100 ms e depois sumiam (medido no Chrome em 390; o CLS não acusa porque
+     o FAQ fica abaixo da dobra). Sem a classe até montar, o fechado do HTML é
+     h-0 desde o primeiro quadro. Depois de montar, o Radix segura a animação
+     de montagem (animation-name: none inline até a primeira troca de estado),
+     então pôr a classe aqui não dispara nada; abrir e fechar animam como
+     antes. Só no ramo `sempreNoDom`: o resto do app não muda. */
+  const [montado, setMontado] = React.useState(false);
+  React.useEffect(() => setMontado(true), []);
+  const animacao = "data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down";
+
+  /* A ALTURA QUE O ABRIR PRECISA. O accordion-down anima de 0 até
+     --radix-accordion-content-height, que o Radix mede — mas com
+     `forceMount` ele mede e não redesenha (o redesenho dele vem da troca de
+     presença, que aqui nunca acontece): a variável ficava vazia, e o abrir
+     virava um salto de 0 para a altura inteira na metade dos 200 ms (medido
+     no Chrome, tempo real). Aqui a altura vem do conteúdo de dentro — que
+     tem a altura natural mesmo com a caixa de fora em h-0 — e é reobservada
+     quando muda (Texto Maior, largura da tela). */
+  const interno = React.useRef<HTMLDivElement>(null);
+  const [altura, setAltura] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    const el = interno.current;
+    if (!sempreNoDom || !el) return;
+    const medir = () => setAltura(el.getBoundingClientRect().height);
+    medir();
+    const observador = new ResizeObserver(medir);
+    observador.observe(el);
+    return () => observador.disconnect();
+  }, [sempreNoDom]);
+  return (
+    <AccordionPrimitive.Content
+      ref={ref}
+      {...(sempreNoDom ? { forceMount: true as const } : {})}
+      /* O `invisible` do fechado espera o fim do accordion-up por uma
+         transição de `visibility` (ela troca no final) — mas o Radix, ao
+         medir, põe `transition-duration: 0s` INLINE, e a troca vinha na hora:
+         o texto sumia e a caixa encolhia vazia. A duração vai com !important,
+         só para a `visibility`, para ganhar do inline; assim o texto encolhe
+         visível, como no acordeão de antes. */
+      className={cn(
+        "overflow-hidden text-sm",
+        sempreNoDom
+          ? cn(
+              montado && animacao,
+              "[transition-property:visibility] !duration-200 data-[state=closed]:h-0 data-[state=closed]:invisible",
+            )
+          : cn("transition-all", animacao),
+      )}
+      {...props}
+      style={
+        sempreNoDom && altura
+          ? ({ ...style, "--radix-accordion-content-height": `${altura}px` } as React.CSSProperties)
+          : style
+      }
+    >
+      <div ref={interno} className={cn("pb-4 pt-0", className)}>{children}</div>
+    </AccordionPrimitive.Content>
+  );
+});
 
 AccordionContent.displayName = AccordionPrimitive.Content.displayName;
 
