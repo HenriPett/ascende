@@ -4,6 +4,11 @@ seoTitle: "Exportar dados do app: confira a cópia"
 description: "Confira escopo, arquivos, datas e registros ao exportar dados de um aplicativo. Entenda o que a cópia permite consultar e o que ainda precisa esclarecer."
 slug: exportar-dados-app-conferir-copia
 datePublished: 2026-10-28
+dateModified: 2026-10-29
+resumo:
+  - "Para exportar dados de um app e conferir a cópia, defina quais registros, de qual conta e de qual período quer consultar; depois verifique os arquivos e abra registros conhecidos."
+  - "Um download concluído confirma que um arquivo chegou; não comprova, sozinho, que ele contém tudo o que você esperava."
+  - "Exportar, conseguir ler e conseguir importar são etapas diferentes, e um arquivo salvo não confirma encerramento de conta nem atendimento de um pedido de exclusão."
 intent: "como exportar dados de um aplicativo e conferir o escopo e a leitura da cópia recebida"
 cluster: ia-privacidade
 sources:
@@ -119,10 +124,28 @@ Para sua organização pessoal, mantenha a localização e a finalidade da cópi
 
 Guarde o original e as informações da exportação, use uma cópia identificada para trabalhar e confira quem pode acessar a pasta. Esses cuidados não comprovam exclusão na origem nem restauração em outro aplicativo.
 
-## Não confunda exportar com encerrar o serviço
+## Exportar os dados encerra o serviço?
 
 O Google informa expressamente que fazer o download não exclui os dados dos seus servidores. Para outros serviços, confira a explicação de cada ação. A existência de um arquivo salvo não confirma cancelamento de assinatura, encerramento de conta ou atendimento de um pedido de exclusão.
 
 Se esse for seu próximo passo, use o roteiro sobre [desinstalar o app, encerrar a conta e pedir exclusão de dados](/blog/desinstalar-app-conta-dados/). Antes de uma decisão que possa retirar seu acesso, esclareça se a cópia contém o que você precisa consultar e quais limitações permaneceram.
 
 No Ascende, a área **Ajustes → Seus dados** oferece exportação em JSON e arquivos CSV de registros e finanças. Se quiser guardar uma cópia, baixe os arquivos e confira os registros relevantes para você. A exportação tem limites de escopo e quantidade; não deve ser tratada como garantia de histórico integral nem de restauração em outro serviço.
+
+## Perguntas frequentes
+
+### Um download concluído significa que a exportação veio completa?
+
+Não necessariamente. Um download concluído confirma que um arquivo chegou, mas não comprova, sozinho, que ele contém tudo o que você esperava; até esclarecer as lacunas, descreva a cópia pelo que verificou.
+
+### Não consegui abrir o arquivo exportado. Os dados foram perdidos?
+
+Um erro de leitura não comprova perda dos dados. Anote a extensão, a mensagem recebida e o programa utilizado, procure a documentação ou o suporte oficial e evite enviar o arquivo inteiro para um conversor desconhecido apenas para testar.
+
+### Por que datas e números mudam quando abro a exportação numa planilha?
+
+A documentação da Apple alerta que certos programas podem arredondar números longos e explica que usa UTC para datas e horas em determinados dados fornecidos. Preserve o original e consulte o significado dos campos antes de corrigir uma data ou um identificador que pareça estranho.
+
+### Como guardar com segurança a cópia dos dados exportados?
+
+O fascículo de backup do CERT.br recomenda proteger as cópias contra acesso indevido, usar criptografia quando possível e reforçar o acesso aos serviços de nuvem com verificação em duas etapas. Confira também quem tem acesso ao aparelho, à pasta e à conta de armazenamento.

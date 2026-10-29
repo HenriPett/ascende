@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { Markdown } from "@/components/core/Markdown";
 import Logo from "@/components/core/Logo";
 import SiteFooter from "@/components/core/SiteFooter";
-import { SOBRE } from "@/lib/sobre";
+import { SOBRE_ABERTURA, SOBRE_AUTOR, SOBRE_FAQ, SOBRE_FECHO } from "@/lib/sobre";
 
 export default function Sobre() {
   return (
@@ -23,7 +23,22 @@ export default function Sobre() {
       <main className="container py-8 max-w-3xl">
         <p className="text-xs uppercase tracking-widest text-muted-foreground mb-3">Sobre</p>
         <article className="rounded-2xl border bg-card p-5 sm:p-8 text-sm">
-          <Markdown content={SOBRE} doc pagina />
+          <Markdown content={SOBRE_ABERTURA} doc pagina />
+          {/* #autor: o `author` de todo post do blog aponta para cá
+              (AUTOR_DO_BLOG.url). scroll-mt: o cabeçalho é fixo (h-14).
+              Cada parte é um <Markdown> próprio, e o primeiro título dele
+              perde a margem (`first:mt-0`): o mt-6 da seção devolve o
+              espaço que o h2 do modo doc teria no texto corrido; o mt-2 do
+              fecho, o do parágrafo. */}
+          <section id="autor" className="mt-6 scroll-mt-20">
+            <Markdown content={SOBRE_AUTOR} doc pagina />
+          </section>
+          <section id="perguntas-frequentes" className="mt-6 scroll-mt-20">
+            <Markdown content={SOBRE_FAQ} doc pagina />
+          </section>
+          <div className="mt-2">
+            <Markdown content={SOBRE_FECHO} doc pagina />
+          </div>
         </article>
       </main>
       <SiteFooter />

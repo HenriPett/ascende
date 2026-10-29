@@ -485,7 +485,7 @@ describe("o pipeline", () => {
     const out = gerarBlog({ arquivos: fixtures(), indice: indiceDasFixtures(), imagens: imagensDasFixtures(), hoje: HOJE, ctx: CTX, templates: falsos });
     const md = out.arquivos["blog/rotina-de-registro-em-uma-frase/index.md"] as string;
     const p = out.posts.find((x) => x.slug === "rotina-de-registro-em-uma-frase")!;
-    expect(md.startsWith(`# ${p.title}\n\n> ${p.description}\n\nPublicado em ${p.datePublished}`)).toBe(true);
+    expect(md.startsWith(`# ${p.title}\n\n> ${p.description}\n\nPor Henrique Pett, fundador do Ascende. Publicado em ${p.datePublished}`)).toBe(true);
     expect(md).toContain("](https://ascende.site/blog/rotina-de-registro-em-uma-frase/diagrama-da-frase.png ");
     expect(md).not.toMatch(/\]\(\.\//);
     expect(md).not.toMatch(/\]\(\/(?!\/)/);

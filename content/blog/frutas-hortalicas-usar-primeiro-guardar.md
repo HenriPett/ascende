@@ -4,6 +4,11 @@ seoTitle: "Frutas e hortaliças: o que usar primeiro"
 description: "Depois das compras, use uma triagem simples para decidir o que preparar primeiro, o que acompanhar e como guardar cada item sem prazo universal."
 slug: frutas-hortalicas-usar-primeiro-guardar
 datePublished: 2026-10-20
+dateModified: 2026-10-29
+resumo:
+  - "Depois das compras, confira o que trouxe, separe o que precisa de atenção primeiro e defina um uso próximo para esses itens; para os demais, veja como guardar cada tipo."
+  - "Essa triagem ajuda a não esquecer alimentos, mas não cria uma validade comum para todos eles: maturação e conservação não são iguais para todos os produtos."
+  - "A observação serve para planejar o uso, não para declarar um alimento seguro: a cartilha da Anvisa explica que micróbios prejudiciais podem estar presentes sem alterar cheiro ou sabor."
 intent: "como decidir quais frutas e hortaliças usar primeiro depois das compras"
 cluster: alimentacao-orcamento
 sources:
@@ -43,7 +48,7 @@ Uma banana já madura pode entrar no café ou lanche que você de fato pretende 
 
 Ao decidir o que vem primeiro, considere também o que já existe em casa. Abrir espaço para a compra nova e deixar um item antigo esquecido no fundo troca um desperdício por outro. Uma breve conferência da geladeira, da fruteira e do plano de refeições basta para reordenar o uso.
 
-## Guarde conforme o tipo e volte a conferir
+## Todas as frutas e hortaliças vão para a geladeira?
 
 Não há uma instrução única “tudo na geladeira”. A [CEASA/MS diferencia verduras folhosas, alguns legumes e frutas que amadurecem fora da refrigeração](https://www.ceasa.ms.gov.br/armazenamento-correto-no-inverno-saiba-como-preservar-a-qualidade-de-frutas-verduras-legumes-e-vegetais/). Ela também orienta evitar excesso de umidade e conferir regularmente os produtos guardados. Condições de transporte, maturação e armazenamento variam; evite copiar um prazo de outro alimento ou de outra casa.
 
@@ -68,3 +73,21 @@ Se a compra costuma se perder de vista, anote apenas o necessário em papel ou n
 Na compra seguinte, compare o que foi comprado com o que você realmente usou. Isso pode ajudar a ajustar a [lista semanal](/blog/lista-de-compras-semanal-orcamento/) e as quantidades. Se a dúvida estiver no custo de embalagens, o [preço por quilo](/blog/preco-por-quilo-comparar-embalagens/) responde outra pergunta. E, se você já preparou refeições completas para guardar, consulte os cuidados específicos para [porcionar e conservar marmitas](/blog/marmitas-semana-porcionar-guardar/).
 
 O próximo passo cabe em uma frase: **qual item precisa ser conferido agora e em qual refeição real ele pode entrar?** Depois, volte a olhar os demais. Organizar o uso é diferente de garantir conservação; observe cada produto e siga orientações de segurança no preparo.
+
+## Perguntas frequentes
+
+### Quais frutas e hortaliças usar primeiro depois das compras?
+
+Pedem atenção primeiro os itens já maduros ou delicados que combinam com a próxima refeição. A resposta muda conforme a fruta ou hortaliça, o estado em que chegou e as condições da sua casa.
+
+### Cortar a parte estragada deixa o resto seguro para comer?
+
+Cortar uma parte ruim e presumir que o restante ficou seguro não é uma regra que este roteiro possa oferecer. Em caso de dúvida sobre a segurança de um alimento, não force o aproveitamento para salvar a compra.
+
+### Guardar banana junto de outras frutas acelera o amadurecimento?
+
+A CEASA/MS alerta que frutas que liberam etileno, como banana, maçã e pera, podem acelerar o amadurecimento de outros produtos sensíveis quando ficam juntas. Se houver espaço, separar esses itens é uma possibilidade de organização.
+
+### Quantos dias frutas e hortaliças duram em casa?
+
+Não há um prazo universal: condições de transporte, maturação e armazenamento variam, por isso evite copiar um prazo de outro alimento ou de outra casa. A CEASA/MS recomenda verificar os alimentos armazenados com frequência.

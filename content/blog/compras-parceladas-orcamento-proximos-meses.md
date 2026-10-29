@@ -4,6 +4,11 @@ seoTitle: "Compras parceladas no orçamento dos próximos meses"
 description: "Organize compras parceladas por mês, confira o que falta pagar e separe compromissos já assumidos de despesas variáveis, com exemplo e fontes do BC."
 slug: compras-parceladas-orcamento-proximos-meses
 datePublished: 2026-10-21
+dateModified: 2026-10-29
+resumo:
+  - "Para enxergar as compras parceladas, liste cada compra com o que ainda falta pagar, distribua as parcelas pelos meses em que serão cobradas e some cada mês."
+  - "Assim você responde duas perguntas diferentes: quanto falta naquela compra e quanto das compras já assumidas aparece em cada mês."
+  - "Confira o mês de cobrança no registro do fornecedor ou da instituição responsável, em vez de contar apenas a partir do dia em que comprou."
 intent: "como visualizar compras parceladas já assumidas no orçamento dos próximos meses"
 cluster: alimentacao-orcamento
 sources:
@@ -62,7 +67,7 @@ Mantenha o valor total da compra na ficha de referência. No calendário de paga
 
 Descreva o resultado com precisão: “parcelas conhecidas para novembro”. Ele não é o custo completo de novembro, pois ainda faltam as outras despesas. Também não é uma autorização para gastar a diferença entre esse número e uma entrada esperada.
 
-## Veja a diferença entre saldo por compra e compromisso por mês
+## Qual a diferença entre saldo por compra e compromisso por mês?
 
 **Exemplo inteiramente hipotético, com valores inventados apenas para demonstrar a conta.** Em uma revisão feita antes de novembro, a parcela de outubro das duas compras abaixo já foi paga. Não há juros, tarifas, atrasos, estornos ou mudanças de valor neste exercício.
 
@@ -93,3 +98,21 @@ Na próxima revisão, compare a previsão com a cobrança efetiva. Marque a parc
 Quando faltar informação, deixe uma ação específica: localizar o comprovante, conferir a posição da parcela ou perguntar ao canal oficial qual valor continua devido. Se há atraso ou cobranças que você não consegue pagar, o quadro ajuda a reunir informações, mas a situação pede orientação adequada ao caso; ele não substitui atendimento financeiro ou de defesa do consumidor.
 
 Encerre com três respostas: qual compra termina em qual mês, quanto das parcelas conhecidas entra em cada período e o que ainda precisa de confirmação. Você pode começar por uma única compra e ampliar o registro à medida que confere os documentos.
+
+## Perguntas frequentes
+
+### Como saber em que mês cada parcela será cobrada?
+
+Confira onde a parcela aparece no registro do fornecedor ou da instituição responsável, sem obter o mês apenas contando a partir do dia em que comprou. Se isso ainda não estiver definido, mantenha o mês como pendente de confirmação.
+
+### Posso multiplicar o valor da parcela pelas parcelas que faltam?
+
+Para parcelas iguais, sem alterações pendentes, a multiplicação do valor pela quantidade restante ajuda a conferir a soma. Quando os valores mudam, some os valores informados para cada cobrança, sem transformar uma multiplicação aproximada em saldo confirmado.
+
+### Lanço o total da compra e também as parcelas no calendário?
+
+Não. Mantenha o valor total da compra na ficha de referência e coloque no calendário de pagamentos as parcelas correspondentes a cada mês; lançar o total e todas as parcelas contaria a mesma compra duas vezes.
+
+### A soma das parcelas do mês é o custo total daquele mês?
+
+Não. As parcelas conhecidas de um mês não são o custo completo daquele mês, pois ainda faltam as outras despesas. Esse número também não é uma autorização para gastar a diferença em relação a uma entrada esperada.

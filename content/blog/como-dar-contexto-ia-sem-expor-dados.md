@@ -4,6 +4,11 @@ seoTitle: Como dar contexto à IA sem expor dados
 description: Aprenda a preparar um resumo da rotina para usar com IA, escolher o que compartilhar e revisar a resposta. Inclui modelo e exemplo fictício.
 slug: como-dar-contexto-ia-sem-expor-dados
 datePublished: 2026-10-15
+dateModified: 2026-10-29
+resumo:
+  - "Para dar contexto à IA, descreva a tarefa, os limites que precisam ser respeitados e o formato da resposta que você quer receber."
+  - "Antes de enviar, retire informações pessoais que não ajudam a resolver aquele pedido e não copie senhas, códigos de acesso ou números de cartão."
+  - "Reduzir informações não garante anonimato nem elimina riscos. O CERT.br recomenda tratar respostas de IA como rascunhos e validar suas informações."
 intent: como dar contexto à IA para organizar a rotina sem expor dados pessoais
 cluster: ia-privacidade
 productPath: /recusas
@@ -34,7 +39,7 @@ Por exemplo: “Ajude a escolher a ordem de duas tarefas domésticas em um inter
 
 Alimentação, treino, sono e dinheiro podem aparecer nesse planejamento como compromissos que já existem. Pedir para reservar tempo para uma aula confirmada é diferente de pedir uma prescrição de exercícios. Aqui, o uso proposto é organizar informações, sem definir tratamentos, dietas, investimentos ou crédito.
 
-## Escreva o contexto que muda a resposta
+## Qual contexto muda a resposta da IA?
 
 Antes de copiar qualquer informação, complete estes campos:
 
@@ -97,7 +102,7 @@ Os tempos e a situação são fictícios. Eles ilustram como conferir limites, n
 
 ![Exemplo fictício de 40 minutos: 15 para separar materiais, 15 para conferir vencimentos e 10 de tempo livre, seguido de duas perguntas de revisão.](./conferir-resposta-ia-40-minutos.png "Uma resposta pode ser conferida contra os limites do próprio pedido. Tempos fictícios, sem recomendação de duração. Diagrama original, 2026. Crédito: Ascende.")
 
-## Confira o resultado antes de usá-lo
+## Como conferir o resultado antes de usá-lo?
 
 Compare a proposta com seu pedido:
 
@@ -115,5 +120,25 @@ Na próxima conversa com IA, experimente começar com uma tarefa pequena e este 
 ## E o Ascende, que também usa IA?
 
 O mesmo roteiro vale aqui. Para gerar as respostas do Conselheiro, os briefings e as estimativas por foto, o Ascende envia os registros necessários para a API da Anthropic, fornecedora do modelo de linguagem, cujos servidores podem estar fora do Brasil — transferência internacional nos termos do art. 33 da LGPD. Isso está escrito na [Política de Privacidade](/privacidade), e o que o Ascende se recusa a fazer com os seus dados está em [o que o Ascende recusa](/recusas). Antes de usar qualquer ferramenta de IA, inclusive esta, leia as duas páginas.
+
+## Perguntas frequentes
+
+### Tirar o nome deixa um relato anônimo?
+
+Não. A retirada de um nome, sozinha, não torna um relato anônimo: local, profissão, datas e outros detalhes combinados podem permitir reconhecer alguém. Quando a história continuar muito específica, prefira formular uma situação hipotética.
+
+### O modo temporário de uma ferramenta de IA garante que meus dados não ficam guardados?
+
+Não presuma que um modo temporário significa ausência total de retenção. O fascículo Privacidade do CERT.br orienta a avaliar quais dados são necessários e entender como o serviço os utiliza e compartilha; antes de usar uma ferramenta, consulte sua política e suas configurações.
+
+### Pedir no prompt que a IA não execute ações é suficiente?
+
+Não. Essas instruções ajudam a deixar o pedido explícito, mas não garantem que a ferramenta o seguirá, e uma frase no prompt não substitui um controle de acesso.
+
+### Posso perguntar à própria IA se a resposta está certa?
+
+Pedir à própria IA que diga “está tudo certo?” não substitui a checagem. Compare a proposta com seu pedido e verifique informações como vencimentos na fonte original.
+
+---
 
 Conteúdo educativo sobre organização e privacidade digital. Não substitui orientação individualizada de saúde, finanças ou segurança da informação.

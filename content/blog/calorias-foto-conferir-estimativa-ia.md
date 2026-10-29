@@ -3,6 +3,11 @@ title: "Calorias por foto: como conferir a estimativa da IA"
 description: "Revise alimentos, preparo e porção antes de confirmar calorias por foto, distinguindo o que aparece na imagem, o que você sabe e o que continua incerto."
 slug: calorias-foto-conferir-estimativa-ia
 datePublished: 2026-10-23
+dateModified: 2026-10-29
+resumo:
+  - "Para conferir calorias por foto, revise quais alimentos a IA identificou, que preparo foi considerado e a qual porção a estimativa se refere."
+  - "Compare a resposta com o que você realmente sabe sobre a refeição e mantenha visíveis as dúvidas, sem completar as lacunas com palpites."
+  - "Um número apresentado na tela continua sendo uma estimativa; o roteiro não estabelece meta alimentar nem avalia uma condição de saúde."
 intent: "como conferir uma estimativa de calorias por foto antes de registrar a refeição com IA"
 cluster: ia-privacidade
 sources:
@@ -76,7 +81,7 @@ O [resumo do estudo original Nutrition5k](https://arxiv.org/abs/2103.03375) desc
 
 Se você já tem uma quantidade conhecida porque participou do preparo ou dispõe de outra informação confiável, ela pode ajudar a conferir a proposta. Não converta uma impressão visual em uma medida exata apenas para preencher o campo. Uma estimativa permanece uma estimativa mesmo quando é apresentada sem casas decimais.
 
-## Uma indicação de confiança não é uma garantia de acerto
+## Uma indicação de confiança alta garante acerto?
 
 Algumas ferramentas apresentam palavras como confiança baixa, média ou alta. Leia isso como parte da resposta do sistema e veja quais dúvidas ele reconheceu. Uma indicação alta não substitui a conferência dos alimentos, do preparo e da porção.
 
@@ -117,3 +122,21 @@ Antes do envio, confira se a foto inclui rostos, documentos, mensagens ou outros
 O guia de [contexto para IA com mais privacidade](/blog/como-dar-contexto-ia-sem-expor-dados/) ajuda a escolher o que informar. No Ascende, a análise da refeição utiliza a API da Anthropic; consulte a [Política de Privacidade](https://ascende.site/privacidade/) para entender o tratamento descrito pela empresa antes de enviar dados.
 
 Se a função estiver disponível na sua conta e você quiser usar o [Ascende](/), comece conferindo a identificação dos alimentos, o preparo e a porção que conhece. Leia as incertezas antes de confirmar e ajuste o registro quando houver informação melhor. Esse registro é informativo e não substitui orientação nutricional individualizada.
+
+## Perguntas frequentes
+
+### A estimativa de calorias por foto é exata?
+
+Não. Um número apresentado na tela continua sendo uma estimativa, e uma imagem não oferece, sozinha, todas as informações de uma preparação. A documentação de visão da Anthropic alerta que o modelo pode cometer erros ao interpretar imagens, especialmente quando estão pequenas, giradas ou com baixa qualidade.
+
+### Confiança alta significa que a estimativa de calorias está certa?
+
+Não. Uma indicação alta não substitui a conferência dos alimentos, do preparo e da porção, e a ausência de uma nota não prova que não há incerteza.
+
+### A foto do prato mostra quanto eu comi?
+
+Não necessariamente. Uma foto do prato servido não comprova quanto foi consumido depois, e uma foto de uma travessa não identifica, por si só, a porção destinada a cada pessoa.
+
+### Como usar o rótulo para conferir as calorias de um alimento embalado?
+
+Veja se a informação corresponde ao produto concreto e se o valor é apresentado por porção, por quantidade de referência ou por embalagem. A Anvisa explica que a tabela nutricional informa valores por 100 g ou 100 ml e o número de porções por embalagem; consultar a embalagem não resolve automaticamente a quantidade consumida.

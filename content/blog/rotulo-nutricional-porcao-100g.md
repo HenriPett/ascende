@@ -2,8 +2,13 @@
 title: "Rótulo nutricional: quando olhar a porção e quando comparar 100 g"
 seoTitle: "Rótulo nutricional: porção ou 100 g?"
 description: "Entenda o que mostram a porção, a coluna por 100 g ou 100 ml e o número de porções da embalagem antes de comparar rótulos no mercado."
+resumo:
+  - "Para comparar dois rótulos, use a coluna por 100 g ou 100 ml: ela põe os valores na mesma base, mesmo quando as porções têm tamanhos diferentes."
+  - "A porção mostra o que a tabela declara para a quantidade indicada no pacote, que não é necessariamente a que você usa."
+  - "O número de porções por embalagem evita ler o valor por porção como se fosse o do pacote inteiro."
 slug: rotulo-nutricional-porcao-100g
 datePublished: 2026-10-19
+dateModified: 2026-10-29
 intent: "como comparar rótulo nutricional por porção e por 100 g ou 100 ml"
 cluster: alimentacao-orcamento
 sources:
@@ -40,7 +45,7 @@ O número de porções por embalagem informa quantas vezes a porção indicada c
 
 ![Diagrama com três informações do rótulo nutricional: tamanho da porção, valores por 100 g ou 100 ml e número de porções na embalagem.](./ascende-tres-leituras-rotulo.png "Porção, base de 100 g ou 100 ml e porções por embalagem respondem perguntas diferentes. Diagrama original, 2026. Crédito: Ascende.")
 
-## Faça a conta apenas quando ela responder à sua dúvida
+## Quando vale fazer a conta do pacote inteiro?
 
 **Exemplo hipotético, com números inventados apenas para mostrar a leitura (não são modelos de rótulo de uma categoria regulatória):** imagine duas embalagens de 120 g. A informa porção de 30 g, quatro porções por embalagem, 60 mg de sódio por porção e 200 mg por 100 g. B informa porção de 40 g, três porções por embalagem, 60 mg de sódio por porção e 150 mg por 100 g. O valor por porção parece igual, mas as porções têm tamanhos diferentes. A coluna por 100 g coloca a comparação na mesma base. Pela conta da tabela, o pacote inteiro corresponderia a 240 mg em A e 180 mg em B. Isso **não decide qual comprar ou quanto consumir**: são rótulos fictícios e o sódio isolado não descreve o alimento inteiro. **Fim do exemplo hipotético.**
 
@@ -55,3 +60,21 @@ Um único número não transforma um alimento em escolha “boa” ou “ruim”
 Se você precisa seguir uma orientação alimentar por condição de saúde, alergia ou outra necessidade individual, procure um profissional de saúde. Este texto ensina a ler campos do rótulo; não prescreve dieta nem classifica produtos para o seu caso.
 
 Na próxima compra, escolha dois produtos que você **já considera comprar** e localize porção, base de 100 g ou 100 ml e porções por embalagem. Se estiver montando uma compra inteira com dinheiro limitado, a [lista semanal dentro do orçamento](https://ascende.site/blog/lista-de-compras-semanal-orcamento/) ajuda a planejar quantidades e prioridades. Ler o rótulo e planejar o gasto são decisões relacionadas, com contas diferentes.
+
+## Perguntas frequentes
+
+### O valor por porção é o valor do pacote inteiro?
+
+Não necessariamente. Os valores da coluna por porção se referem à porção indicada na tabela, e o número de porções por embalagem mostra quantas vezes essa porção cabe no pacote, conforme a declaração do rótulo.
+
+### Por que comparar rótulos pela coluna de 100 g ou 100 ml?
+
+Porque ela usa a mesma quantidade de referência nos dois produtos, mesmo quando as porções declaradas têm tamanhos diferentes. A Anvisa explica que essa declaração foi incluída para facilitar a comparação entre produtos.
+
+### A porção do rótulo é a quantidade que devo comer?
+
+Não. A porção é a quantidade indicada na tabela pelas regras aplicáveis àquele alimento e não é necessariamente a quantidade que você costuma usar. Ler o rótulo não define quanto consumir.
+
+### O rótulo mostra se um alimento é bom ou ruim?
+
+Um único número não transforma um alimento em escolha “boa” ou “ruim”: o contexto inclui ingredientes, preparo, quantidade usada, acesso, preferência e condições de saúde. Se você segue uma orientação alimentar por condição de saúde, alergia ou outra necessidade individual, procure um profissional de saúde.

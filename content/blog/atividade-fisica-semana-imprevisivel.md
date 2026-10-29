@@ -4,6 +4,11 @@ seoTitle: "Atividade física em semana imprevisível"
 description: "Um jeito de reconhecer oportunidades de movimento quando a agenda muda, sem plano perfeito nem equipamento, com base nas orientações da OMS."
 slug: atividade-fisica-semana-imprevisivel
 datePublished: 2026-10-19
+dateModified: 2026-10-29
+resumo:
+  - "Quando a semana muda de última hora, escolha uma oportunidade de movimento que caiba no dia real, sem exigir que a agenda fique perfeita."
+  - "A OMS considera atividade física movimentos feitos no lazer, no transporte, no trabalho e nas tarefas domésticas, e afirma que toda atividade conta."
+  - "Se a oportunidade não aparecer hoje, isso é informação sobre as condições do dia, não uma dívida a pagar amanhã."
 intent: "como escolher atividade física possível quando a rotina muda na semana"
 cluster: rotina-integrada
 sources:
@@ -34,7 +39,7 @@ Se a principal dificuldade for decidir o que cabe entre vários compromissos, a 
 
 ![Três passos para adaptar movimento a uma semana imprevisível: olhar o calendário, escolher o possível e rever o plano sem compensar mudanças.](./ascende-movimento-semana.png "Planeje uma possibilidade de cada vez e reveja quando a semana mudar. Diagrama original, 2026. Crédito: Ascende.")
 
-## Monte uma escolha que aceite mudanças
+## Como montar uma escolha que aceite mudanças?
 
 Em vez de depender de uma única hora, escreva duas possibilidades em linguagem simples: **“se este trecho do dia estiver disponível, posso fazer isto; se ele mudar, posso considerar aquilo”**. As duas opções podem ter formatos diferentes. Por exemplo, um deslocamento ativo quando a rota for segura e houver tempo; em outro dia, uma atividade de que você goste perto de casa ou dentro de um espaço acessível.
 
@@ -58,10 +63,28 @@ Uma atividade do cotidiano pode contar como movimento mesmo sem roupa especial o
 
 Se você tem uma condição de saúde, sente sintomas durante a atividade, está gestante ou tem dúvida sobre o que é seguro para você, converse com um profissional de saúde. Um texto geral não consegue avaliar seu caso nem prescrever treino.
 
-## Faça um registro que ajude, sem virar cobrança
+## Como registrar atividade física sem virar cobrança?
 
 Se registrar for útil, escreva o que aconteceu: tipo de movimento, quando coube e qual condição tornou isso possível. Registre também os dias em que a agenda impediu a atividade, sem classificá-los como fracasso. O [artigo sobre registro de hábitos](https://ascende.site/blog/registro-de-habitos-consistencia/) aprofunda como acompanhar a consistência; aqui o foco é escolher uma possibilidade diante de mudanças.
 
 No fim da semana, você terá uma pergunta mais concreta do que “fiz tudo certo?”: **quais oportunidades foram realmente acessíveis para mim?** A resposta pode orientar a próxima escolha, inclusive a decisão de descansar ou pedir apoio para mudar uma condição da rotina.
 
 Se quiser guardar seus treinos junto dos demais registros da rotina, o Ascende permite registrar manualmente o treino realizado. O app não substitui a orientação de um profissional de saúde.
+
+## Perguntas frequentes
+
+### Tarefas domésticas contam como atividade física?
+
+A OMS considera atividade física movimentos feitos no lazer, no transporte, no trabalho e nas tarefas domésticas. Isso não significa que toda tarefa do dia ofereça o mesmo efeito.
+
+### O que fazer quando não dá para treinar no horário de sempre?
+
+Em vez de depender de uma única hora, você pode escrever duas possibilidades: se este trecho do dia estiver disponível, posso fazer isto; se ele mudar, posso considerar aquilo. Se nenhuma opção couber, anote o motivo para planejar melhor a próxima oportunidade.
+
+### Preciso compensar o dia em que não fiz atividade física?
+
+Não precisa transformar a alternativa em uma versão compensatória do que não aconteceu. Se a oportunidade não aparecer hoje, isso é informação sobre as condições do dia, não uma dívida a pagar amanhã.
+
+### Quando conversar com um profissional de saúde sobre atividade física?
+
+Quando você tem uma condição de saúde, sente sintomas durante a atividade, está gestante ou tem dúvida sobre o que é seguro para você. Um texto geral não consegue avaliar seu caso nem prescrever treino.

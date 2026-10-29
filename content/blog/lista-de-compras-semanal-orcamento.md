@@ -2,8 +2,13 @@
 title: Como organizar a lista de compras semanal dentro do orçamento
 seoTitle: Lista de compras semanal que cabe no orçamento
 description: Organize a lista de compras semanal com o que já tem em casa, sua agenda e seu orçamento. Veja um exemplo prático e um checklist para adaptar.
+resumo:
+  - "Confira o que já tem em casa, conte as refeições que realmente fará ali e estime o custo dos itens que faltam."
+  - "Depois, compare esse total com o valor disponível para a compra."
+  - "Na lista, anote quantidade, uso previsto e custo estimado de cada item; depois da compra, registre o que faltou e o que sobrou para ajustar a próxima semana."
 slug: lista-de-compras-semanal-orcamento
 datePublished: 2026-10-14
+dateModified: 2026-10-29
 intent: como organizar a lista de compras semanal dentro do orçamento
 cluster: alimentacao-orcamento
 sources:
@@ -85,5 +90,25 @@ Pode ter sido uma mudança de planos, uma quantidade excessiva ou falta de tempo
 - Anotei quantidades e usos dos itens que faltam.
 - Estimei a compra e os custos de entrega ou transporte.
 - Sei quais itens podem esperar, se o total mudar.
+
+## Perguntas frequentes
+
+### Por onde começar a lista de compras da semana?
+
+Pela agenda: marque os dias em que vai comer em casa, levar comida ou comer fora, e quem participa dessas refeições. Depois confira geladeira, freezer e despensa e anote só o que falta para as refeições previstas.
+
+### Como saber quanto posso gastar na compra da semana?
+
+Se você tem um controle de gastos, consulte quanto sobra para alimentação no período; se não tem, uma estimativa do que dá para gastar já serve para começar. Use preços de compras recentes e, se houver espaço no orçamento, deixe uma parte para diferenças de preço, sem um percentual obrigatório.
+
+### Embalagem maior sempre compensa?
+
+Nem sempre. Compare pela mesma unidade, como quilo ou litro: uma embalagem maior pode ter menor custo proporcional e ainda exigir um desembolso que não cabe naquela semana. Confira também se você conseguirá usar e armazenar a quantidade.
+
+### O que fazer se a compra passou do valor previsto?
+
+Registre o valor real e a diferença em relação à estimativa, e use essa informação para atualizar a próxima lista. Anotar o que faltou, o que sobrou e quais preparações couberam na rotina ajuda a ajustar sem exigir que a primeira lista seja perfeita.
+
+---
 
 Comece pela próxima compra e faça ajustes com base na sua experiência. Organização pode ajudar a enxergar escolhas, mas não garante economia nem resolve limitações de renda ou acesso a alimentos. Este conteúdo é educativo e não substitui orientação alimentar ou financeira individualizada.

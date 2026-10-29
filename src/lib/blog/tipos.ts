@@ -63,10 +63,23 @@ export interface PostDoBlog {
   /** As imagens do corpo, pelo `src` EXATO do markdown (`./arquivo.png`).
    *  `{}` quando o post não tem imagem. */
   imagens: Record<string, ImagemDoPost>;
+  /** O `resumo` do frontmatter: 2 a 4 frases, a resposta direta à intenção.
+   *  `[]` quando o post não tem. Vira o bloco "Em resumo", o `abstract` do
+   *  BlogPosting e o começo do .md. */
+  resumo: string[];
+  /** As perguntas da seção `## Perguntas frequentes` do corpo (`[]` sem a
+   *  seção). Viram o FAQPage JSON-LD do artigo. */
+  faq: PerguntaDoPost[];
   /** Caminho público, com barra final: /blog/<slug>/ */
   caminho: string;
   /** URL absoluta canônica: https://ascende.site/blog/<slug>/ */
   url: string;
+}
+
+export interface PerguntaDoPost {
+  pergunta: string;
+  /** O parágrafo único depois do `### …?`, em Markdown. */
+  resposta: string;
 }
 
 /** O que o pipeline entrega aos templates além dos posts. */
@@ -78,6 +91,22 @@ export interface ContextoDoBlog {
 }
 
 export const SITE_URL = "https://ascende.site";
+
+/** O AUTOR DE TODO POST (decisão do Henrique, 29/10/2026). Uma constante só:
+ *  byline do artigo e da listagem, `author` do BlogPosting, feed, .md e
+ *  llms.txt leem daqui — trocar o nome é trocar esta constante. Só fatos: ele
+ *  é o fundador e escreve o blog. Nada de credencial, "especialista", foto ou
+ *  sameAs que não existam (docs/blog/EDITORIAL.md §4). */
+export const AUTOR_DO_BLOG = {
+  nome: "Henrique Pett",
+  cargo: "Fundador do Ascende",
+  /** A seção do autor na página /sobre. */
+  url: `${SITE_URL}/sobre#autor`,
+} as const;
+
+/** "Henrique Pett, fundador do Ascende" — a assinatura em texto corrido. */
+export const ASSINATURA_DO_AUTOR =
+  `${AUTOR_DO_BLOG.nome}, ${AUTOR_DO_BLOG.cargo.charAt(0).toLowerCase()}${AUTOR_DO_BLOG.cargo.slice(1)}`;
 
 /** A frase que descreve o blog — na listagem (texto e meta description) e no
  *  canal do RSS. Uma só, para as três nunca dizerem coisas diferentes

@@ -3,10 +3,12 @@
 //
 // O esquema do frontmatter foi combinado com a Clareira (docs/blog/EDITORIAL.md)
 // e é ESTRITO: chave fora da lista é erro. A razão é o que o blog promete não
-// fazer — `author`, `reviewedBy`, `medicalReview`, `rating` não existem porque
-// o Ascende não tem autor-pessoa nem revisão profissional para declarar. Um
-// campo que o esquema aceitasse "por via das dúvidas" seria o primeiro passo
-// para alguém um dia preenchê-lo.
+// fazer — `reviewedBy`, `medicalReview`, `rating` não existem porque o Ascende
+// não tem revisão profissional para declarar. `author` também não: o autor de
+// todo post é UM só, fixo no template (AUTOR_DO_BLOG em tipos.ts) — um campo
+// por post deixaria cada texto declarar outro autor. Um campo que o esquema
+// aceitasse "por via das dúvidas" seria o primeiro passo para alguém um dia
+// preenchê-lo.
 //
 // Função pura: recebe o texto e a data de hoje, devolve o post ou os erros.
 // Quem lê o disco é scripts/blog.mjs.
@@ -16,16 +18,23 @@ import {
   type ClusterDoBlog, type FonteDoPost, type PostDoBlog, type ProductPath,
 } from "@/lib/blog/tipos";
 import { errosDaImagemNoTexto, imagensDoCorpo } from "@/lib/blog/imagem";
+import { lerFaq } from "@/lib/blog/faq";
 
 export const CHAVES_OBRIGATORIAS = [
   "title", "description", "slug", "datePublished", "intent", "cluster", "sources",
 ] as const;
-export const CHAVES_OPCIONAIS = ["seoTitle", "dateModified", "related", "productPath"] as const;
+export const CHAVES_OPCIONAIS = ["seoTitle", "dateModified", "related", "productPath", "resumo"] as const;
+
+/** `resumo`: 2 a 4 frases, cada uma de até 200 caracteres. É a resposta
+ *  direta à intenção — o que um buscador ou uma IA cita primeiro. */
+export const RESUMO_MIN = 2;
+export const RESUMO_MAX = 4;
+export const RESUMO_ITEM_MAX = 200;
 const CHAVES = new Set<string>([...CHAVES_OBRIGATORIAS, ...CHAVES_OPCIONAIS]);
 
 /** Chaves que o esquema recusa nominalmente, com o porquê na mensagem. */
 const PROIBIDAS: Record<string, string> = {
-  author: "o autor é sempre a Organization 'Ascende', fixo no template",
+  author: "o autor de todo post é fixo no template (AUTOR_DO_BLOG em src/lib/blog/tipos.ts)",
   reviewedBy: "o Ascende não tem revisão profissional para declarar",
   medicalReview: "o Ascende não tem revisão médica para declarar",
   rating: "o blog não publica avaliação",
@@ -203,7 +212,26 @@ export function lerPost(nomeArquivo: string, texto: string, hoje: string): Lido 
     erros.push(`productPath '${String(f.productPath)}' não existe (${PRODUCT_PATHS.join(" | ")})`);
   }
 
+  let resumo: string[] = [];
+  if (f.resumo !== undefined) {
+    if (!Array.isArray(f.resumo) || f.resumo.some((r) => typeof r !== "string")) {
+      erros.push("resumo tem de ser uma lista de frases");
+    } else {
+      resumo = (f.resumo as string[]).map((r) => r.trim());
+      if (resumo.length < RESUMO_MIN || resumo.length > RESUMO_MAX) {
+        erros.push(`resumo tem ${resumo.length} item(ns); precisa de ${RESUMO_MIN} a ${RESUMO_MAX}`);
+      }
+      resumo.forEach((r, i) => {
+        if (!r) erros.push(`resumo[${i}] está vazio`);
+        else if (r.length > RESUMO_ITEM_MAX) erros.push(`resumo[${i}] tem ${r.length} caracteres; no máximo ${RESUMO_ITEM_MAX}`);
+        else if (/^#|^[-*+]\s|\n/.test(r)) erros.push(`resumo[${i}] é uma frase, sem título, lista ou quebra de linha`);
+      });
+    }
+  }
+
   erros.push(...errosDoCorpo(partes.corpo));
+  const { faq, erros: errosDoFaq } = lerFaq(partes.corpo);
+  erros.push(...errosDoFaq);
   erros.push(...placeholders(texto));
 
   if (erros.length) return { post: null, erros };
@@ -226,6 +254,8 @@ export function lerPost(nomeArquivo: string, texto: string, hoje: string): Lido 
       corpo: partes.corpo.replace(/^\n+/, ""),
       // Preenchido por checagem.ts, que conhece os arquivos da pasta do post.
       imagens: {},
+      resumo,
+      faq,
       caminho,
       url: `${SITE_URL}${caminho}`,
     },

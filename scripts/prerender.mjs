@@ -69,13 +69,16 @@ try {
     const markup = await renderizarRota(pg.rota);
     if (!markup.includes("<h1")) throw new Error(`${pg.rota}: o pré-render saiu sem <h1>`);
     let html = p.comTema(p.comConteudo(shell, markup));
-    if (pg.cabeca) html = p.semJsonLd(p.aplicarCabeca(html, { ...pg.cabeca, canonical: p.canonicaDe(pg.rota) }));
+    if (pg.cabeca) {
+      html = p.semJsonLd(p.aplicarCabeca(html, { ...pg.cabeca, canonical: p.canonicaDe(pg.rota) }));
+      html = p.comJsonLd(html, p.jsonLdDaPagina(pg));
+    }
     const quebrados = p.jsonLdInvalidos(html);
     if (quebrados.length) throw new Error(`${pg.rota}: JSON-LD que não é JSON: ${quebrados.join(" | ")}`);
     escrever(pg.arquivo, html);
     const md = fonteMd[pg.rota] !== undefined
       ? linksAbsolutos(fonteMd[pg.rota].trim(), SITE_URL)
-      : p.comFaq(htmlParaMarkdown(markup, SITE_URL).trim(), p.faqDoMarkup(markup));
+      : htmlParaMarkdown(markup, SITE_URL).trim();
     escrever(pg.md, `${md}\n\nURL: ${p.canonicaDe(pg.rota)}\n`);
   }
 

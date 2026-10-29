@@ -9,7 +9,9 @@
 //
 // O shell vazio continua existindo como dist/app-shell.html: é ele que o
 // netlify.toml serve para /app, /auth e /onboarding.
-import { SITE_URL } from "@/lib/blog/tipos";
+import { AUTOR_DO_BLOG, SITE_URL } from "@/lib/blog/tipos";
+import { lerFaq, textoPlano } from "@/lib/blog/faq";
+import { SOBRE_FAQ } from "@/lib/sobre";
 
 export interface PaginaPreRenderizada {
   rota: string;
@@ -161,18 +163,78 @@ export function faqDoMarkup(markup: string): PerguntaFaq[] {
   return [];
 }
 
-export const TITULO_DO_FAQ = "Perguntas diretas, respostas diretas";
 
-/** O FAQ entra no index.md logo abaixo do título da seção, como `###`
- *  pergunta + resposta. O título sumiu da Landing → erro (o FAQ não pode
- *  sair do .md em silêncio). */
-export function comFaq(md: string, faq: PerguntaFaq[], titulo = TITULO_DO_FAQ): string {
-  if (!faq.length) return md;
-  const linha = `## ${titulo}`;
-  const i = md.split("\n").indexOf(linha);
-  if (i < 0) throw new Error(`pré-render: o index.md não tem "${linha}" para receber o FAQ`);
-  const linhas = md.split("\n");
-  const blocos = faq.map((f) => `### ${f.pergunta}\n\n${f.resposta}`).join("\n\n");
-  linhas.splice(i + 1, 0, "", blocos);
-  return linhas.join("\n");
+/** "Política de Privacidade — Ascende" → "Política de Privacidade". */
+export const nomeNaTrilha = (title: string) => title.replace(/\s+[—–-]\s+Ascende$/, "");
+
+/** A Organization da home (index.html), referida pelo @id — as páginas não
+ *  repetem endereço nem logo, só dizem de quem são. */
+const ORG_REF = { "@type": "Organization", "@id": `${SITE_URL}/#organization`, name: "Ascende", url: `${SITE_URL}/` };
+
+/** JSON-LD de uma página pré-renderizada (não a home, que tem o dela no
+ *  index.html): WebPage — AboutPage no /sobre — e a trilha Ascende → página.
+ *  Só o que o <head> já diz (título, descrição, URL); nenhuma alegação nova.
+ *  No /sobre, o autor do blog com o @id que o BlogPosting usa
+ *  (AUTOR_DO_BLOG.url): a mesma pessoa, descrita uma vez. */
+export function jsonLdDaPagina(pg: PaginaPreRenderizada): unknown[] {
+  if (!pg.cabeca) return [];
+  const url = canonicaDe(pg.rota);
+  const out: unknown[] = [
+    {
+      "@context": "https://schema.org",
+      "@type": pg.rota === "/sobre" ? "AboutPage" : "WebPage",
+      name: pg.cabeca.title,
+      description: pg.cabeca.description,
+      url,
+      inLanguage: "pt-BR",
+      isPartOf: { "@type": "WebSite", name: "Ascende", url: `${SITE_URL}/` },
+      publisher: ORG_REF,
+      ...(pg.rota === "/sobre" ? { about: ORG_REF } : {}),
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Ascende", item: `${SITE_URL}/` },
+        // O nome da página, sem a marca: na busca a trilha já começa em
+        // "Ascende ›" ("Ascende › Política de Privacidade — Ascende" repete).
+        { "@type": "ListItem", position: 2, name: nomeNaTrilha(pg.cabeca.title), item: url },
+      ],
+    },
+  ];
+  if (pg.rota === "/sobre") {
+    // As perguntas frequentes VISÍVEIS na /sobre, pelo mesmo leitor do blog:
+    // texto fora do formato quebra o build, não sai um FAQPage torto.
+    const { faq, erros } = lerFaq(SOBRE_FAQ);
+    if (erros.length) throw new Error(`/sobre, perguntas frequentes: ${erros.join("; ")}`);
+    out.push({
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      url,
+      inLanguage: "pt-BR",
+      mainEntity: faq.map((f) => ({
+        "@type": "Question",
+        name: f.pergunta,
+        acceptedAnswer: { "@type": "Answer", text: textoPlano(f.resposta) },
+      })),
+    });
+    out.push({
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "@id": AUTOR_DO_BLOG.url,
+      name: AUTOR_DO_BLOG.nome,
+      jobTitle: AUTOR_DO_BLOG.cargo,
+      url: AUTOR_DO_BLOG.url,
+      worksFor: ORG_REF,
+    });
+  }
+  return out;
+}
+
+/** Os blocos de `jsonLdDaPagina` no fim do <head>. `<` vira `\u003c`: um
+ *  `</script>` num título não fecha a tag. */
+export function comJsonLd(html: string, dados: unknown[]): string {
+  if (!dados.length) return html;
+  const tags = dados.map((d) => `    <script type="application/ld+json">${JSON.stringify(d).replace(/</g, "\\u003c")}</script>`).join("\n");
+  return trocarUma(html, /<\/head>/, `${tags}\n  </head>`, "</head>");
 }

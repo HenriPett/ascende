@@ -4,6 +4,11 @@ seoTitle: "Cupom fiscal: confira a compra do supermercado"
 description: "Confira itens, quantidades, descontos e total no cupom fiscal do supermercado e separe o gasto já pago de uma divergência ainda em análise."
 slug: conferir-cupom-fiscal-supermercado
 datePublished: 2026-10-28
+dateModified: 2026-10-29
+resumo:
+  - "Para conferir o cupom fiscal, compare os produtos que vieram para casa com descrições, quantidades, unidades, preços e descontos registrados; depois, o total e o pagamento."
+  - "Se encontrar uma diferença, guarde o documento e descreva a pendência, sem tratar uma devolução esperada como dinheiro já recebido."
+  - "Segundo o Procon Assembleia, quando o valor registrado no caixa é maior que o anunciado na etiqueta ou na gôndola, o consumidor tem direito ao menor valor."
 intent: "como conferir o cupom fiscal do supermercado e separar o gasto pago de uma divergência pendente"
 cluster: alimentacao-orcamento
 sources:
@@ -107,7 +112,7 @@ O [orçamento do mês com despesas variáveis](/blog/orcamento-mes-despesas-vari
 
 Mantenha o comprovante do que foi pago, a pergunta e a resposta sobre a divergência e, quando ocorrer, a evidência da devolução. Cada registro descreve uma situação diferente.
 
-## Guarde o necessário para explicar a diferença
+## O que guardar para explicar a diferença?
 
 Antes de deixar o comprovante no fundo da bolsa, veja se o texto está legível. Uma cópia legível pode ajudar na consulta pessoal; preserve também os documentos e referências necessários para o atendimento. Evite cortar a linha questionada de uma forma que elimine data, estabelecimento ou identificação da compra.
 
@@ -124,3 +129,21 @@ Se o tempo estiver curto, comece pelo que gerou dúvida: uma quantidade inespera
 Para a próxima ida, a [lista de compras semanal](/blog/lista-de-compras-semanal-orcamento/) continua sendo o lugar de planejar o que levar. O cupom guarda outra parte da história: o que foi registrado naquela compra, quanto foi pago e o que ainda precisa de esclarecimento.
 
 Se quiser reunir o gasto ao seu orçamento, o Ascende permite registrar despesas manualmente em Prosperidade, com valor, categoria e descrição. Use o valor confirmado e mantenha o acompanhamento da divergência junto dos comprovantes; essa conferência depende da sua leitura e do atendimento do estabelecimento.
+
+## Perguntas frequentes
+
+### O preço no caixa saiu maior que o da gôndola. O que fazer?
+
+Segundo a orientação do Procon Assembleia, quando o valor registrado no caixa é maior que o anunciado na etiqueta ou na gôndola, o consumidor tem direito ao menor valor. Leve a identificação do produto e a referência da oferta para o atendimento, começando pela linha que gerou a dúvida.
+
+### Posso reclamar se percebi a diferença só depois da compra?
+
+O Procon Assembleia orienta guardar a nota e procurar o estabelecimento quando a diferença é percebida depois da compra, e informa a possibilidade de reclamação no Procon em caso de recusa em cumprir o valor ofertado. Não há aqui promessa de prazo, devolução automática ou resultado individual.
+
+### O recibo do cartão substitui o cupom fiscal?
+
+Não. Um recibo do cartão, sozinho, não explica quais produtos compuseram a compra: o documento fiscal apresenta os registros da venda, e o comprovante ajuda a conferir a transação de pagamento.
+
+### Posso descontar do gasto uma devolução que ainda não aconteceu?
+
+Se o pagamento aconteceu, existe um gasto realizado, e a devolução só entra como confirmada quando você consegue verificar que ela ocorreu no meio correspondente. Uma promessa de crédito futuro não deve reduzir, por antecipação, o gasto que você já pagou.

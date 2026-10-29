@@ -4,6 +4,11 @@ seoTitle: "Alimentos da safra: use o calendário nas compras"
 description: "Use a sazonalidade como pista, confira variedade e oferta local e compare preço, quantidade e uso antes de decidir o que levar para casa."
 slug: alimentos-safra-calendario-compras
 datePublished: 2026-10-27
+dateModified: 2026-10-29
+resumo:
+  - "Trate o calendário de alimentos da safra como uma pista para pesquisar, não como confirmação do preço que vai encontrar."
+  - "Confira a região e o período da fonte, localize o produto e a variedade e depois compare a oferta real no lugar onde pretende comprar."
+  - "A decisão também precisa considerar a quantidade que você consegue pagar, guardar e usar; não há obrigação de seguir o calendário."
 intent: "como usar um calendário de alimentos da safra e conferir oferta e preço local antes das compras"
 cluster: alimentacao-orcamento
 sources:
@@ -30,7 +35,7 @@ Para usar um calendário de alimentos da safra antes das compras, trate a inform
 
 Um calendário pode ajudar a escolher o que vale conferir na feira ou no mercado. Ele não garante que determinado alimento esteja mais barato naquela semana nem que sua disponibilidade seja igual em todo o Brasil. Você pode terminar a consulta com uma alternativa para observar, sem obrigação de comprá-la.
 
-## Descubra de onde vem o calendário
+## De onde vem o calendário da safra?
 
 Antes de procurar o mês, veja quem publicou a tabela e a que mercado suas informações se referem. “Safra” numa lista genérica pode esconder diferenças de produto, variedade, origem e região. Uma fonte identificada permite saber qual pergunta os dados conseguem responder.
 
@@ -38,7 +43,7 @@ A [página de sazonalidade da CEAGESP](https://ceagesp.gov.br/sazonalidade/) apr
 
 Esse recorte importa. Estamos olhando um histórico de comercialização de uma central de abastecimento paulistana, não uma cotação atual de cada feira, supermercado ou cidade. Use a referência para orientar uma conferência local, preservando o nome da fonte e seu período.
 
-## Separe disponibilidade e preço
+## Disponibilidade e preço são a mesma informação?
 
 Maior volume de entrada e preço mais favorável são informações relacionadas à compra, mas não são o mesmo indicador. Confira qual tabela abriu e leia a legenda daquele arquivo antes de interpretar uma cor.
 
@@ -125,3 +130,21 @@ Uma observação local não substitui o histórico da fonte, assim como o histó
 Na próxima consulta, escolha um alimento e uma alternativa para pesquisar. Confira o recorte do calendário, o nome completo do produto e a oferta do local. Termine decidindo com base no que consegue comprar e usar, preservando as incertezas que a tabela não resolve.
 
 Se quiser guardar o custo efetivamente pago entre seus gastos, o [Ascende](/) permite registrar manualmente uma despesa na área Prosperidade. O calendário e a conferência da oferta local continuam sendo tarefas suas; o aplicativo não fornece cotação automática de safra.
+
+## Perguntas frequentes
+
+### Alimento da safra é sempre mais barato?
+
+Não necessariamente. Um calendário não garante que determinado alimento esteja mais barato naquela semana nem que sua disponibilidade seja igual em todo o Brasil; a etiqueta e a quantidade escolhida informam o custo concreto da compra.
+
+### O que mostra o calendário de sazonalidade da CEAGESP?
+
+A página de sazonalidade da CEAGESP apresenta duas tabelas dos produtos do Entreposto Terminal São Paulo, o ETSP: uma de quantidade, sobre o volume de entrada em toneladas, e outra de preço, em reais por quilo. É um histórico de comercialização de uma central de abastecimento paulistana, não uma cotação atual de cada feira, supermercado ou cidade.
+
+### Por que conferir a variedade do alimento no calendário?
+
+Nos arquivos da CEAGESP aparecem várias linhas de abacate e de banana, e esses nomes não devem ser reunidos como se descrevessem uma única oferta. Se não conseguir confirmar a variedade na compra, você tem uma referência para conferir, sem uma correspondência confirmada com aquele produto.
+
+### Estar na safra indica quanto tempo o alimento dura em casa?
+
+Não. Estar em um período historicamente favorável não define quanto tempo o item comprado durará na sua casa.
