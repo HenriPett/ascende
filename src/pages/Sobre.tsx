@@ -25,14 +25,20 @@ export default function Sobre() {
         <article className="rounded-2xl border bg-card p-5 sm:p-8 text-sm">
           <Markdown content={SOBRE_ABERTURA} doc pagina />
           {/* #autor: o `author` de todo post do blog aponta para cá
-              (AUTOR_DO_BLOG.url). scroll-mt: o cabeçalho é fixo (h-14). */}
-          <section id="autor" className="scroll-mt-20">
+              (AUTOR_DO_BLOG.url). scroll-mt: o cabeçalho é fixo (h-14).
+              Cada parte é um <Markdown> próprio, e o primeiro título dele
+              perde a margem (`first:mt-0`): o mt-6 da seção devolve o
+              espaço que o h2 do modo doc teria no texto corrido; o mt-2 do
+              fecho, o do parágrafo. */}
+          <section id="autor" className="mt-6 scroll-mt-20">
             <Markdown content={SOBRE_AUTOR} doc pagina />
           </section>
-          <section id="perguntas-frequentes" className="scroll-mt-20">
+          <section id="perguntas-frequentes" className="mt-6 scroll-mt-20">
             <Markdown content={SOBRE_FAQ} doc pagina />
           </section>
-          <Markdown content={SOBRE_FECHO} doc pagina />
+          <div className="mt-2">
+            <Markdown content={SOBRE_FECHO} doc pagina />
+          </div>
         </article>
       </main>
       <SiteFooter />
