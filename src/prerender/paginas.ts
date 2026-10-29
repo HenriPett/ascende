@@ -163,21 +163,9 @@ export function faqDoMarkup(markup: string): PerguntaFaq[] {
   return [];
 }
 
-export const TITULO_DO_FAQ = "Perguntas diretas, respostas diretas";
 
-/** O FAQ entra no index.md logo abaixo do título da seção, como `###`
- *  pergunta + resposta. O título sumiu da Landing → erro (o FAQ não pode
- *  sair do .md em silêncio). */
-export function comFaq(md: string, faq: PerguntaFaq[], titulo = TITULO_DO_FAQ): string {
-  if (!faq.length) return md;
-  const linha = `## ${titulo}`;
-  const i = md.split("\n").indexOf(linha);
-  if (i < 0) throw new Error(`pré-render: o index.md não tem "${linha}" para receber o FAQ`);
-  const linhas = md.split("\n");
-  const blocos = faq.map((f) => `### ${f.pergunta}\n\n${f.resposta}`).join("\n\n");
-  linhas.splice(i + 1, 0, "", blocos);
-  return linhas.join("\n");
-}
+/** "Política de Privacidade — Ascende" → "Política de Privacidade". */
+export const nomeNaTrilha = (title: string) => title.replace(/\s+[—–-]\s+Ascende$/, "");
 
 /** A Organization da home (index.html), referida pelo @id — as páginas não
  *  repetem endereço nem logo, só dizem de quem são. */
@@ -208,7 +196,9 @@ export function jsonLdDaPagina(pg: PaginaPreRenderizada): unknown[] {
       "@type": "BreadcrumbList",
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "Ascende", item: `${SITE_URL}/` },
-        { "@type": "ListItem", position: 2, name: pg.cabeca.title, item: url },
+        // O nome da página, sem a marca: na busca a trilha já começa em
+        // "Ascende ›" ("Ascende › Política de Privacidade — Ascende" repete).
+        { "@type": "ListItem", position: 2, name: nomeNaTrilha(pg.cabeca.title), item: url },
       ],
     },
   ];

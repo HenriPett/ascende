@@ -13,6 +13,7 @@ import { BLOG_TEM_POSTS } from "@/blog/temPosts";
 import { consumirMontagemDoPrerender } from "@/lib/montagem";
 import SiteFooter from "@/components/core/SiteFooter";
 import { jsonParaScript } from "@/blog/formato";
+import { FAQ_DA_HOME, faqPageDaHome } from "@/lib/faqDaHome";
 
 /* ─────────────────────────────────────────────────────────────────
    Demo animado da captura: a frase é "digitada" e vira registros
@@ -232,6 +233,22 @@ function TryItDemo() {
         </div>
       )}
     </div>
+  );
+}
+
+/** A resposta do FAQ: texto com `código` e [link](/interno) — os dois
+ *  marcadores que a lista usa (src/lib/faqDaHome.ts). */
+function RespostaDoFaq({ texto }: { texto: string }) {
+  const partes = texto.split(/(`[^`]+`|\[[^\]]+\]\(\/[^)]*\))/g);
+  return (
+    <>
+      {partes.map((p, i) => {
+        if (p.startsWith("`")) return <code key={i} className="rounded bg-muted px-1 text-xs">{p.slice(1, -1)}</code>;
+        const link = p.match(/^\[([^\]]+)\]\((\/[^)]*)\)$/);
+        if (link) return <Link key={i} to={link[2]} className="underline underline-offset-2 text-foreground">{link[1]}</Link>;
+        return p;
+      })}
+    </>
   );
 }
 
@@ -715,65 +732,18 @@ export default function Landing() {
       <section className="border-t bg-card/50">
         <div className="container py-16 md:py-20 max-w-2xl">
           <h2 className="font-display text-3xl font-semibold text-center mb-8">Perguntas diretas, respostas diretas</h2>
+          {/* Da MESMA lista que o FAQPage (src/lib/faqDaHome.ts). As respostas
+              ficam no HTML mesmo fechadas (`sempreNoDom`): o FAQPage pede o
+              texto na página, e o pré-render é lido sem JS. */}
           <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value="q1">
-              <AccordionTrigger className="text-left">Quanto custa?</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                Criar conta e começar é grátis, para sempre: você registra sua vida, acompanha hábitos,
-                XP e indicadores sem pagar nada. O Ascende+ (R$ 29,90/mês ou R$ 239,90/ano) amplia os
-                recursos de IA — mais mensagens do Conselheiro, briefing diário, mais análises por foto
-                e por documento. A comparação completa está logo acima.
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="q2">
-              <AccordionTrigger className="text-left">Preciso organizar a vida inteira de uma vez?</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                Não. A maioria começa pelo corpo e pelo dinheiro — o plano alimentar dentro do orçamento
-                é o primeiro "uau" de quase todo mundo. Os outros pilares você ativa quando fizer sentido.
-                O Ascende premia consistência, não ambição de primeiro dia.
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="q3">
-              <AccordionTrigger className="text-left">A IA substitui médico, nutricionista ou psicólogo?</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                Não, e ela mesma vai te dizer isso. O Conselheiro organiza sua vida e conecta seus dados,
-                mas decisões clínicas, terapêuticas e de investimento continuam com os profissionais certos.
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="q4">
-              <AccordionTrigger className="text-left">E a minha fé, entra como nesse app? E se eu não tiver religião?</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                Do seu jeito, nos dois casos. Quem tem uma prática define o nome dela — oração, meditação,
-                culto, silêncio — e o Ascende acompanha esse compromisso no seu vocabulário, sem nunca sugerir
-                ou comparar crenças. Quem não tem religião ativa o modo "Mente & Foco" nos ajustes: o pilar
-                vira desenvolvimento mental puro (diário, humor, foco), sem nenhum vocabulário espiritual.
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="q5">
-              <AccordionTrigger className="text-left">
-                Dá para trazer o que eu já registrei em outros aplicativos?
-              </AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                Dá. Do iPhone, o export do app Saúde entra inteiro — é aquele{" "}
-                <code className="rounded bg-muted px-1 text-xs">.zip</code> que sai em Ajustes do
-                Saúde → sua foto de perfil → Exportar todos os dados de saúde, e ele traz anos de
-                sono, treino, peso e água de uma vez. De outros aplicativos, entra o CSV de sono,
-                treino, peso ou alimentação: o Ascende reconhece pelo formato das colunas, e não
-                pela marca, então funciona com Sleep Cycle, Oura, Whoop, Garmin, Fitbit, Hevy,
-                Strava, Withings, MyFitnessPal e outros. O arquivo é lido dentro do seu aparelho,
-                sem passar por IA e sem subir para servidor nenhum; cada registro entra com a data
-                original, e você revisa a lista antes de qualquer coisa ser gravada.
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="q6">
-              <AccordionTrigger className="text-left">Meus dados estão seguros?</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                Seus registros são seus. Cada conta só acessa os próprios dados, nada é vendido ou usado para
-                anúncios, fotos analisadas pela IA não são armazenadas — e você pode solicitar a exclusão
-                total da conta quando quiser, sem cópias. Nossos compromissos públicos estão em{" "}
-                <Link to="/recusas" className="underline underline-offset-2 text-foreground">O que o Ascende recusa</Link>.
-              </AccordionContent>
-            </AccordionItem>
+            {FAQ_DA_HOME.map((f, i) => (
+              <AccordionItem key={f.pergunta} value={`q${i + 1}`}>
+                <AccordionTrigger className="text-left">{f.pergunta}</AccordionTrigger>
+                <AccordionContent sempreNoDom className="text-muted-foreground">
+                  <RespostaDoFaq texto={f.resposta} />
+                </AccordionContent>
+              </AccordionItem>
+            ))}
           </Accordion>
         </div>
       </section>
@@ -795,65 +765,10 @@ export default function Landing() {
       {/* ─── Rodapé ─── */}
       <SiteFooter />
 
-      {/* SEO: marcação estruturada do FAQ acima (conteúdo espelhado manualmente).
+      {/* SEO: o FAQPage do FAQ acima, gerado da mesma lista (faqDaHome.ts).
           `dangerouslySetInnerHTML`, como no blog: como filho, o pré-render
-          (renderToStaticMarkup) escaparia as aspas em &quot; e o JSON-LD do
-          HTML servido sem JS deixaria de ser JSON. jsonParaScript neutraliza
-          `</script>`. */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonParaScript({
-          "@context": "https://schema.org",
-          "@type": "FAQPage",
-          mainEntity: [
-            {
-              "@type": "Question",
-              name: "Quanto custa?",
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: "Criar conta e começar é grátis, para sempre: você registra sua vida, acompanha hábitos, XP e indicadores sem pagar nada. O Ascende+ (R$ 29,90/mês ou R$ 239,90/ano) amplia os recursos de IA — mais mensagens do Conselheiro, briefing diário, mais análises por foto e por documento.",
-              },
-            },
-            {
-              "@type": "Question",
-              name: "Preciso organizar a vida inteira de uma vez?",
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: "Não. A maioria começa pelo corpo e pelo dinheiro — o plano alimentar dentro do orçamento é o primeiro \"uau\" de quase todo mundo. Os outros pilares você ativa quando fizer sentido.",
-              },
-            },
-            {
-              "@type": "Question",
-              name: "A IA substitui médico, nutricionista ou psicólogo?",
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: "Não, e ela mesma vai te dizer isso. O Conselheiro organiza sua vida e conecta seus dados, mas decisões clínicas, terapêuticas e de investimento continuam com os profissionais certos.",
-              },
-            },
-            {
-              "@type": "Question",
-              name: "E a minha fé, entra como nesse app? E se eu não tiver religião?",
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: "Do seu jeito, nos dois casos. Quem tem uma prática define o nome dela — oração, meditação, culto, silêncio. Quem não tem religião ativa o modo \"Mente & Foco\" nos ajustes, sem nenhum vocabulário espiritual.",
-              },
-            },
-            {
-              "@type": "Question",
-              name: "Dá para trazer o que eu já registrei em outros aplicativos?",
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: "Dá. Do iPhone, o export do app Saúde entra inteiro (o .zip de Ajustes do Saúde → sua foto de perfil → Exportar todos os dados de saúde), com anos de sono, treino, peso e água. De outros aplicativos, entra o CSV de sono, treino, peso ou alimentação: o reconhecimento é pelo formato das colunas, não pela marca, então funciona com Sleep Cycle, Oura, Whoop, Garmin, Fitbit, Hevy, Strava, Withings, MyFitnessPal e outros. O arquivo é lido dentro do seu aparelho, sem passar por IA e sem subir para servidor nenhum; cada registro entra com a data original e você revisa tudo antes de gravar.",
-              },
-            },
-            {
-              "@type": "Question",
-              name: "Meus dados estão seguros?",
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: "Seus registros são seus. Cada conta só acessa os próprios dados, nada é vendido ou usado para anúncios, fotos analisadas pela IA não são armazenadas, e você pode solicitar a exclusão total da conta quando quiser.",
-              },
-            },
-          ],
-        }) }} />
+          escaparia as aspas em &quot; e o JSON-LD deixaria de ser JSON. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonParaScript(faqPageDaHome()) }} />
     </div>
   );
 }

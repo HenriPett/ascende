@@ -12,10 +12,12 @@ vi.mock("@/integrations/supabase/client", () => import("@/prerender/supabaseAuse
 
 import { renderizar404, renderizarRota } from "@/prerender/entrada";
 import {
-  aplicarCabeca, canonicaDe, comConteudo, comFaq, comTema, faqDoMarkup, jsonLdInvalidos, PAGINAS_PRE_RENDERIZADAS,
-  paginaSemApp, semJsonLd, TITULO_DO_FAQ,
+  aplicarCabeca, canonicaDe, comConteudo, comTema, faqDoMarkup, jsonLdInvalidos, PAGINAS_PRE_RENDERIZADAS,
+  paginaSemApp, semJsonLd,
 } from "@/prerender/paginas";
 import { htmlParaMarkdown } from "@/lib/agentes/htmlParaMarkdown";
+import { FAQ_DA_HOME } from "@/lib/faqDaHome";
+import { textoPlano } from "@/lib/blog/faq";
 import { PAGINAS_PUBLICAS } from "@/lib/blog/sitemap";
 import { PRIVACIDADE } from "@/lib/legal";
 import { SOBRE } from "@/lib/sobre";
@@ -52,16 +54,33 @@ describe("cada página pública pré-renderizada", () => {
     expect(jsonLdInvalidos('<script type="application/ld+json">{&quot;a&quot;:1}</script>')).toHaveLength(1);
   });
 
-  it("index.md tem o FAQ inteiro (o acordeão fechado não monta as respostas) e títulos com <br> inteiros", async () => {
+  it("FAQ da home: cada pergunta e resposta do FAQPage está no HTML pré-renderizado (o texto visível É o do schema)", async () => {
     const home = await renderizarRota("/");
     const faq = faqDoMarkup(home);
-    expect(faq.length).toBeGreaterThanOrEqual(6);
-    const md = comFaq(htmlParaMarkdown(home, "https://ascende.site"), faq);
-    const secao = md.slice(md.indexOf(`## ${TITULO_DO_FAQ}`));
-    for (const f of faq) expect(secao).toContain(`### ${f.pergunta}\n\n${f.resposta}`);
+    expect(faq.map((f) => f.pergunta)).toEqual(FAQ_DA_HOME.map((f) => f.pergunta));
+    // Texto do HTML sem script, entidades decodificadas e sem espaços (a
+    // tag de um link vira espaço antes do ponto final).
+    const plano = (t: string) => t.replace(/\s+/g, "");
+    const visivel = plano(home.replace(/<script\b[\s\S]*?<\/script>/g, "").replace(/<[^>]+>/g, " ")
+      .replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
+    for (const f of faq) {
+      expect(visivel, f.pergunta).toContain(plano(f.pergunta));
+      expect(visivel, f.pergunta).toContain(plano(f.resposta));
+    }
+    // Fechado, mas no DOM: forceMount + altura 0 + invisible (não o `hidden`).
+    expect(home.match(/data-state="closed"[^>]*class="[^"]*data-\[state=closed\]:invisible/g)?.length).toBeGreaterThanOrEqual(FAQ_DA_HOME.length);
+  });
+
+  it("index.md tem o FAQ inteiro (pergunta em ### e a resposta) e títulos com <br> inteiros", async () => {
+    const md = htmlParaMarkdown(await renderizarRota("/"), "https://ascende.site");
+    for (const f of FAQ_DA_HOME) {
+      const i = md.indexOf(`### ${f.pergunta}`);
+      expect(i, f.pergunta).toBeGreaterThan(0);
+      const depois = textoPlano(md.slice(i).split("\n\n")[1]);
+      expect(depois).toBe(textoPlano(f.resposta));
+    }
     expect(md).toMatch(/^## Batalhas: para o que rouba seu dinheiro e sua energia\.$/m);
     expect(md).not.toMatch(/^- •/m);
-    expect(() => comFaq("# x\n", faq)).toThrow(/FAQ/);
   });
 
   it("as páginas pré-renderizadas SÃO as do sitemap (uma rota pública nova entra nas duas listas)", () => {

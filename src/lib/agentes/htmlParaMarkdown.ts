@@ -67,12 +67,15 @@ function juntar(pedacos: string[]): string {
 }
 
 /** Texto inline de um nó (links, ênfase), em uma linha. */
-function inline(n: No | string, base: string): string {
+/** `emTitulo`: o botão dentro de um título é o gatilho do acordeão — o
+ *  texto dele É o título (a pergunta do FAQ); fora de título, botão é
+ *  interface e sai. */
+function inline(n: No | string, base: string, emTitulo = false): string {
   if (typeof n === "string") return decodificar(n).replace(/\s+/g, " ");
-  if (DESCARTAR.has(n.tag) || escondido(n)) return "";
+  if ((DESCARTAR.has(n.tag) && !(emTitulo && n.tag === "button")) || escondido(n)) return "";
   if (n.tag === "br") return "\n";
   if (n.tag === "img") { const alt = attr(n, "alt"); return alt ? decodificar(alt) : ""; }
-  const dentro = juntar(n.filhos.map((f) => inline(f, base)));
+  const dentro = juntar(n.filhos.map((f) => inline(f, base, emTitulo)));
   const t = dentro.trim();
   if (!t) return dentro.includes(" ") ? " " : "";
   if (n.tag === "strong" || n.tag === "b") return `**${t}**`;
@@ -94,7 +97,7 @@ function blocos(n: No | string, base: string, out: string[]): void {
     // Título é UMA linha em Markdown: o <br> de diagramação ("Batalhas: para
     // o que rouba<br>seu dinheiro…") vira espaço, senão o resto sairia como
     // parágrafo.
-    const t = inline(n, base).replace(/\s*\n\s*/g, " ").trim();
+    const t = inline(n, base, true).replace(/\s*\n\s*/g, " ").trim();
     if (t) out.push(`${"#".repeat(Number(h[1]))} ${t}`);
     return;
   }

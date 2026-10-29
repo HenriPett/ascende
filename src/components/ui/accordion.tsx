@@ -34,13 +34,23 @@ const AccordionTrigger = React.forwardRef<
 ));
 AccordionTrigger.displayName = AccordionPrimitive.Trigger.displayName;
 
+/** `sempreNoDom`: a resposta fica no HTML também fechada (o FAQ da home:
+ *  o FAQPage pede o texto na página e o pré-render é lido sem JS). Radix com
+ *  `forceMount` não esconde nada sozinho, então fechado = altura 0 e
+ *  `invisible` (fora da leitura de tela e do Tab, como o `hidden` de antes).
+ *  O `invisible` só vale ao FIM dos 200 ms do accordion-up (a transição de
+ *  `visibility` troca no final), então o texto encolhe como antes. */
 const AccordionContent = React.forwardRef<
   React.ElementRef<typeof AccordionPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  Omit<React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Content>, "forceMount"> & { sempreNoDom?: boolean }
+>(({ className, children, sempreNoDom = false, ...props }, ref) => (
   <AccordionPrimitive.Content
     ref={ref}
-    className="overflow-hidden text-sm transition-all data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+    {...(sempreNoDom ? { forceMount: true as const } : {})}
+    className={cn(
+      "overflow-hidden text-sm transition-all data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down",
+      sempreNoDom && "duration-200 data-[state=closed]:h-0 data-[state=closed]:invisible",
+    )}
     {...props}
   >
     <div className={cn("pb-4 pt-0", className)}>{children}</div>

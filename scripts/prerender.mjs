@@ -78,7 +78,7 @@ try {
     escrever(pg.arquivo, html);
     const md = fonteMd[pg.rota] !== undefined
       ? linksAbsolutos(fonteMd[pg.rota].trim(), SITE_URL)
-      : p.comFaq(htmlParaMarkdown(markup, SITE_URL).trim(), p.faqDoMarkup(markup));
+      : htmlParaMarkdown(markup, SITE_URL).trim();
     escrever(pg.md, `${md}\n\nURL: ${p.canonicaDe(pg.rota)}\n`);
   }
 
