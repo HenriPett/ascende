@@ -34,6 +34,9 @@ intent: a pergunta ou busca que este post responde
 cluster: rotina-integrada        # rotina-integrada | alimentacao-orcamento | ia-privacidade
 related: [outro-slug]            # 0 a 3 slugs que existem
 productPath: /                   # / ou /recusas — o link de produto do fim
+resumo:                          # opcional: 2 a 4 frases de até 200 caracteres
+  - A resposta direta à intenção.
+  - Só com o que o corpo diz.
 sources:
   - title: Título da fonte
     url: https://...
@@ -43,12 +46,37 @@ sources:
 ```
 
 Depois do segundo `---` vem o corpo, em Markdown: `##` e `###` (o H1 é o `title`), parágrafos, listas, **negrito**,
-links, citações e imagens (abaixo).
+links, citações, imagens (abaixo) e, opcionalmente, as perguntas frequentes (abaixo).
 
-O esquema é **estrito**: chave fora da lista é erro. `author`, `reviewedBy`, `medicalReview`, `rating` e `image` são
-recusados nominalmente, porque o Ascende não tem autor-pessoa, revisão profissional nem avaliação para declarar — e o
-`og:image` é sempre `/icon-512.png`; imagem do artigo vai no **corpo**, não no frontmatter. O autor é sempre a
-Organization "Ascende", fixo no template.
+O esquema é **estrito**: chave fora da lista é erro. `reviewedBy`, `medicalReview`, `rating` e `image` são recusados
+nominalmente, porque o Ascende não tem revisão profissional nem avaliação para declarar — e o `og:image` é sempre
+`/icon-512.png`; imagem do artigo vai no **corpo**, não no frontmatter. `author` também é recusado: o autor de todo
+post é **Henrique Pett, fundador do Ascende**, numa constante só (`AUTOR_DO_BLOG` em `src/lib/blog/tipos.ts`) que a
+byline, o JSON-LD (`Person`), o feed (`dc:creator`), o `.md` e o `llms.txt` leem. Trocar o nome é trocar ali.
+
+#### Perguntas frequentes no corpo
+
+Opcional, e com fronteira exata (o pipeline gera o `FAQPage` JSON-LD com elas — ver `docs/blog/EDITORIAL.md` §6):
+
+```markdown
+## Perguntas frequentes
+
+### A pergunta, como a pessoa faria?
+
+Um parágrafo só: a resposta, com o que o corpo já diz.
+
+### Outra pergunta?
+
+Outro parágrafo.
+
+---
+
+Aviso educativo final (opcional), depois de uma linha '---'.
+```
+
+- **última** seção do corpo, título exatamente `## Perguntas frequentes`;
+- 2 a 6 `### …?`, cada uma terminando em `?`, cada uma com **exatamente um parágrafo** de resposta;
+- o parágrafo de produto fica **antes** do FAQ; depois da última resposta, só `---` e o aviso, sem título.
 
 #### Imagem no corpo
 
@@ -102,6 +130,8 @@ Recusa, com motivo e linha:
 | variante `-360` com outra largura, outra proporção, ou não mais estreita | o `srcset` promete a mesma imagem |
 | arquivo em `content/blog/img/<slug>/` que o texto não usa, ou pasta sem post | nada vai para `dist/` sem estar no texto |
 | marcador de texto não pronto | `lorem`, `ipsum`, `[inserir`, `placeholder`, `example.com`, `exemplo.com` em qualquer caixa; `TODO`, `TBD`, `FIXME`, `XXX` só em MAIÚSCULAS e palavra inteira (em minúsculas, "todo dia" é português) |
+| `resumo` fora de 2–4 itens, item vazio, com mais de 200 caracteres, ou com título/lista/quebra de linha | é a resposta direta que um buscador ou uma IA cita |
+| `## Perguntas frequentes` que não é a última seção, repetida ou com outro título; pergunta sem `?`; resposta que não é UM parágrafo; menos de 2 ou mais de 6 perguntas; algo depois da última resposta sem `---` | vira `FAQPage`: a resposta tem de ser exatamente o que está visível, sem produto |
 
 **Erro em um post não publica nenhum.** O build do blog é tudo ou nada: metade do blog no ar é pior que um build que
 falha, porque ninguém nota a metade que faltou.
@@ -112,8 +142,9 @@ falha, porque ninguém nota a metade que faltou.
 
 - `dist/blog/index.html` — a listagem;
 - `dist/blog/<slug>/index.html` — cada artigo, com o HTML **renderizado** (lido sem JavaScript), `<title>`,
-  description, canonical com barra final, Open Graph e JSON-LD (`BlogPosting` + `BreadcrumbList`; `Blog` na listagem);
-- `dist/blog/feed.xml` — RSS 2.0;
+  description, canonical com barra final, Open Graph, byline do autor, bloco "Em resumo" (se houver) e JSON-LD
+  (`BlogPosting` com `author` Person e `abstract`, `BreadcrumbList` e `FAQPage` se houver a seção; `Blog` na listagem);
+- `dist/blog/feed.xml` — RSS 2.0, com `dc:creator` em cada item;
 - `dist/blog/<slug>/<imagem>` — as imagens do post (e a variante `-360`), byte a byte como estão em `content/`;
 - `dist/blog/tema.js` — o único JS das páginas do blog (aplica o tema escuro; a página funciona sem ele);
 - `dist/sitemap.xml` — as 5 páginas públicas de sempre + `/blog/` + cada post, com `lastmod` da data real.

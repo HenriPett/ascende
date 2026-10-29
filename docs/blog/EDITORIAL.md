@@ -66,6 +66,9 @@ sources:
 related: # opcional
   - outro-slug-ja-publicado
 productPath: / # opcional
+resumo: # opcional — 2 a 4 frases (§6, "Formato GEO")
+  - "A resposta direta à intenção, numa frase."
+  - "Outra frase autossuficiente, só com o que o corpo diz."
 ---
 ```
 
@@ -84,10 +87,19 @@ _(O bloco acima é só a forma dos campos; não é post nem fixture.)_
 | `sources`       | sim         | ≥ 1 item `{title, url (https), publisher, accessed (≤ hoje)}`; URL não repete no post.                                       |
 | `related`       | não         | 0–3 slugs **já publicados**, sem o próprio.                                                                                  |
 | `productPath`   | não         | `/` ou `/recusas` (padrão `/`). O link de produto do fim do artigo.                                                          |
+| `resumo`        | não         | 2–4 frases, cada uma 1–200 caracteres, sem título/lista/quebra de linha. Bloco "Em resumo", `abstract` do JSON-LD (§6).      |
 
-**Proibidos:** `author`, `reviewedBy`, `medicalReview`, `rating`, `image` e qualquer outro. O autor é
-sempre a organização Ascende, fixa no template. Não existe revisão por médico, nutricionista ou
-consultor financeiro — então não existe campo para dizer que existe.
+**Proibidos:** `author`, `reviewedBy`, `medicalReview`, `rating`, `image` e qualquer outro. Não
+existe revisão por médico, nutricionista ou consultor financeiro — então não existe campo para dizer
+que existe.
+
+**Autoria (decisão do Henrique, 29/10/2026).** Todo post é assinado por **Henrique Pett, fundador do
+Ascende**. O autor não é campo do frontmatter: é uma constante só (`AUTOR_DO_BLOG` em
+`src/lib/blog/tipos.ts`), usada na byline do artigo ("Por Henrique Pett, fundador do Ascende", com o
+nome levando a `/sobre#autor`), na listagem, no JSON-LD, no feed, no `.md` e no `llms.txt`. Só
+fatos: ele é o fundador e escreve o blog. Ele **não** é médico, nutricionista, psicólogo nem
+consultor financeiro — nada de "especialista", "revisado por", credencial, foto ou `sameAs`. O
+`publisher` continua a organização Ascende.
 
 ## 5. Padrões de title, description e slug
 
@@ -137,6 +149,46 @@ consultor financeiro — então não existe campo para dizer que existe.
 - Sem placeholder: o check barra `lorem`, `ipsum`, `[inserir`, `placeholder`, `example.com`,
   `exemplo.com` (qualquer caixa) e `TODO`, `TBD`, `FIXME`, `XXX` (maiúsculos, palavra inteira —
   "todo dia" e "todos" passam).
+
+### Formato GEO: resumo e perguntas frequentes
+
+O formato que um buscador ou uma IA cita como resposta pronta. Vale para os posts publicados e
+para os novos. Combinado com o pipeline (`src/lib/blog/faq.ts`, `post.ts`); o check recusa fora
+dele.
+
+- **`resumo` (frontmatter, opcional):** 2 a 4 frases curtas (≤ 200 caracteres cada) que respondem
+  à intenção do post por si mesmas. **Nenhum fato ou número que não esteja no corpo, com a mesma
+  fonte.** Sai como bloco "Em resumo" logo após o cabeçalho, no `.md` e como `abstract`.
+- **`## Perguntas frequentes` (corpo, opcional):** a **última** seção do corpo, com o título
+  exatamente assim.
+  - 2 a 6 perguntas em `### Pergunta?`, cada uma terminando em `?`, como a pessoa perguntaria.
+  - A resposta é **exatamente um parágrafo** logo abaixo da pergunta (1 a 3 frases), autossuficiente
+    e só com o que o corpo já diz: nada novo, sem número novo, **sem produto**.
+  - O parágrafo de produto ("Se quiser guardar… no Ascende") e os de links internos ficam **antes**
+    do FAQ.
+  - O aviso educativo final, se houver, vem **depois**, separado por uma linha `---` sozinha. Depois
+    do `---` só há parágrafos, sem título.
+  - O pipeline gera o `FAQPage` JSON-LD dessas perguntas e respostas, as mesmas que estão visíveis.
+- **Títulos H2:** quando for natural, em forma da pergunta que a pessoa faria, sem reescrever o post.
+- Post alterado para este formato ganha `dateModified` (§8).
+
+```markdown
+## Perguntas frequentes
+
+### Preciso pesar tudo cru?
+
+Não. O artigo mostra quando o peso cozido serve, desde que a referência usada seja a do mesmo estado.
+
+### Onde anoto o estado do alimento?
+
+Junto do registro, no mesmo lugar do peso, para a comparação usar a mesma base.
+
+---
+
+Conteúdo educativo. Não substitui orientação individualizada.
+```
+
+_(Forma do bloco; não é texto de post.)_
 
 ### O que se pode dizer do produto (e o que não)
 
@@ -228,17 +280,30 @@ Ao publicar um post novo, revise os 1–3 posts mais próximos do mesmo cluster 
   `article:published_time` (e `article:modified_time` só se houver `dateModified`); `twitter:card=summary`.
 - Um único `<h1>`; data visível em `<time datetime="AAAA-MM-DD">`; texto completo no HTML (sem JS).
 - JSON-LD `BlogPosting`: `headline`, `description`, `datePublished`, `dateModified` só se existir,
-  `inLanguage: pt-BR`, `url` e `mainEntityOfPage` = canonical, `author` e `publisher` =
-  `{"@type":"Organization","name":"Ascende","url":"https://ascende.site/"}`, `isPartOf` o Blog.
-  Mais um `BreadcrumbList` (Ascende → Blog → título). Proibido: `Person`, `reviewedBy`,
-  `aggregateRating`, `image` inventada.
+  `inLanguage: pt-BR`, `url` e `mainEntityOfPage` = canonical, `abstract` = o `resumo` (só se
+  existir), `publisher` = a Organization Ascende, `isPartOf` o Blog, e `author` =
+  `{"@type":"Person","name":"Henrique Pett","jobTitle":"Fundador do Ascende","url":"https://ascende.site/sobre#autor","worksFor":<Organization>}`.
+  Mais um `BreadcrumbList` (Ascende → Blog → título) e, se houver a seção, um `FAQPage` com as
+  perguntas e respostas visíveis. Proibido: `reviewedBy`, `aggregateRating`, `image` inventada e,
+  no `Person`, `sameAs`, foto ou credencial.
+- Byline visível: "Por Henrique Pett, fundador do Ascende", com o nome levando a `/sobre#autor`;
+  bloco "Em resumo" logo após o cabeçalho, só quando há `resumo`.
 - Imagem do corpo: `<figure>` com `<img src width height srcset sizes alt loading="lazy"
 decoding="async">` e `<figcaption>` com a legenda; arquivo servido de `/blog/<slug>/`.
 
 **Listagem — `https://ascende.site/blog/`**
 
 - canonical com barra, `og:type=website`, JSON-LD `Blog` com `publisher` Organization e `blogPost`
-  (headline, url, datePublished), posts do mais novo para o mais antigo.
+  (headline, url, datePublished, author Person), posts do mais novo para o mais antigo; "Escrito por
+  Henrique Pett, fundador do Ascende" uma vez, sob a descrição.
+
+**Feed** — cada item com `<dc:creator>Henrique Pett</dc:creator>` (o `<author>` do RSS exige e-mail,
+e não há e-mail público). **`.md`** — byline e "Em resumo" antes do corpo. **`llms.txt`** — o autor
+na seção Optional, com o link de `/sobre#autor`.
+
+**Páginas pré-renderizadas** — `/privacidade`, `/termos`, `/aviso-legal` e `/recusas` com `WebPage`
++ `BreadcrumbList`; `/sobre` com `AboutPage`, `BreadcrumbList`, `FAQPage` das perguntas visíveis e o
+`Person` do autor (o mesmo `@id` `https://ascende.site/sobre#autor` do `author` dos posts).
 
 **Sitemap — `dist/sitemap.xml`** gerado no build: as 5 URLs públicas de sempre + `/blog/` + cada post,
 com `<lastmod>` = `dateModified ?? datePublished`. **Sem posts: nem `/blog/` no sitemap, nem página
@@ -267,6 +332,9 @@ Antes do commit `post(blog): <slug>`:
       não tem CTA no texto.
 - [ ] Toda afirmação de produto foi conferida abrindo o app em produção.
 - [ ] Links internos da §7 presentes; `related` só com posts publicados.
+- [ ] `resumo` (se houver) e respostas do FAQ só com o que o corpo diz, com a mesma fonte; FAQ é a
+      última seção, um parágrafo por resposta, sem produto; aviso final depois de `---`.
+- [ ] Nenhuma credencial, "especialista" ou "revisado por" atribuída ao autor.
 - [ ] Imagem (se houver): criada pelo Astra a partir do molde `docs/blog/imagens/` e revisada por
       Prisma, Farol e Fiel; texto na imagem ≥ 24 px no arquivo de 720; todo o conteúdo dela também
       no texto (o alt resume, não substitui); local, alt descritivo, legenda com crédito.
