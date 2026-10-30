@@ -18,6 +18,7 @@ sources:
     accessed: 2026-10-16
 related:
   - lista-de-compras-semanal-orcamento
+  - pix-agendado-comprovante-pagamento
 ---
 
 Um orçamento útil começa pelo que você já sabe: quanto espera receber, quais contas têm vencimento e quais gastos podem mudar. Para a parte incerta, use uma estimativa revisável, em vez de fingir que o próximo mês será igual ao anterior. O [caderno de educação financeira do Banco Central](https://www.bcb.gov.br/content/cidadaniafinanceira/documentos_cidadania/Cuidando_do_seu_dinheiro_Gestao_de_Financas_Pessoais/v4_modulo_2_caderno_educacao_financeira_430206_2026.pdf) sugere um método em quatro etapas para elaborar o orçamento — planejamento, registro, agrupamento e avaliação — e registra que não é a única maneira de fazer isso.
