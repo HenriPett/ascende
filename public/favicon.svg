@@ -1,11 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="au" x1="8" y1="52" x2="56" y2="8" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#E39A2E"/>
-      <stop offset="1" stop-color="#F8C842"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="16" fill="#FCFAF4"/>
-  <circle cx="44" cy="10" r="6" fill="url(#au)"/>
-  <path d="M8 50 L26 28 L36 40 L56 16" fill="none" stroke="url(#au)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="au" x1="8" x2="56" y1="52" y2="8" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#E39A2E"/><stop offset="1" stop-color="#F8C842"/></linearGradient></defs><rect width="64" height="64" fill="#FCFAF4" rx="16"/><circle cx="44" cy="10" r="6" fill="url(#au)"/><path fill="none" stroke="url(#au)" stroke-linecap="round" stroke-linejoin="round" stroke-width="6.5" d="M8 50 L26 28 L36 40 L56 16"/></svg>
