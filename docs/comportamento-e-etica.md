@@ -254,8 +254,8 @@ Registrado para o veto ter peso — e para estas decisões não voltarem à paut
 - Paywall sem escassez artificial, sem contagem regressiva, sem confirmshaming;
   "Agora não" é botão de verdade ao lado do CTA. Linka `/recusas` de dentro do
   momento de venda.
-- Preço honesto: R$ 29,90 × 12 = R$ 358,80; anual R$ 239,90; economia declarada
-  de R$ 118,90. A conta fecha, sem âncora inflada.
+- Preço honesto: R$ 45,50 × 12 = R$ 546,00; anual R$ 364,00; economia declarada
+  de R$ 182,00. A conta fecha, sem âncora inflada.
 - Nada de vender o que não existe — o cartão "No radar (sem data, sem promessa)"
   é o oposto do padrão do mercado.
 - Falha de leitura nunca rebaixa o plano: na dúvida, `planUnknown`.

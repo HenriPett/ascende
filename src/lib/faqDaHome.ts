@@ -14,7 +14,7 @@ export const FAQ_DA_HOME: readonly PerguntaDaHome[] = [
   {
     pergunta: "Quanto custa?",
     resposta:
-      "Criar conta e começar é grátis, para sempre: você registra sua vida, acompanha hábitos, XP e indicadores sem pagar nada. O Ascende+ (R$ 29,90/mês ou R$ 239,90/ano) amplia os recursos de IA — mais mensagens do Conselheiro, briefing diário, mais análises por foto e por documento. A comparação completa está logo acima.",
+      "Criar conta e começar é grátis, para sempre: você registra sua vida, acompanha hábitos, XP e indicadores sem pagar nada. O Ascende+ (R$ 45,50/mês ou R$ 364,00/ano) amplia os recursos de IA — mais mensagens do Conselheiro, briefing diário, mais análises por foto e por documento. A comparação completa está logo acima.",
   },
   {
     pergunta: "Preciso organizar a vida inteira de uma vez?",

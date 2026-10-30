@@ -114,8 +114,8 @@ export default function Paywall({
 
         <div className="flex items-center justify-between gap-2 pt-1">
           <div className="text-sm">
-            <p className="font-semibold">{ent?.pricing?.monthly_label ?? "R$ 29,90/mês"}</p>
-            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "R$ 239,90/ano — economia de R$ 118,90"}</p>
+            <p className="font-semibold">{ent?.pricing?.monthly_label ?? "R$ 45,50/mês"}</p>
+            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "R$ 364,00/ano — economia de R$ 182,00"}</p>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>Agora não</Button>
