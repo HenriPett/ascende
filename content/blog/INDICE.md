@@ -44,4 +44,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | despesas-compartilhadas-combinar-repasses | como organizar despesas compartilhadas distinguindo acordo pagamento adiantado e repasse confirmado | alimentacao-orcamento | 2026-10-29 |  |
 | peso-alimento-cru-cozido-registro | como conferir peso cru ou cozido estado de preparo e parte comestível antes de registrar uma refeição | alimentacao-orcamento | 2026-10-29 |  |
 | relatorio-tempo-uso-celular | como interpretar o relatório de tempo de uso do celular considerando período aparelho indicadores e contexto | rotina-integrada | 2026-10-29 |  |
+| alergicos-contem-pode-conter-rotulo | entender a diferença entre contém e pode conter nas advertências de alergênicos antes de comprar um alimento | alimentacao-orcamento | 2026-10-30 |  |
 | pix-agendado-comprovante-pagamento | como distinguir comprovante de Pix agendado e pagamento executado antes de confirmar uma saída ou recebimento | alimentacao-orcamento | 2026-10-30 |  |
