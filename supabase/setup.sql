@@ -685,8 +685,8 @@ insert into public.app_settings (key, value) values
     }
   }'::jsonb),
   ('pricing', '{
-    "monthly_label": "R$ 29,90/mês",
-    "annual_label": "R$ 239,90/ano — economia de R$ 118,90"
+    "monthly_label": "R$ 45,50/mês",
+    "annual_label": "R$ 364,00/ano — economia de R$ 182,00"
   }'::jsonb),
   ('billing_entity', '{
     "name": "", "document": "", "note": "Dados da entidade de cobrança ficam AQUI (configuração), nunca no código."
@@ -752,7 +752,7 @@ alter table public.profiles add column if not exists ai_scopes jsonb not null de
 -- assinatura lê SEMPRE daqui — e este valor deve corresponder EXATAMENTE
 -- aos produtos configurados no Stripe (STRIPE_PRICE_MONTHLY_ID / ANNUAL_ID).
 update public.app_settings
-   set value = '{"monthly_label": "R$ 29,90/mês", "annual_label": "R$ 239,90/ano — economia de R$ 118,90"}'::jsonb,
+   set value = '{"monthly_label": "R$ 45,50/mês", "annual_label": "R$ 364,00/ano — economia de R$ 182,00"}'::jsonb,
        updated_at = now()
  where key = 'pricing'
    and (value->>'monthly_label') like '%19,90%';

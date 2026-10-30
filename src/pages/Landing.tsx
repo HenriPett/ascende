@@ -655,9 +655,9 @@ export default function Landing() {
               <Sparkles className="w-4 h-4 text-gold" /> Ascende+
             </h3>
             <p className="text-2xl font-bold mt-1">
-              R$ 29,90<span className="text-sm font-normal text-muted-foreground">/mês</span>
+              R$ 45,50<span className="text-sm font-normal text-muted-foreground">/mês</span>
             </p>
-            <p className="text-xs text-muted-foreground">ou R$ 239,90/ano — economia de R$ 118,90</p>
+            <p className="text-xs text-muted-foreground">ou R$ 364,00/ano — economia de R$ 182,00</p>
             <ul className="mt-4 space-y-2 text-sm">
               {[
                 "Tudo do plano gratuito",

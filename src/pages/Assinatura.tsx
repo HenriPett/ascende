@@ -170,8 +170,8 @@ export default function Assinatura() {
             <h2 className="font-display font-semibold flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-gold" /> Ascende+
             </h2>
-            <p className="text-lg font-bold">{ent?.pricing?.monthly_label ?? "R$ 29,90/mês"}</p>
-            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "R$ 239,90/ano — economia de R$ 118,90"}</p>
+            <p className="text-lg font-bold">{ent?.pricing?.monthly_label ?? "R$ 45,50/mês"}</p>
+            <p className="text-xs text-muted-foreground">{ent?.pricing?.annual_label ?? "R$ 364,00/ano — economia de R$ 182,00"}</p>
           </div>
           <ul className="text-sm space-y-1.5">
             {PLUS_FEATURES.map((f) => (
@@ -187,10 +187,10 @@ export default function Assinatura() {
           {canOfferUpgrade && (checkoutEnabled ? (
             <div className="flex flex-col gap-2 pt-1">
               <Button onClick={() => startCheckout("monthly")} disabled={starting !== null} loading={starting === "monthly"}>
-                {`Assinar por ${ent?.pricing?.monthly_label ?? "R$ 29,90/mês"}`}
+                {`Assinar por ${ent?.pricing?.monthly_label ?? "R$ 45,50/mês"}`}
               </Button>
               <Button variant="outline" onClick={() => startCheckout("annual")} disabled={starting !== null} loading={starting === "annual"}>
-                {`Assinar por ${ent?.pricing?.annual_label ?? "R$ 239,90/ano — economia de R$ 118,90"}`}
+                {`Assinar por ${ent?.pricing?.annual_label ?? "R$ 364,00/ano — economia de R$ 182,00"}`}
               </Button>
               <p className="text-xs text-muted-foreground">
                 O pagamento é feito numa página segura do Stripe. Você confere tudo antes de
