@@ -47,5 +47,6 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | alergicos-contem-pode-conter-rotulo | entender a diferença entre contém e pode conter nas advertências de alergênicos antes de comprar um alimento | alimentacao-orcamento | 2026-10-30 |  |
 | open-finance-revisar-cancelar-compartilhamento | como consultar e cancelar autorizações de compartilhamento de dados no Open Finance sem confundir dados com pagamentos | alimentacao-orcamento | 2026-10-30 |  |
 | pix-agendado-comprovante-pagamento | como distinguir comprovante de Pix agendado e pagamento executado antes de confirmar uma saída ou recebimento | alimentacao-orcamento | 2026-10-30 |  |
+| corrida-aplicativo-estimativa-recibo-orcamento | como conferir valor estimado recibo e cobrança de corrida por aplicativo antes de registrar no orçamento | alimentacao-orcamento | 2026-11-02 |  |
 | estorno-cartao-conferir-fatura-orcamento | como conferir um estorno de compra no cartão de crédito e relacioná-lo à compra original no orçamento | alimentacao-orcamento | 2026-11-02 |  |
 | lupa-alto-em-rotulo-nutricional | entender o significado da lupa alto em na frente do alimento e seus limites antes de comparar rótulos | alimentacao-orcamento | 2026-11-02 |  |
