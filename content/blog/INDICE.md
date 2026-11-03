@@ -52,3 +52,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | lupa-alto-em-rotulo-nutricional | entender o significado da lupa alto em na frente do alimento e seus limites antes de comparar rótulos | alimentacao-orcamento | 2026-11-02 |  |
 | leve-tres-pague-dois-preco-uso | como calcular uma promoção leve 3 pague 2 e decidir se a quantidade cabe nas compras | alimentacao-orcamento | 2026-11-03 |  |
 | limite-cartao-nao-e-saldo-orcamento | entender por que limite disponível no cartão não é saldo nem renda para o orçamento pessoal | alimentacao-orcamento | 2026-11-03 |  |
+| passos-celular-treino-diferenca-registro | entender a diferença entre passos contados pelo celular e treino registrado sem duplicar a caminhada | rotina-integrada | 2026-11-03 |  |
