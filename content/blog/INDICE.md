@@ -50,4 +50,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | corrida-aplicativo-estimativa-recibo-orcamento | como conferir valor estimado recibo e cobrança de corrida por aplicativo antes de registrar no orçamento | alimentacao-orcamento | 2026-11-02 |  |
 | estorno-cartao-conferir-fatura-orcamento | como conferir um estorno de compra no cartão de crédito e relacioná-lo à compra original no orçamento | alimentacao-orcamento | 2026-11-02 |  |
 | lupa-alto-em-rotulo-nutricional | entender o significado da lupa alto em na frente do alimento e seus limites antes de comparar rótulos | alimentacao-orcamento | 2026-11-02 |  |
+| leve-tres-pague-dois-preco-uso | como calcular uma promoção leve 3 pague 2 e decidir se a quantidade cabe nas compras | alimentacao-orcamento | 2026-11-03 |  |
 | limite-cartao-nao-e-saldo-orcamento | entender por que limite disponível no cartão não é saldo nem renda para o orçamento pessoal | alimentacao-orcamento | 2026-11-03 |  |
