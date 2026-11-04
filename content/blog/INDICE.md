@@ -55,3 +55,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | passos-celular-treino-diferenca-registro | entender a diferença entre passos contados pelo celular e treino registrado sem duplicar a caminhada | rotina-integrada | 2026-11-03 |  |
 | conta-luz-estimada-acerto-orcamento | como organizar no orçamento uma conta de luz faturada por estimativa e conferir o acerto posterior | alimentacao-orcamento | 2026-11-04 |  |
 | pagamento-fatura-cartao-gasto-duplicado | como conciliar compras no cartão e pagamento da fatura no extrato sem duplicar gastos no orçamento pessoal | alimentacao-orcamento | 2026-11-04 |  |
+| tarifa-bancaria-extrato-pacote-servicos | como conferir uma tarifa bancária no extrato e comparar com o pacote de serviços contratado | alimentacao-orcamento | 2026-11-04 |  |
