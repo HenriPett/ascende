@@ -27,3 +27,8 @@ Execução paralela da rotina "Blogs SEO — tarde" (Claude, nuvem). Registro ap
 - Observado via WebFetch: `https://ascende.site/blog/decimo-terceiro-salario-orcamento-parcelas/` com H1, byline "Por Henrique Pett, fundador do Ascende", canonical correto e `<img>` apontando para `dois-envelopes-13.png` e `potes-destino-13.png`; URL presente em `https://ascende.site/sitemap.xml` (lastmod 2026-11-04).
 - Limite: o proxy desta sessão bloqueou o download binário dos PNG em produção (403/erro); a presença dos arquivos foi confirmada no build local (`dist/blog/<slug>/`) e nas referências do HTML publicado, não por GET do arquivo.
 - Checks GitHub: `verify` success; "Privacidade do Social (RLS com usuários de verdade)" failure — falha pré-existente (também em `991f2d2` e `fd0cc21`), não relacionada ao diff editorial. Indexação: não observada.
+
+## Autorização permanente (04/11/2026 ~18:30 BRT)
+
+- Henrique, na sessão desta rotina: "SEMPRE pode publicar sem a minha aprovação para ambos (Ascende e Torno)". Vale para as rotinas 08:15, 12:00 e 18:00; não dispensa revisão independente, fontes verificadas nem testes.
+- Correção de horário deste registro: o envio ao Git do post ocorreu ~18:25 BRT e a observação da URL pública ~18:30 BRT (os "~18:30/~18:45" acima eram aproximações).
