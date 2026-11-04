@@ -20,3 +20,10 @@ Execução paralela da rotina "Blogs SEO — tarde" (Claude, nuvem). Registro ap
 - Agentes: pesquisa (sonnet), redação (sonnet), imagens (sonnet), revisão factual independente (opus, GO após trocar fonte da Receita pela Lei 8.134/1990), revisão final independente do diff staged (opus, GO).
 - Testes: `blog:indice`, `blog:check` (47 posts), `npm run build` OK, `vitest src/lib/blog` 106/106; render local desktop 1280 e mobile 390 conferido (byline "Por Henrique Pett, fundador do Ascende", canonical, JSON-LD BlogPosting/FAQPage/BreadcrumbList, author Person).
 - Pendência de processo: os papéis nomeados Astra/Prisma/Farol/Fiel não existem neste ambiente; imagens revisadas pelos agentes revisores independentes acima.
+
+## Estado: publicado — HTML observado (04/11/2026 ~18:45 BRT)
+
+- Commits: `7a30315` (post) e `6f06659` (registro), push sem force sobre `fd0cc21`.
+- Observado via WebFetch: `https://ascende.site/blog/decimo-terceiro-salario-orcamento-parcelas/` com H1, byline "Por Henrique Pett, fundador do Ascende", canonical correto e `<img>` apontando para `dois-envelopes-13.png` e `potes-destino-13.png`; URL presente em `https://ascende.site/sitemap.xml` (lastmod 2026-11-04).
+- Limite: o proxy desta sessão bloqueou o download binário dos PNG em produção (403/erro); a presença dos arquivos foi confirmada no build local (`dist/blog/<slug>/`) e nas referências do HTML publicado, não por GET do arquivo.
+- Checks GitHub: `verify` success; "Privacidade do Social (RLS com usuários de verdade)" failure — falha pré-existente (também em `991f2d2` e `fd0cc21`), não relacionada ao diff editorial. Indexação: não observada.
