@@ -44,7 +44,7 @@ Mesmo quando a loja anuncia “sem juros”, pode haver **desconto para pagar à
 
 Suponha, em outro **exemplo fictício**, R$ 480 à vista ou 6 parcelas de R$ 80: o total nominal é igual. Ainda resta a pergunta de calendário. As seis parcelas coincidem com aluguel, alimentação, outras compras e contas já previstas? O [Banco Central recomenda organizar receitas e despesas em um orçamento](https://www.bcb.gov.br/content/cidadaniafinanceira/documentos_cidadania/Cuidando_do_seu_dinheiro_Gestao_de_Financas_Pessoais/caderno_cidadania_financeira.pdf), considerando também gastos futuros. Parcelas iguais não tornam livre a renda que ainda precisa cobrir outras necessidades.
 
-![Agenda mensal fictícia com seis cartões de R$ 80 e espaço reservado para despesas já assumidas.](./seis-meses-na-agenda.png "Vencimentos futuros de um exemplo inventado. Ilustração original Ascende, 2026.")
+![Agenda mensal fictícia com seis cartões de R$ 80 e uma nota para conferir as demais contas.](./seis-meses-na-agenda.png "Vencimentos futuros de um exemplo inventado. Ilustração original Ascende, 2026.")
 
 Antes de escolher, anote **mês de início, número de parcelas, vencimento e total**. O guia de [compras parceladas no orçamento](https://ascende.site/blog/compras-parceladas-orcamento-proximos-meses/) ajuda a visualizar os próximos meses. Se o cartão for usado, confira também [fechamento e vencimento da fatura](https://ascende.site/blog/fatura-fechamento-vencimento-periodo-compras/): a primeira cobrança pode aparecer em outro ciclo. Não trate [limite disponível no cartão como saldo](https://ascende.site/blog/limite-cartao-nao-e-saldo-orcamento/).
 
