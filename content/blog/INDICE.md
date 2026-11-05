@@ -59,3 +59,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | tarifa-bancaria-extrato-pacote-servicos | como conferir uma tarifa bancária no extrato e comparar com o pacote de serviços contratado | alimentacao-orcamento | 2026-11-04 |  |
 | debito-automatico-conferir-pagamento-conta | como conferir se uma conta em débito automático foi de fato paga e evitar pagamento duplicado | alimentacao-orcamento | 2026-11-05 |  |
 | preco-a-vista-parcelado-total-compra | como comparar o preço à vista com o total parcelado e conferir se as parcelas cabem no orçamento | alimentacao-orcamento | 2026-11-05 |  |
+| taxa-servico-restaurante-conferir-conta | como conferir a taxa de serviço opcional na conta do restaurante e registrar o valor pago no orçamento | alimentacao-orcamento | 2026-11-05 |  |
