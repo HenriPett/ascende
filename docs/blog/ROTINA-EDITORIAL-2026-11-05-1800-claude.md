@@ -20,3 +20,9 @@ Execução paralela da rotina "Blogs SEO — tarde" (Claude, nuvem). Registro ap
 - Imagens: `relogio-ultimo-cafe.png` 720×720 + `-360` (relógio de 24 h, exemplo fictício) e `cafeina-por-bebida.png` 720×640 + `-360` (gráfico de faixas FDA). Originais por código (SVG/HTML → PNG via Chromium), fonte Sora (SIL OFL 1.1). Formato visual: relógio radial + gráfico de faixas — diferente dos objetos/cartões recentes.
 - Agentes: pesquisa (sonnet), redação (sonnet), imagens (sonnet), revisão factual independente (opus: GO após 2 correções — redação da FDA sobre 400 mg e da EFSA sobre 200 mg), revisão final independente do diff (opus: GO).
 - Testes: `blog:indice`, `blog:check` (51 posts, 192 imagens), `npm run build`, `vitest src/lib/blog` 106/106; prévia local Chromium 390/1280 px: H1 único, byline "Por Henrique Pett, fundador do Ascende", canonical, JSON-LD author Person, imagens carregadas, sem overflow. Não é evidência de produção.
+
+## Estado: publicado — HTML observado (05/11/2026 ~18:35 BRT)
+
+- Commit `ae365ea` (post + registro), push sem force sobre `f5d7f5d`.
+- Observado via WebFetch: `https://ascende.site/blog/cafeina-sono-horario-ultimo-cafe/` com H1, byline "Por Henrique Pett, fundador do Ascende", canonical correto e `<img>` para `relogio-ultimo-cafe.png` e `cafeina-por-bebida.png`.
+- Limite: o download direto dos PNG em produção falhou nesta sessão (erro da ferramenta/proxy); presença confirmada pelas referências no HTML publicado e no build local, não por GET do arquivo. Checks da CI e indexação não observados.
