@@ -9,3 +9,10 @@
 - Revisão independente por agente Codex: fonte e intenção aprovadas; imagem corrigida conforme apontamentos de alt e tamanho de texto. GO do diff final ainda pendente neste estado.
 - Testes iniciais: `blog:indice`, `blog:check` (50 posts), `npm run build`, `npx vitest run src/lib/blog` (106/106) passaram antes da correção da imagem; repetir antes do push. `dist` tem HTML, sitemap e PNGs. Autoria "Por Henrique Pett" vem da constante editorial do blog.
 - Publicação pública, CI e indexação: sem evidência neste estado.
+
+## Estado após envio — 05/11/2026, 18h BRT
+
+- `origin/main` avançou de `33518d1` para `2dbd05a` com reserva paralela do Claude para cafeína e sono. A reserva foi lida, a intenção é distinta, e o worktree avançou por fast-forward sem alterar seus arquivos. Testes repetidos sobre a nova base: `blog:check` 50 posts, build, Vitest 106/106. Revisão independente final GO sobre o diff e a nova base.
+- Commit editorial `fe213488bdb60cf30bb650bd98a66fa4c1b391fd` enviado à main com push normal; `git ls-remote` confirmou este SHA no momento da checagem. Imagem e variante presentes no build local; HTML local contém canonical, BlogPosting com autor Person, FAQPage, imagens e sitemap.
+- **Publicação pública não confirmada**: HEAD da página e PNG retornou `curl: (56) CONNECT tunnel failed, response 403`; ferramenta web não conseguiu abrir página nem sitemap. URLs são previstas, sem afirmar HTTP 200 ou indexação. Chromium do ambiente não concluiu a captura visual em celular/desktop; inspeção visual da imagem e checks de HTML local concluídos.
+- CI do SHA: consulta `gh api` ao endpoint de checks retornou `Forbidden`. Conector GitHub retornou lista vazia de statuses e lista vazia de workflows (consulta filtrada a PR); não comprova sucesso nem falha da CI deste push.
