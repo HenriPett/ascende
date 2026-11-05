@@ -57,6 +57,7 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | decimo-terceiro-salario-orcamento-parcelas | como organizar o 13º salário no orçamento distinguindo parcelas, descontos e valor líquido antes de decidir o uso | alimentacao-orcamento | 2026-11-04 |  |
 | pagamento-fatura-cartao-gasto-duplicado | como conciliar compras no cartão e pagamento da fatura no extrato sem duplicar gastos no orçamento pessoal | alimentacao-orcamento | 2026-11-04 |  |
 | tarifa-bancaria-extrato-pacote-servicos | como conferir uma tarifa bancária no extrato e comparar com o pacote de serviços contratado | alimentacao-orcamento | 2026-11-04 |  |
+| cafeina-sono-horario-ultimo-cafe | como entender quanto tempo antes de dormir a cafeína pode afetar o sono e registrar horário e fonte para observar a própria rotina | rotina-integrada | 2026-11-05 |  |
 | debito-automatico-conferir-pagamento-conta | como conferir se uma conta em débito automático foi de fato paga e evitar pagamento duplicado | alimentacao-orcamento | 2026-11-05 |  |
 | preco-a-vista-parcelado-total-compra | como comparar o preço à vista com o total parcelado e conferir se as parcelas cabem no orçamento | alimentacao-orcamento | 2026-11-05 |  |
 | taxa-servico-restaurante-conferir-conta | como conferir a taxa de serviço opcional na conta do restaurante e registrar o valor pago no orçamento | alimentacao-orcamento | 2026-11-05 |  |
