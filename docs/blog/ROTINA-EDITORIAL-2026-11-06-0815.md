@@ -20,3 +20,10 @@
 - Ilustração original de panela e caderno, sem material de terceiros, 720×520 e variante 360×260; alt e crédito no artigo. Conceito visual de natureza morta, distinto de filas/fluxogramas.
 - `npm run blog:indice`, `npm run blog:check` (52 posts, 194 imagens), `npm run build`, `npx vitest run src/lib/blog src/blog` (149/149) passaram no checkout isolado. Build local não prova publicação.
 - Estado: rascunho completo em checkout isolado, aguardando revisão independente do diff e da saída HTML. Push, CI e URL pública ainda não observados neste registro.
+
+## Atualização após envio (06/11/2026)
+
+- O revisor editorial independente aprovou o diff final, incluindo fontes, conta fictícia, alt e metadados. Nenhum byte do artigo mudou depois dessa revisão.
+- O commit editorial `cf074a06d950f5df6ed88ccb076416d50054f186` foi enviado à `main` por avanço direto a partir de `dd42dbdbff40eab127fce935eaa29731335cc857`.
+- [CI do commit](https://github.com/HenriPett/ascende/actions/runs/42209309364): `verify` passou; `Privacidade do Social (RLS com usuários de verdade)` falhou na etapa de revogações. A falha é fora do diff editorial, mas o workflow como um todo não passou.
+- A URL prevista é `https://ascende.site/blog/custo-refeicao-caseira-porcao-orcamento/`. A consulta direta à página e à imagem retornou `CONNECT 403` no ambiente; a ferramenta de navegação também não conseguiu abrir o domínio. **Publicação no ar ainda não confirmada.**
