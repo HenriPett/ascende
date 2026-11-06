@@ -21,3 +21,9 @@ Execução paralela da rotina "Blogs SEO — tarde" (Claude, nuvem). Registro ap
 - Imagens: `linha-do-dia.webp` 720×540 (+360×270) — linha do tempo de dia fictício com céu do amanhecer à noite; `dois-estudos.webp` 720×750 (+360×375) — cartões comparando Brooks & Lack 2006 e Dutheil 2021. Originais por código (SVG → Chromium → WebP), fontes Sora e Inter (SIL OFL 1.1), texto ≥24 px no arquivo de 720. Formato visual: linha do tempo ilustrada + cartões comparativos (diferente do relógio radial/gráfico de faixas e das cenas de carteira recentes).
 - Agentes: pesquisa (sonnet), redação (opus), imagens (sonnet), revisão factual independente (opus: NO-GO → GO às 2026-11-06T21:38:09Z após 4 correções obrigatórias e 7 recomendadas — contexto do NIOSH, "cerca de duas horas", 17/11 estudos de Dutheil, legibilidade das imagens), revisão final independente do diff e da renderização (opus: GO).
 - Testes: `blog:indice`, `blog:check` (54 posts), `npm run build`, `vitest src/lib/blog src/blog` 149/149; prévia local Chromium 390/1280 px: H1 único, byline "Por Henrique Pett, fundador do Ascende", canonical, JSON-LD author Person, sitemap, imagens carregadas, sem overflow. Não é evidência de produção.
+
+## Estado: publicado — HTML observado (06/11/2026 ~18:52 BRT)
+
+- Commit `6472d4f` (post + registro), push sem force sobre `2ddedb9`.
+- Observado via WebFetch: `https://ascende.site/blog/cochilo-durante-dia-duracao-sono-noite/` com H1, byline "Por Henrique Pett, fundador do Ascende", canonical correto e `<img>` para `dois-estudos.webp` e `linha-do-dia.webp`.
+- Limite: GET direto dos WebP em produção falhou nesta sessão (erro da ferramenta/proxy); presença confirmada pelas referências no HTML publicado e no build local. Checks da CI e indexação não observados.
