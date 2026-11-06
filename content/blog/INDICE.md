@@ -61,5 +61,6 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | debito-automatico-conferir-pagamento-conta | como conferir se uma conta em débito automático foi de fato paga e evitar pagamento duplicado | alimentacao-orcamento | 2026-11-05 |  |
 | preco-a-vista-parcelado-total-compra | como comparar o preço à vista com o total parcelado e conferir se as parcelas cabem no orçamento | alimentacao-orcamento | 2026-11-05 |  |
 | taxa-servico-restaurante-conferir-conta | como conferir a taxa de serviço opcional na conta do restaurante e registrar o valor pago no orçamento | alimentacao-orcamento | 2026-11-05 |  |
+| cochilo-durante-dia-duracao-sono-noite | como entender duração e horário de um cochilo durante o dia para não atrapalhar o sono da noite e registrar sonecas no diário do sono | rotina-integrada | 2026-11-06 |  |
 | custo-refeicao-caseira-porcao-orcamento | como calcular o custo por porção de uma refeição feita em casa sem confundir com o valor da compra | alimentacao-orcamento | 2026-11-06 |  |
 | saque-dinheiro-especie-orcamento | saque é gasto e como registrar compras em dinheiro no orçamento sem duplicar despesas | alimentacao-orcamento | 2026-11-06 |  |
