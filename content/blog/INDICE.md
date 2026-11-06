@@ -62,3 +62,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | preco-a-vista-parcelado-total-compra | como comparar o preço à vista com o total parcelado e conferir se as parcelas cabem no orçamento | alimentacao-orcamento | 2026-11-05 |  |
 | taxa-servico-restaurante-conferir-conta | como conferir a taxa de serviço opcional na conta do restaurante e registrar o valor pago no orçamento | alimentacao-orcamento | 2026-11-05 |  |
 | custo-refeicao-caseira-porcao-orcamento | como calcular o custo por porção de uma refeição feita em casa sem confundir com o valor da compra | alimentacao-orcamento | 2026-11-06 |  |
+| saque-dinheiro-especie-orcamento | saque é gasto e como registrar compras em dinheiro no orçamento sem duplicar despesas | alimentacao-orcamento | 2026-11-06 |  |
