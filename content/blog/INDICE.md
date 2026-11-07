@@ -64,3 +64,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | cochilo-durante-dia-duracao-sono-noite | como entender duração e horário de um cochilo durante o dia para não atrapalhar o sono da noite e registrar sonecas no diário do sono | rotina-integrada | 2026-11-06 |  |
 | custo-refeicao-caseira-porcao-orcamento | como calcular o custo por porção de uma refeição feita em casa sem confundir com o valor da compra | alimentacao-orcamento | 2026-11-06 |  |
 | saque-dinheiro-especie-orcamento | saque é gasto e como registrar compras em dinheiro no orçamento sem duplicar despesas | alimentacao-orcamento | 2026-11-06 |  |
+| black-friday-desconto-real-orcamento | como conferir se o desconto da Black Friday é real e se a compra cabe no orçamento antes de pagar | alimentacao-orcamento | 2026-11-07 |  |
