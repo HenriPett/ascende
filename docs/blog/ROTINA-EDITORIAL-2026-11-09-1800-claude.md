@@ -21,3 +21,9 @@ Execução paralela da rotina "Blogs SEO — tarde" (Claude, nuvem). Disparo rec
 - Imagens (originais por código, HTML → Chromium → WebP; Sora e Inter, SIL OFL 1.1; crédito Ascende; selo "Exemplo fictício"): `relogios-semana-folga.webp` 720×900 (+360×450) — dois relógios de parede (3h00 x 5h00); `semana-ponto-medio.webp` 720×1024 (+360×512) — gráfico de barras de uma semana com pontos médios. Formato visual: relógios ilustrados + gráfico de faixas semanal, diferente do calendário/prancheta da tarde anterior.
 - Agentes: pesquisa (sonnet), redação (opus), imagens (sonnet), revisão factual independente (opus: NO-GO com 5 correções — sinais do CDC, local da rotina de sono no app, resumo da meta-análise, separar diferença de horário x horas extras, frase do NHLBI no corpo — → GO 21:20:07Z), revisão final independente do diff e da renderização (opus: GO 21:24Z — Chromium 390/1280 px, H1 único, byline, canonical, JSON-LD BlogPosting/FAQPage/BreadcrumbList com author Person, imagens carregadas, sem overflow, URL no sitemap).
 - Testes locais: `blog:indice` (+1 linha), `blog:check` ok (60 posts), `npm run build` ok, `vitest src/lib/blog src/blog` 149/149. Build local não prova publicação.
+
+## Estado: enviado ao Git — deploy não confirmado (09/11/2026 ~18h33 BRT)
+
+- Commit `17b54c8`, push sem force sobre `87781c9` (sem commits de terceiros no intervalo).
+- [CI do commit](https://github.com/HenriPett/ascende/actions/runs/42702264069): job `verify` verde (TypeScript, lint, testes, edge functions, build); job `Privacidade do Social (RLS com usuários de verdade)` falhou no passo "As quatro revogações", como nos commits anteriores — fora do diff editorial. O workflow como um todo **não** está verde.
+- Verificação pública bloqueada nesta sessão: `curl` para ascende.site recusado pelo proxy (CONNECT 403) e a ferramenta de navegação recusou a URL (proveniência). **Publicação não confirmada**; promover a "publicado" só após observar a URL pública.
