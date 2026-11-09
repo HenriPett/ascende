@@ -66,3 +66,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | saque-dinheiro-especie-orcamento | saque é gasto e como registrar compras em dinheiro no orçamento sem duplicar despesas | alimentacao-orcamento | 2026-11-06 |  |
 | black-friday-desconto-real-orcamento | como conferir se o desconto da Black Friday é real e se a compra cabe no orçamento antes de pagar | alimentacao-orcamento | 2026-11-07 |  |
 | pagamento-minimo-fatura-rotativo-orcamento | o que acontece ao pagar só o mínimo ou parte da fatura do cartão de crédito e como registrar o saldo financiado no orçamento | alimentacao-orcamento | 2026-11-09 |  |
+| pix-automatico-autorizacao-cancelar-orcamento | como conferir, limitar e cancelar uma autorização de Pix Automático e registrar a cobrança recorrente no orçamento | alimentacao-orcamento | 2026-11-09 |  |
