@@ -15,6 +15,7 @@ sources:
     publisher: "Procon-ES"
     accessed: 2026-11-05
 related:
+  - restaurante-quilo-tara-peso-prato
   - delivery-custo-total-pedido
   - orcamento-mes-despesas-variaveis
 productPath: /
