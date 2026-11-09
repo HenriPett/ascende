@@ -65,3 +65,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | custo-refeicao-caseira-porcao-orcamento | como calcular o custo por porção de uma refeição feita em casa sem confundir com o valor da compra | alimentacao-orcamento | 2026-11-06 |  |
 | saque-dinheiro-especie-orcamento | saque é gasto e como registrar compras em dinheiro no orçamento sem duplicar despesas | alimentacao-orcamento | 2026-11-06 |  |
 | black-friday-desconto-real-orcamento | como conferir se o desconto da Black Friday é real e se a compra cabe no orçamento antes de pagar | alimentacao-orcamento | 2026-11-07 |  |
+| pagamento-minimo-fatura-rotativo-orcamento | o que acontece ao pagar só o mínimo ou parte da fatura do cartão de crédito e como registrar o saldo financiado no orçamento | alimentacao-orcamento | 2026-11-09 |  |
