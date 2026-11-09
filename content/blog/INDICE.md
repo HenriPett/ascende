@@ -68,3 +68,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | pagamento-minimo-fatura-rotativo-orcamento | o que acontece ao pagar só o mínimo ou parte da fatura do cartão de crédito e como registrar o saldo financiado no orçamento | alimentacao-orcamento | 2026-11-09 |  |
 | pix-automatico-autorizacao-cancelar-orcamento | como conferir, limitar e cancelar uma autorização de Pix Automático e registrar a cobrança recorrente no orçamento | alimentacao-orcamento | 2026-11-09 |  |
 | restaurante-quilo-tara-peso-prato | como conferir o peso do prato e a tara no restaurante por quilo antes de pagar | alimentacao-orcamento | 2026-11-09 |  |
+| vale-alimentacao-orcamento-saldo-gasto | como registrar vale-alimentação no orçamento distinguindo crédito saldo e compras | alimentacao-orcamento | 2026-11-09 |  |
