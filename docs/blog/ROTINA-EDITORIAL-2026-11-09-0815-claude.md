@@ -20,3 +20,9 @@ Rotina "Blogs SEO — manhã" (Claude, nuvem). Disparo recebido na segunda 09/11
 - Agentes: pesquisa (sonnet), redação (opus), imagens (sonnet), revisão factual independente (opus: NO-GO 11:32:35Z → GO 11:43:25Z após 2 correções obrigatórias — art. 2º-C "descontados os juros e encargos já pagos" e fonte para pagamento abaixo do mínimo — e recomendadas), revisão final independente do diff e da renderização (opus: GO 11:47:43Z — Chromium 390/1280 px, H1 único, byline, canonical, JSON-LD BlogPosting/FAQPage/BreadcrumbList, imagens carregadas, sem overflow, URL no sitemap).
 - Testes locais: `blog:indice` (+1 linha), `blog:check` ok (56 posts), `npm run build` ok, `vitest src/lib/blog src/blog` 149/149. Build local não prova publicação.
 - Pendência para outra execução: incluir este post no `related` de `pagamento-fatura-cartao-gasto-duplicado` (fora do escopo desta).
+
+## Estado: enviado ao Git — deploy não confirmado (09/11/2026 ~08h55 BRT)
+
+- Commit `d781a21`, push sem force sobre `3d30cff` (registro da outra rotina das 08:15, só docs; rebase apenas do commit desta execução, `blog:check` repetido ok).
+- [CI do commit](https://github.com/HenriPett/ascende/actions/runs/42612006502): job `verify` verde (TypeScript, lint, testes, edge functions, build); job `Privacidade do Social (RLS com usuários de verdade)` falhou, como nos commits anteriores (`3d30cff`, `7ba4317`) — fora do diff editorial. O workflow como um todo **não** está verde.
+- Verificação pública bloqueada nesta sessão: `curl` em ascende.site e ascende.netlify.app retornou `CONNECT tunnel failed, response 403` (proxy) e a ferramenta de navegação recusou as URLs. **Publicação não confirmada.**
