@@ -20,3 +20,9 @@ Rotina "Blogs SEO — meio-dia" (Claude, nuvem). Disparo recebido na segunda 09/
 - Imagens (originais por código, HTML → Chromium → WebP; Sora SIL OFL 1.1 + Inter SIL OFL 1.1; texto ≥ 24 px no arquivo de 720): `calendario-cobranca.webp` 720×960 (+360×480) — calendário de parede com régua de horas do dia do débito; `ficha-autorizacao.webp` 720×1040 (+360×520) — prancheta com ficha dos campos a conferir, com selo "Ilustração: não é tela de banco". Formato visual: calendário de parede + prancheta, diferente das barras/caderno da manhã.
 - Agentes: pesquisa (sonnet), redação (opus), imagens (sonnet), revisão factual independente (opus: NO-GO 15:24:06Z — crédito vem habilitado por padrão — → GO 15:27:53Z), ajuste de duas frases pelo integrador (retentativas definidas pela empresa, Guia 5.1), revisão final independente do diff e da renderização (opus: GO 15:31:26Z — Chromium 390/1280 px, H1 único, byline, canonical, JSON-LD BlogPosting/FAQPage/BreadcrumbList, imagens carregadas, sem overflow, URL no sitemap).
 - Testes locais: `blog:indice` (+1 linha), `blog:check` ok (57 posts), `npm run build` ok, `vitest src/lib/blog src/blog` 149/149. Build local não prova publicação.
+
+## Estado: enviado ao Git — deploy não confirmado (09/11/2026 ~12h37 BRT)
+
+- Commit `792f7b7`, push sem force sobre `8df3690` (sem commits de terceiros no intervalo).
+- [CI do commit](https://github.com/HenriPett/ascende/actions/runs/42645651440): job `verify` verde (TypeScript, lint, testes, edge functions, build); job `Privacidade do Social (RLS com usuários de verdade)` falhou no passo "As quatro revogações", como nos commits anteriores (`8df3690`, `31d731b`) — fora do diff editorial. O workflow como um todo **não** está verde.
+- Verificação pública bloqueada nesta sessão: `curl` na URL retornou falha de túnel (código 000) e a ferramenta de navegação recusou a URL (proveniência). **Publicação não confirmada.**
