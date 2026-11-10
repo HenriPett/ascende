@@ -70,3 +70,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | pix-automatico-autorizacao-cancelar-orcamento | como conferir, limitar e cancelar uma autorização de Pix Automático e registrar a cobrança recorrente no orçamento | alimentacao-orcamento | 2026-11-09 |  |
 | restaurante-quilo-tara-peso-prato | como conferir o peso do prato e a tara no restaurante por quilo antes de pagar | alimentacao-orcamento | 2026-11-09 |  |
 | vale-alimentacao-orcamento-saldo-gasto | como registrar vale-alimentação no orçamento distinguindo crédito saldo e compras | alimentacao-orcamento | 2026-11-09 |  |
+| intensidade-moderada-vigorosa-teste-fala | como saber se a atividade física é leve, moderada ou vigorosa pelo teste da fala e pelo esforço percebido e anotar no registro do treino | rotina-integrada | 2026-11-10 |  |
