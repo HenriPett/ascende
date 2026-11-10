@@ -71,4 +71,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | restaurante-quilo-tara-peso-prato | como conferir o peso do prato e a tara no restaurante por quilo antes de pagar | alimentacao-orcamento | 2026-11-09 |  |
 | vale-alimentacao-orcamento-saldo-gasto | como registrar vale-alimentação no orçamento distinguindo crédito saldo e compras | alimentacao-orcamento | 2026-11-09 |  |
 | cheque-especial-juros-limite-orcamento | como funciona o cheque especial, quanto custam juros e IOF e como registrar o saldo negativo no orçamento sem tratar o limite como saldo | alimentacao-orcamento | 2026-11-10 |  |
+| fortalecimento-muscular-dias-semana-registro | fortalecimento muscular quantas vezes por semana, o que conta como treino de força e como anotar os dias no registro do treino | rotina-integrada | 2026-11-10 |  |
 | intensidade-moderada-vigorosa-teste-fala | como saber se a atividade física é leve, moderada ou vigorosa pelo teste da fala e pelo esforço percebido e anotar no registro do treino | rotina-integrada | 2026-11-10 |  |
