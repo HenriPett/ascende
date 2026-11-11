@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   LogOut, Smartphone, Share, Sun, Moon, Monitor, Plus, X, Brain, Download, ShieldAlert,
   Sparkles, Eye, Upload, FileStack, ChevronRight, MessageSquarePlus, UserRound,
-  SlidersHorizontal, Database, Palette, MessageCircle,
+  SlidersHorizontal, Database, Palette,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -36,7 +36,6 @@ import QueryError from "@/components/core/QueryError";
 import { useGuides } from "@/hooks/useGuides";
 import { useMokariPreference } from "@/hooks/useMokariPreference";
 import FeedbackDialog from "@/components/core/FeedbackDialog";
-import WhatsappCard from "@/components/core/WhatsappCard";
 import { todayISOInSP } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +66,7 @@ const SECOES: { id: SecaoId; titulo: string; resumo: string; icon: typeof Sun }[
   { id: "conselheiro", titulo: "O que o Conselheiro vê", resumo: "As áreas que ele analisa e o que ele já sabe", icon: Eye },
   { id: "dados", titulo: "Seus dados", resumo: "Importar, conferir, exportar ou excluir", icon: Database },
   { id: "aparencia", titulo: "Aparência", resumo: "Tema, Mokari e dicas de uso", icon: Palette },
-  { id: "conectar", titulo: "WhatsApp e tela inicial", resumo: "Registrar por mensagem e instalar o app", icon: MessageCircle },
+  { id: "conectar", titulo: "Instalar o app", resumo: "Ícone na tela inicial e abertura em tela cheia", icon: Smartphone },
 ];
 
 const DIAS_DO_CICLO = Array.from({ length: 28 }, (_, i) => i + 1);
@@ -500,7 +499,7 @@ export default function Ajustes() {
 
       {/* ═══ O ÍNDICE ═══════════════════════════════════════════════════════
           A página tinha 7 telas de rolagem: perfil, pilares, 12 rastreadores,
-          WhatsApp, dicas, assinatura, privacidade, importação e exclusão na
+          dicas, assinatura, privacidade, importação e exclusão na
           mesma coluna. Agora o primeiro nível é uma lista curta de linhas de
           48 pt — o padrão dos Ajustes do iPhone e o mesmo da folha Conta — e
           cada uma abre uma subseção que cabe em uma tela. */}
@@ -1084,13 +1083,10 @@ export default function Ajustes() {
         </>
       )}
 
-      {/* ═══ WHATSAPP E TELA INICIAL ════════════════════════════════════════
-          As duas formas de o Ascende chegar até a pessoa fora desta aba. */}
+      {/* ═══ TELA INICIAL ═══════════════════════════════════════════════════
+          O vínculo com o WhatsApp saiu: o número do produto foi desativado. */}
       {secao === "conectar" && (
         <>
-          {/* WhatsApp: captura por mensagem + avisos que trazem de volta ao app */}
-          <WhatsappCard />
-
           <Card className="p-4 space-y-3">
             <div>
               <h2 className="font-display font-semibold">Instalar na tela inicial</h2>

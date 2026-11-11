@@ -14,7 +14,6 @@ import { formatSP } from "@/lib/dates";
 
 const FREE_FEATURES = [
   "Registros manuais, hábitos e batalhas sem limite",
-  "Registro e Conselheiro pelo WhatsApp — texto, áudio e foto",
   "Diário, hidratação, XP, níveis e gráficos básicos",
   "Captura inteligente: 3 por dia (10 por dia nas suas 2 primeiras semanas)",
   "Conselheiro: 15 mensagens por semana",
@@ -31,9 +30,9 @@ const PLUS_FEATURES = [
   "Tudo do plano gratuito",
   "Captura inteligente: 30 por dia",
   "Conselheiro: 15 mensagens por dia (até 300/mês)",
-  "Briefing diário todas as manhãs — com aviso no seu WhatsApp",
+  "Briefing diário todas as manhãs",
   "30 análises de refeição por mês",
-  "Análise de documentos: 10 PDFs por mês (no app e pelo WhatsApp)",
+  "Análise de documentos: 10 PDFs por mês",
   "Até 5 planos ativos · 150 memórias do Conselheiro",
 ];
 

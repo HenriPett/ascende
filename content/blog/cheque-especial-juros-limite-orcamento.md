@@ -151,7 +151,7 @@ Se a conta vive negativa e o mês não fecha mesmo sem novos gastos, vale conver
 
 ## Onde o Ascende entra
 
-O Ascende não se conecta ao banco e não lê saldo nem limite da sua conta: ele não sabe se você entrou no cheque especial. Os lançamentos são seus. Você registra numa frase, digitada, por voz ou pelo WhatsApp, ou importa o PDF ou a foto de uma fatura ou extrato (no plano grátis, a importação é limitada ao começo da conta; no Ascende+, entra na cota mensal de documentos); o app propõe as linhas e só grava depois que você confirma. Ao importar o extrato, confira antes de confirmar para não lançar de novo um gasto já registrado. Não há categoria própria para juros ou IOF: uma opção é lançar em "Outros" com uma descrição clara, como "juros do cheque especial". E o limite fica de fora, sem virar entrada.
+O Ascende não se conecta ao banco e não lê saldo nem limite da sua conta: ele não sabe se você entrou no cheque especial. Os lançamentos são seus. Você registra numa frase, digitada ou por voz, ou importa o PDF ou a foto de uma fatura ou extrato (no plano grátis, a importação é limitada ao começo da conta; no Ascende+, entra na cota mensal de documentos); o app propõe as linhas e só grava depois que você confirma. Ao importar o extrato, confira antes de confirmar para não lançar de novo um gasto já registrado. Não há categoria própria para juros ou IOF: uma opção é lançar em "Outros" com uma descrição clara, como "juros do cheque especial". E o limite fica de fora, sem virar entrada.
 
 ## Perguntas frequentes
 

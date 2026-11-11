@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import CaptureBar from "@/components/core/CaptureBar";
-import { WhatsappHojeCard } from "@/components/core/WhatsappCard";
 import BattleCheckinCard from "@/components/core/BattleCheckin";
 import QuickActions from "@/components/core/QuickActions";
 import { toast } from "sonner";
@@ -22,7 +21,7 @@ import { PLAN_KIND_META } from "@/lib/blueprint";
 import { appPath } from "@/lib/routes";
 import { focusCaptureElement, useProvideCaptureFocus } from "@/hooks/useCaptureFocus";
 import {
-  useSleepZoneVisible, useBattleZoneVisible, useWhatsappZoneVisible,
+  useSleepZoneVisible, useBattleZoneVisible,
 } from "@/hooks/useHojeZones";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { greet, todayISO } from "@/lib/format";
@@ -1264,8 +1263,6 @@ const HOJE_ZONES = [
     why: "Trilha da primeira semana; só conta nova sem Blueprint." },
   { id: "retro", Component: RetroCountdown, useVisible: useRetroCountdownVisible,
     why: "Expectativa, não ação. Dispensável." },
-  { id: "whatsapp", Component: WhatsappHojeCard, useVisible: useWhatsappZoneVisible,
-    why: "Crescimento — serve mais a nós do que a ela." },
   { id: "briefing_locked", Component: BriefingLocked, useVisible: useBriefingLockedVisible,
     why: "Convite ao Ascende+. Último por decisão do fundador: quem tem vida "
       + "registrada vê a própria vida primeiro; quem não tem registro nenhum "

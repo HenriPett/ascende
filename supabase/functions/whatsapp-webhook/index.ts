@@ -1,4 +1,4 @@
-// ASCENDE — Webhook do WhatsApp (Cloud API da Meta)
+// ASCENDE — Webhook do WhatsApp (Cloud API da Meta) — DESATIVADO desde 2026-11-11 (ver WHATSAPP_DESATIVADO no fim do arquivo)
 //
 // Papel: receber mensagens do usuário e SEMPRE apontar de volta para o app.
 //
@@ -465,7 +465,7 @@ async function counselorTurn(
   return true;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(async (req) => { if (WHATSAPP_DESATIVADO) return respostaDesativada(req); // kill switch: ver o fim do arquivo
   // ── Verificação do webhook (Meta chama com GET na configuração) ──
   if (req.method === "GET") {
     const u = new URL(req.url);
@@ -939,3 +939,20 @@ Deno.serve(async (req) => {
     return new Response("ok", { status: 200 });
   }
 });
+
+/* ── KILL SWITCH (2026-11-11) ──────────────────────────────────────────
+   O dono desativou o número de WhatsApp do produto. Com isto em `true` o
+   webhook não processa nada: não lê a mensagem, não chama a IA, não grava e
+   não responde ninguém. O GET de verificação da Meta é recusado (403), então
+   o webhook não pode ser (re)configurado; o POST recebe 200 vazio para a Meta
+   não entrar em tempestade de reenvio. Constante no código, e não variável de
+   ambiente, para ficar desligado por padrão sem trabalho de operação.
+   Fica no fim do arquivo (e o `if` na mesma linha do Deno.serve) para não
+   deslocar as linhas citadas em src/lib/routes.ts (EXTERNALLY_LINKED).
+   `const` no topo do módulo: já está inicializada quando o handler roda. */
+const WHATSAPP_DESATIVADO = true;
+
+function respostaDesativada(req: Request): Response {
+  if (req.method === "GET") return new Response("forbidden", { status: 403 });
+  return new Response("ok", { status: 200 });
+}

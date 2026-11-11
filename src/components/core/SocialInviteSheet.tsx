@@ -89,7 +89,7 @@ export default function SocialInviteSheet({
         <DrawerHeader>
           <DrawerTitle>Chamar alguém</DrawerTitle>
           <DrawerDescription>
-            Um link. Você manda por onde já fala com a pessoa — WhatsApp, no olho, o que for.
+            Um link. Você manda por onde já fala com a pessoa — mensagem, no olho, o que for.
           </DrawerDescription>
         </DrawerHeader>
         <DrawerBody>
