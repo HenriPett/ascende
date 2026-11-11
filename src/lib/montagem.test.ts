@@ -20,7 +20,7 @@ describe("a montagem por cima do pré-render", () => {
     const landing = readFileSync(new URL("../pages/Landing.tsx", import.meta.url), "utf8");
     expect(landing).toContain('useState(() => (consumirMontagemDoPrerender() ? "" : "animate-fade-up"))');
     const heroi = landing.slice(landing.indexOf('<section className="relative">'), landing.indexOf("<CaptureDemo />"));
-    expect(heroi.match(/\$\{animarEntrada\}/g)).toHaveLength(6);
+    expect(heroi.match(/\$\{animarEntrada\}/g)).toHaveLength(5);
     expect(heroi).not.toContain(" animate-fade-up");
     expect(landing.match(/p-2\.5 animate-fade-up/g)).toHaveLength(2);
   });

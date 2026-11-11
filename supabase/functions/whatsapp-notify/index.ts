@@ -1,4 +1,4 @@
-// ASCENDE — Envios de saída do WhatsApp (agendado 1x/dia, ~09:05 SP)
+// ASCENDE — Envios de saída do WhatsApp (agendado 1x/dia, ~09:05 SP) — DESATIVADO desde 2026-11-11
 //
 // Papel: chamar a pessoa DE VOLTA ao app — nunca entregar o conteúdo aqui.
 // Três convites, todos curtos, todos com link, todos desligáveis:
@@ -30,7 +30,19 @@ const DEFAULTS: WaSettings = {
   return_template: "ascende_retorno", lang: "pt_BR",
 };
 
+// ── KILL SWITCH (2026-11-11): número de WhatsApp desativado pelo dono. ──
+// Com isto em `true` nenhum template (retro, briefing, retorno) é enviado e
+// nada é lido nem gravado (whatsapp_links, whatsapp_sends). Constante no
+// código, e não variável de ambiente, para ficar desligado sem trabalho de
+// operação. Se o agendador (pg_cron) ainda chamar, recebe 200 e nada acontece.
+const WHATSAPP_DESATIVADO = true;
+
 Deno.serve(async (req) => {
+  if (WHATSAPP_DESATIVADO) {
+    return new Response(JSON.stringify({ desativado: true }), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    });
+  }
   const secret = Deno.env.get("WHATSAPP_CRON_SECRET");
   if (!secret || req.headers.get("x-cron-secret") !== secret) {
     return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });

@@ -39,7 +39,7 @@ const PLUS_BENEFITS = [
   // pessoa acha que está comprando, e o desmentido chegaria no primeiro dia.
   "Perguntar quando a dúvida aparece, não quando a semana virar — 15 mensagens por dia",
   "Contar o dia quantas vezes quiser: 30 capturas por dia, sem escolher o que vale a pena",
-  "Uma leitura da sua vida toda manhã, avisada no seu WhatsApp",
+  "Uma leitura da sua vida toda manhã",
   "A foto do prato e a fatura em PDF viram registro: 30 refeições e 10 documentos por mês",
   "Cinco planos vivos ao mesmo tempo — e um Conselheiro que lembra de 150 coisas suas",
 ];

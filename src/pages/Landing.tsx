@@ -305,18 +305,7 @@ export default function Landing() {
             monta o plano do seu corpo dentro do orçamento que você tem de verdade.
             Você conta o dia numa frase; ela registra o resto.
           </p>
-          <div className={`mt-7 flex justify-center ${animarEntrada}`}>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3.5 py-1.5 text-xs font-medium">
-              <MessageCircle className="w-3.5 h-3.5 text-gold" />
-              {/* Este selo ocupa a última linha antes do CTA — o lugar de maior
-                  valor da página. "Novo:" é vocabulário de release: para quem
-                  chega pela primeira vez nada é novo, e a palavra gastava esse
-                  lugar anunciando uma feature em vez de derrubar a objeção nº 1
-                  do público ("vou ter que aprender mais um aplicativo?"). */}
-              Nem precisa abrir o app: dá para registrar o dia pelo WhatsApp
-            </span>
-          </div>
-          <div className={`mt-5 flex flex-col sm:flex-row items-center justify-center gap-3 ${animarEntrada}`}>
+          <div className={`mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 ${animarEntrada}`}>
             <Button asChild size="lg" className="px-9 h-12 text-base">
               <Link to="/auth?intent=signup">Começar minha subida <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
             </Button>
@@ -392,12 +381,12 @@ export default function Landing() {
               {
                 n: "1",
                 title: "Conte, não preencha",
-                desc: "\u201CGastei 47 no mercado, treinei e dormi mal.\u201D Uma frase — digitada, falada, por foto do prato ou por mensagem de WhatsApp — e a IA registra tudo nos lugares certos. Sem formulários, sem planilhas.",
+                desc: "\u201CGastei 47 no mercado, treinei e dormi mal.\u201D Uma frase — digitada, falada ou por foto do prato — e a IA registra tudo nos lugares certos. Sem formulários, sem planilhas.",
               },
               {
                 n: "2",
                 title: "A IA conecta os pontos",
-                desc: "Uma retrospectiva toda semana cruzando finanças, corpo, alimentação e mente (no Ascende+, um briefing todo dia) — e um Conselheiro que responde com os seus dados, não com conselhos genéricos. Quando ela ficar pronta, o Ascende avisa você no WhatsApp.",
+                desc: "Uma retrospectiva toda semana cruzando finanças, corpo, alimentação e mente (no Ascende+, um briefing todo dia) — e um Conselheiro que responde com os seus dados, não com conselhos genéricos.",
               },
               {
                 n: "3",
@@ -549,13 +538,8 @@ export default function Landing() {
           Por isso o Ascende faz o trabalho chato por você — de foto, de voz, de conversa
           ou do arquivo que outro aplicativo já guarda.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[
-            {
-              icon: MessageCircle,
-              title: "WhatsApp → registro",
-              desc: "Mensagem, \u00e1udio ou foto: \u201Cgastei 47 e treinei\u201D falado no caminho de casa, o print do Pix ou a foto do prato viram registro — você só confirma no botão. E o Conselheiro responde por lá também.",
-            },
             {
               icon: Camera,
               title: "Foto do prato → calorias",
@@ -633,7 +617,6 @@ export default function Landing() {
             <ul className="mt-4 space-y-2 text-sm">
               {[
                 "Registros manuais, hábitos e batalhas sem limite",
-                "Registro e Conselheiro pelo WhatsApp — texto, áudio e foto",
                 "Diário, hidratação, XP, níveis e gráficos básicos",
                 "Importar o export do App Saúde do iPhone e CSV de outros apps",
                 "Captura inteligente por IA: 3 por dia (10 por dia nas 2 primeiras semanas)",
@@ -663,9 +646,9 @@ export default function Landing() {
                 "Tudo do plano gratuito",
                 "Captura inteligente: 30 por dia",
                 "Conselheiro: 15 mensagens por dia (até 300/mês)",
-                "Briefing diário todas as manhãs — com aviso no seu WhatsApp",
+                "Briefing diário todas as manhãs",
                 "30 análises de refeição por mês",
-                "Análise de documentos: 10 PDFs por mês (no app e pelo WhatsApp)",
+                "Análise de documentos: 10 PDFs por mês",
                 "Até 5 planos ativos · 150 memórias do Conselheiro",
               ].map((f) => (
                 <li key={f} className="flex gap-2">
@@ -703,9 +686,9 @@ export default function Landing() {
               <Check className="w-4 h-4 text-gold" /> Já está aqui hoje
             </h3>
             <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-              <li>• Captura por frase, voz e foto — no app e pelo WhatsApp (áudio transcrito na hora, foto de prato e print de Pix viram registro)</li>
-              <li>• Conselheiro que vê a sua vida inteira — dinheiro, corpo e mente —, no app e pelo WhatsApp (a conversa continua nos dois)</li>
-              <li>• Retrospectiva semanal, briefing diário (Ascende+) e avisos no WhatsApp</li>
+              <li>• Captura por frase, voz e foto (áudio transcrito na hora, foto de prato e print de Pix viram registro)</li>
+              <li>• Conselheiro que vê a sua vida inteira — dinheiro, corpo e mente</li>
+              <li>• Retrospectiva semanal e briefing diário (Ascende+)</li>
               <li>• Raio-X de 60 segundos das finanças, importação de fatura e batalhas contra vícios</li>
               <li>• Importação do histórico que já existe em outros apps: o export do App Saúde do iPhone e CSV de sono, treino, peso e alimentação — lido no próprio aparelho</li>
               <li>• Planos que viram metas vivas na sua tela Hoje</li>

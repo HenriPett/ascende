@@ -194,7 +194,7 @@ _(Forma do bloco; não é texto de post.)_
 
 | Pode (existe hoje)                                                              | Não pode                                                                                   |
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Registrar o dia numa frase — digitada, por voz, foto do prato ou WhatsApp       | Open Finance / fatura entrando sozinha (está "no radar — sem data e sem promessa")         |
+| Registrar o dia numa frase — digitada, por voz ou foto do prato (sem WhatsApp) | Open Finance / fatura entrando sozinha (está "no radar — sem data e sem promessa")         |
 | Plano alimentar no orçamento e o Blueprint (proposta que a pessoa confirma)     | App nativo / integração automática de sono e treino (idem)                                 |
 | Cruzamento corpo × dinheiro, retrospectiva semanal; briefing diário no Ascende+ | Integração com wearable, banco ou app de nicho                                             |
 | Grátis no essencial; Ascende+ por assinatura                                    | "A IA substitui médico/nutricionista/psicólogo/corretor" — ela não substitui               |

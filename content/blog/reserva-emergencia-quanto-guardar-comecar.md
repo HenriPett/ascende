@@ -150,7 +150,7 @@ Guardar dinheiro numa aplicação de baixo risco enquanto se pagam juros altos n
 
 ## Onde o Ascende entra
 
-O Ascende não se conecta ao banco, não acompanha o saldo da sua reserva e não indica onde aplicar. O que ele faz é guardar os seus gastos: você registra numa frase, digitada, por voz ou pelo WhatsApp, e o app só grava depois que você confirma. Com alguns meses de lançamentos, fica mais fácil chegar ao número das despesas essenciais; a escolha do que é essencial continua sua.
+O Ascende não se conecta ao banco, não acompanha o saldo da sua reserva e não indica onde aplicar. O que ele faz é guardar os seus gastos: você registra numa frase, digitada ou por voz, e o app só grava depois que você confirma. Com alguns meses de lançamentos, fica mais fácil chegar ao número das despesas essenciais; a escolha do que é essencial continua sua.
 
 ## Perguntas frequentes
 

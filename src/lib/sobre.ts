@@ -21,9 +21,9 @@ Para quem, no Brasil, quer arrumar o corpo e o dinheiro ao mesmo tempo, com o or
 
 ## O que o Ascende faz hoje
 
-- **Registro numa frase.** Você conta o dia digitando, falando, mandando a foto do prato ou uma mensagem no WhatsApp, e a IA separa os registros para você confirmar. Sem formulários e sem planilhas.
+- **Registro numa frase.** Você conta o dia digitando, falando ou mandando a foto do prato, e a IA separa os registros para você confirmar. Sem formulários e sem planilhas.
 - **Plano alimentar no orçamento.** A IA considera a sua meta, quanto você gasta com comida e o seu orçamento, e propõe um plano. Você revisa e confirma antes de qualquer coisa ser gravada.
-- **Conselheiro.** Um assistente de IA que responde com os seus dados, no app e pelo WhatsApp. Ele organiza, conecta e aponta o próximo passo. Não diagnostica, não prescreve e não recomenda investimentos.
+- **Conselheiro.** Um assistente de IA que responde com os seus dados, no app. Ele organiza, conecta e aponta o próximo passo. Não diagnostica, não prescreve e não recomenda investimentos.
 - **Retrospectiva semanal** cruzando finanças, corpo, alimentação e mente.
 - **Batalhas** contra o que rouba seu dinheiro e sua energia, como compras por impulso, apostas, redes sociais ou álcool. Os dias limpos acumulam e uma recaída não apaga o que veio antes.
 - **Importação do que você já registrou**, como o export do App Saúde do iPhone ou o CSV de outros apps de sono, treino, peso e alimentação. O arquivo é lido no seu aparelho.

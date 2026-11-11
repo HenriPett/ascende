@@ -46,7 +46,9 @@ Este guia leva você do zero ao app no ar, **mesmo que você nunca tenha feito i
 6. **Por último, rode `supabase/whatsapp_e_metas.sql`** do mesmo jeito (copiar,
    colar no SQL Editor, **Run**). Ele cria as tabelas do canal de WhatsApp e das
    metas. Ele fica fora de `migrations/`, então nem o passo 5 nem o `db push` o
-   executam — se você pular, o app sobe, mas o WhatsApp não funciona.
+   executam. Continua necessário por causa das metas; a parte de WhatsApp está
+   **desativada desde 2026-11-11** (o número foi desligado) e não precisa de
+   configuração.
 
 Pronto — banco criado, com segurança (RLS) já configurada.
 
@@ -80,9 +82,11 @@ npx supabase functions deploy ai-chat capture briefing analyze-meal import-state
 Essas dez são exatamente as que o app chama — publique todas. Se aparecer
 "Deployed Functions", funcionou.
 
-_(As demais são opcionais e só valem a pena depois: `whatsapp-webhook` e
-`whatsapp-notify` para o canal de WhatsApp, `billing-webhook` para a cobrança
-pelo Stripe, e `analyze-body`, hoje suspensa por decisão de produto.)_
+_(As demais são opcionais e só valem a pena depois: `billing-webhook` para a
+cobrança pelo Stripe, e `analyze-body`, hoje suspensa por decisão de produto.
+`whatsapp-webhook` e `whatsapp-notify` estão **desativadas desde 2026-11-11**:
+o número foi desligado e as duas respondem sem fazer nada; não publique nem
+agende.)_
 
 ### Login com Google (opcional, recomendado)
 
@@ -222,7 +226,7 @@ Os valores vivem em `supabase/functions/_shared/entitlements.ts` (`DEFAULT_LIMIT
 │   └── lib/appleHealthZip.ts   # export do app Saúde: streaming do .zip (fflate)
 ├── supabase/setup.sql      # linha de base do banco (Passo 2)
 ├── supabase/migrations/    # tudo que veio depois — roda em ordem (Passo 2)
-├── supabase/whatsapp_e_metas.sql  # tabelas de WhatsApp e metas (Passo 2, item 6)
+├── supabase/whatsapp_e_metas.sql  # tabelas de metas e do WhatsApp (desativado desde 2026-11-11)
 ├── supabase/functions/     # as funções de IA (Passo 4)
 ├── netlify.toml            # configuração do Netlify (já pronta)
 └── .env.example            # modelo das variáveis (Passo 5)
