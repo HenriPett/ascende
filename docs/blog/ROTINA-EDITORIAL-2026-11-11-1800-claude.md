@@ -21,3 +21,9 @@ Rotina "Blogs SEO — tarde" (Claude, nuvem). Disparo recebido na quarta 11/11/2
 - Agentes: pesquisa/redação/imagens (opus); revisão factual independente (opus: NO-GO 21:18Z UTC por duas frases além da fonte — IBGE "não inclui o que se come fora" e atribuição a Hall da ressalva de proteína — corrigidas pelo integrador, com sugestões aplicadas: confundimento residual em Lane, "em duas semanas", link do NIH para tempo e dinheiro, observação em Vitalidade).
 - Testes locais: `blog:indice` (+1 linha), `blog:check` ok (66 posts), `npm run build` ok, `vitest src/lib/blog src/blog` 149/149. Build local não prova publicação.
 - Revisão final independente do diff e da renderização (opus, agente que não redigiu nem fez a revisão factual): GO às 21:29:25Z UTC para os dois projetos — diff só editorial, hashes conferidos, testes/build ok, Chromium 390/1280 px (H1 único, byline Henrique Pett, canonical, JSON-LD author Person, imagens com alt, sem overflow), URL no sitemap, correções da revisão factual conferidas, 3 links por artigo reconferidos.
+
+## Estado: enviado ao Git — deploy não confirmado (11/11/2026 ~18h35 BRT)
+
+- Commit `279d58f`, push sem force sobre `067459f` (sem commits de terceiros no intervalo).
+- [CI do commit](https://github.com/HenriPett/ascende/actions/runs/43103547821): job `verify` verde (TypeScript, lint, testes, edge functions, build); job `Privacidade do Social (RLS com usuários de verdade)` falhou no passo "As quatro revogações", como nos commits anteriores (inclusive o merge do PR #37) — fora do diff editorial. O workflow como um todo **não** está verde.
+- Verificação pública bloqueada nesta sessão: `curl` para ascende.site recusado pelo proxy (CONNECT 403) e a ferramenta de navegação recusou a URL (proveniência). **Publicação não confirmada**; promover a "publicado" só após observar `https://ascende.site/blog/alimentos-ultraprocessados-o-que-sao-identificar/`.
