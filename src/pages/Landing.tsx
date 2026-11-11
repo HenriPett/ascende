@@ -305,7 +305,7 @@ export default function Landing() {
             monta o plano do seu corpo dentro do orçamento que você tem de verdade.
             Você conta o dia numa frase; ela registra o resto.
           </p>
-          <div className={`mt-5 flex flex-col sm:flex-row items-center justify-center gap-3 ${animarEntrada}`}>
+          <div className={`mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 ${animarEntrada}`}>
             <Button asChild size="lg" className="px-9 h-12 text-base">
               <Link to="/auth?intent=signup">Começar minha subida <ArrowRight className="w-4 h-4 ml-1.5" /></Link>
             </Button>
