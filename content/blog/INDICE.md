@@ -73,3 +73,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | cheque-especial-juros-limite-orcamento | como funciona o cheque especial, quanto custam juros e IOF e como registrar o saldo negativo no orçamento sem tratar o limite como saldo | alimentacao-orcamento | 2026-11-10 |  |
 | fortalecimento-muscular-dias-semana-registro | fortalecimento muscular quantas vezes por semana, o que conta como treino de força e como anotar os dias no registro do treino | rotina-integrada | 2026-11-10 |  |
 | intensidade-moderada-vigorosa-teste-fala | como saber se a atividade física é leve, moderada ou vigorosa pelo teste da fala e pelo esforço percebido e anotar no registro do treino | rotina-integrada | 2026-11-10 |  |
+| reserva-emergencia-quanto-guardar-comecar | como estimar quanto guardar e começar uma reserva de emergência com orçamento apertado sem misturar com despesas previstas | alimentacao-orcamento | 2026-11-11 |  |
