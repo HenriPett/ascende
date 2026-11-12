@@ -76,4 +76,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | alimentos-ultraprocessados-o-que-sao-identificar | o que são alimentos ultraprocessados e como diferenciá-los dos processados pela lista de ingredientes na compra e no registro das refeições | alimentacao-orcamento | 2026-11-11 |  |
 | quantas-horas-sono-adulto-precisa | quantas horas de sono um adulto precisa e como comparar a média semanal com a recomendação sem confundir tempo na cama com tempo de sono | rotina-integrada | 2026-11-11 |  |
 | reserva-emergencia-quanto-guardar-comecar | como estimar quanto guardar e começar uma reserva de emergência com orçamento apertado sem misturar com despesas previstas | alimentacao-orcamento | 2026-11-11 |  |
+| isencao-imposto-renda-5-mil-holerite | quem fica isento ou com redução do imposto de renda na fonte pela regra dos R$ 5 mil e como conferir no holerite e no orçamento | alimentacao-orcamento | 2026-11-12 |  |
 | quantos-passos-por-dia-meta-10-mil | quantos passos por dia estão associados a benefício à saúde, de onde vem a meta de 10 mil e como acompanhar a própria média semanal | rotina-integrada | 2026-11-12 |  |
