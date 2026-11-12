@@ -23,6 +23,7 @@ sources:
 related:
   - preco-por-quilo-comparar-embalagens
   - lista-de-compras-semanal-orcamento
+  - quanto-acucar-por-dia-oms-acucares-livres
 ---
 
 Para comparar a informação nutricional de dois alimentos embalados, comece pela coluna **por 100 g** ou **por 100 ml**, quando ela estiver disponível nos dois rótulos. Para entender o que a tabela declara para uma quantidade indicada no próprio pacote, olhe a **porção**. Depois confira **quantas porções há na embalagem**. Essas três informações respondem perguntas diferentes.
