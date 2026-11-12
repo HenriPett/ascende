@@ -21,3 +21,9 @@ Rotina "Blogs SEO — manhã" (Claude, nuvem). Disparo recebido na quinta 12/11/
 - Agentes: pesquisa/redação/imagens (opus); revisão factual independente (opus: NO-GO 2026-11-12T11:33:32Z por duas frases além da fonte — citação do Guia que era mensagem provisória dos Métodos e "achatou" para Ding — corrigidas pelo autor a pedido do integrador, com sugestões aplicadas: Paluch "até um nível que variou com a idade", comunicado da OMS citado no corpo, ressalva de Ding sobre 10 mil para mais ativos, "Em Paluch", vírgula, frase da caderneta no texto).
 - Testes locais: `blog:indice` (+1 linha), `blog:check` ok (67 posts), `npm run build` ok, `vitest src/lib/blog src/blog` 149/149. Build local não prova publicação.
 - Revisão final independente do diff e da renderização (opus, agente que não redigiu nem fez a revisão factual): GO às 2026-11-12T11:43:30Z para os dois projetos — diff só editorial, testes/build ok, Chromium 390/1280 px (H1 único, byline Henrique Pett, canonical, JSON-LD author Person, imagens com alt, sem overflow), URL no sitemap, correções conferidas, 3 links reabertos.
+
+## Estado: enviado ao Git — deploy não confirmado (12/11/2026 ~08h50 BRT)
+
+- Commit `8996cea`, push sem force sobre `68756f6` (sem commits de terceiros no intervalo).
+- [CI do commit](https://github.com/HenriPett/ascende/actions/runs/43211760738): job `verify` verde (TypeScript, lint, testes, edge functions, build); job `Privacidade do Social (RLS com usuários de verdade)` falhou no passo "As quatro revogações", como nos commits anteriores — fora do diff editorial. O workflow como um todo **não** está verde.
+- Verificação pública bloqueada nesta sessão: `curl` para ascende.site recusado pelo proxy (CONNECT 403) e a ferramenta de navegação recusou a URL (proveniência). **Publicação não confirmada**; promover a "publicado" só após observar `https://ascende.site/blog/quantos-passos-por-dia-meta-10-mil/`.
