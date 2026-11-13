@@ -79,4 +79,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | isencao-imposto-renda-5-mil-holerite | quem fica isento ou com redução do imposto de renda na fonte pela regra dos R$ 5 mil e como conferir no holerite e no orçamento | alimentacao-orcamento | 2026-11-12 |  |
 | quanto-acucar-por-dia-oms-acucares-livres | quanto açúcar por dia a recomendação da OMS considera e como reconhecer açúcares livres e adicionados no rótulo e na rotina | alimentacao-orcamento | 2026-11-12 |  |
 | quantos-passos-por-dia-meta-10-mil | quantos passos por dia estão associados a benefício à saúde, de onde vem a meta de 10 mil e como acompanhar a própria média semanal | rotina-integrada | 2026-11-12 |  |
+| celular-antes-de-dormir-sono-telas | usar o celular antes de dormir atrapalha o sono, o que a evidência diz sobre luz, conteúdo e horário e como observar o efeito na rotina | rotina-integrada | 2026-11-13 |  |
 | registrato-banco-central-consultar-dividas-cpf | como consultar no Registrato do Banco Central as dívidas, contas e chaves Pix no próprio CPF e o que fazer com o que não reconhecer | alimentacao-orcamento | 2026-11-13 |  |
