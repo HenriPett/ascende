@@ -22,6 +22,7 @@ sources:
 related:
   - permissoes-apps-saude-financas
   - exportar-dados-app-conferir-copia
+  - registrato-banco-central-consultar-dividas-cpf
 productPath: /
 ---
 
