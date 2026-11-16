@@ -82,4 +82,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | celular-antes-de-dormir-sono-telas | usar o celular antes de dormir atrapalha o sono, o que a evidência diz sobre luz, conteúdo e horário e como observar o efeito na rotina | rotina-integrada | 2026-11-13 |  |
 | quanta-proteina-por-dia-gramas-kg | quanta proteína por dia um adulto precisa segundo as referências em gramas por kg de peso e como estimar isso nos alimentos e no rótulo | alimentacao-orcamento | 2026-11-13 |  |
 | registrato-banco-central-consultar-dividas-cpf | como consultar no Registrato do Banco Central as dívidas, contas e chaves Pix no próprio CPF e o que fazer com o que não reconhecer | alimentacao-orcamento | 2026-11-13 |  |
+| quanto-sal-por-dia-sodio-oms | quanto sal e sódio por dia a OMS recomenda e como estimar o próprio consumo pelo rótulo e pela rotina | alimentacao-orcamento | 2026-11-16 |  |
 | regra-50-30-20-orcamento-como-adaptar | como funciona a regra 50-30-20 e como adaptá-la a um orçamento apertado | alimentacao-orcamento | 2026-11-16 |  |
