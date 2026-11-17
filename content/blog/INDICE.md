@@ -85,3 +85,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | ciclo-sono-90-minutos-calculadora-acordar | se calcular a hora de acordar por ciclos de 90 minutos funciona, quanto os ciclos do sono variam e como usar a ideia sem dormir menos | rotina-integrada | 2026-11-16 |  |
 | quanto-sal-por-dia-sodio-oms | quanto sal e sódio por dia a OMS recomenda e como estimar o próprio consumo pelo rótulo e pela rotina | alimentacao-orcamento | 2026-11-16 |  |
 | regra-50-30-20-orcamento-como-adaptar | como funciona a regra 50-30-20 e como adaptá-la a um orçamento apertado | alimentacao-orcamento | 2026-11-16 |  |
+| valores-a-receber-banco-central-consultar-resgatar | como consultar e pedir a devolução de dinheiro esquecido no Sistema de Valores a Receber do Banco Central sem cair em golpe | alimentacao-orcamento | 2026-11-17 |  |
