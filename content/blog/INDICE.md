@@ -89,4 +89,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | quantas-frutas-verduras-por-dia-400g | quantas frutas, verduras e legumes comer por dia segundo a OMS e o Guia Alimentar e como acompanhar a média na rotina | alimentacao-orcamento | 2026-11-17 |  |
 | valores-a-receber-banco-central-consultar-resgatar | como consultar e pedir a devolução de dinheiro esquecido no Sistema de Valores a Receber do Banco Central sem cair em golpe | alimentacao-orcamento | 2026-11-17 |  |
 | cet-custo-efetivo-total-comparar-emprestimos | o que é o CET e como usá-lo junto com o total a pagar e a parcela para comparar propostas de empréstimo pelo mesmo valor e prazo | alimentacao-orcamento | 2026-11-18 |  |
+| iof-compra-internacional-cartao-orcamento | quanto é o IOF em compra internacional no cartão, qual cotação a fatura usa e como estimar e registrar o custo total em moeda estrangeira | alimentacao-orcamento | 2026-11-18 |  |
 | quanta-gordura-saturada-por-dia-oms | quanta gordura saturada por dia a OMS recomenda, como converter a porcentagem em gramas e como ler gordura saturada e trans no rótulo | alimentacao-orcamento | 2026-11-18 |  |
