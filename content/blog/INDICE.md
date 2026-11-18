@@ -88,3 +88,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | quanta-fibra-por-dia-gramas-oms | quantas gramas de fibra alimentar por dia a recomendação da OMS considera e como reconhecer de onde a fibra vem nos alimentos e no rótulo | alimentacao-orcamento | 2026-11-17 |  |
 | quantas-frutas-verduras-por-dia-400g | quantas frutas, verduras e legumes comer por dia segundo a OMS e o Guia Alimentar e como acompanhar a média na rotina | alimentacao-orcamento | 2026-11-17 |  |
 | valores-a-receber-banco-central-consultar-resgatar | como consultar e pedir a devolução de dinheiro esquecido no Sistema de Valores a Receber do Banco Central sem cair em golpe | alimentacao-orcamento | 2026-11-17 |  |
+| cet-custo-efetivo-total-comparar-emprestimos | o que é o CET e como usá-lo junto com o total a pagar e a parcela para comparar propostas de empréstimo pelo mesmo valor e prazo | alimentacao-orcamento | 2026-11-18 |  |
