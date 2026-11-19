@@ -91,4 +91,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | cet-custo-efetivo-total-comparar-emprestimos | o que é o CET e como usá-lo junto com o total a pagar e a parcela para comparar propostas de empréstimo pelo mesmo valor e prazo | alimentacao-orcamento | 2026-11-18 |  |
 | iof-compra-internacional-cartao-orcamento | quanto é o IOF em compra internacional no cartão, qual cotação a fatura usa e como estimar e registrar o custo total em moeda estrangeira | alimentacao-orcamento | 2026-11-18 |  |
 | quanta-gordura-saturada-por-dia-oms | quanta gordura saturada por dia a OMS recomenda, como converter a porcentagem em gramas e como ler gordura saturada e trans no rótulo | alimentacao-orcamento | 2026-11-18 |  |
+| med-pix-golpe-devolucao-como-pedir | como pedir pelo Mecanismo Especial de Devolução do Banco Central a devolução de um Pix enviado por golpe, em que prazo e com que provas | alimentacao-orcamento | 2026-11-19 |  |
 | score-credito-cadastro-positivo-como-funciona | o que é o score de crédito, de onde vêm os dados do Cadastro Positivo e como consultar, cancelar ou contestar uma informação errada | alimentacao-orcamento | 2026-11-19 |  |
