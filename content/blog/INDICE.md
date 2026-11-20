@@ -94,4 +94,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | med-pix-golpe-devolucao-como-pedir | como pedir pelo Mecanismo Especial de Devolução do Banco Central a devolução de um Pix enviado por golpe, em que prazo e com que provas | alimentacao-orcamento | 2026-11-19 |  |
 | score-credito-cadastro-positivo-como-funciona | o que é o score de crédito, de onde vêm os dados do Cadastro Positivo e como consultar, cancelar ou contestar uma informação errada | alimentacao-orcamento | 2026-11-19 |  |
 | treinar-no-calor-hidratacao-sinais-alerta | como treinar no calor ajustando horário, intensidade e hidratação e quais sinais de exaustão ou insolação pedem parar e buscar atendimento | rotina-integrada | 2026-11-19 |  |
+| adocante-faz-mal-oms-edulcorantes-rotulo | o que a OMS, a IARC e o JECFA dizem sobre adoçantes não açucarados e como reconhecer edulcorantes e suas advertências no rótulo | alimentacao-orcamento | 2026-11-20 |  |
 | boleto-falso-conferir-antes-de-pagar | como conferir se um boleto é verdadeiro antes de pagar e o que fazer se já pagou um boleto falso | alimentacao-orcamento | 2026-11-20 |  |
