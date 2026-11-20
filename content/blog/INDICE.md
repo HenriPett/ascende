@@ -95,4 +95,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | score-credito-cadastro-positivo-como-funciona | o que é o score de crédito, de onde vêm os dados do Cadastro Positivo e como consultar, cancelar ou contestar uma informação errada | alimentacao-orcamento | 2026-11-19 |  |
 | treinar-no-calor-hidratacao-sinais-alerta | como treinar no calor ajustando horário, intensidade e hidratação e quais sinais de exaustão ou insolação pedem parar e buscar atendimento | rotina-integrada | 2026-11-19 |  |
 | adocante-faz-mal-oms-edulcorantes-rotulo | o que a OMS, a IARC e o JECFA dizem sobre adoçantes não açucarados e como reconhecer edulcorantes e suas advertências no rótulo | alimentacao-orcamento | 2026-11-20 |  |
+| alcool-sono-beber-antes-de-dormir | se o álcool atrapalha o sono, o que muda no sono REM e na segunda metade da noite e como observar o efeito de beber antes de dormir | rotina-integrada | 2026-11-20 |  |
 | boleto-falso-conferir-antes-de-pagar | como conferir se um boleto é verdadeiro antes de pagar e o que fazer se já pagou um boleto falso | alimentacao-orcamento | 2026-11-20 |  |
