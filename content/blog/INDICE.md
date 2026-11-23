@@ -98,4 +98,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | alcool-sono-beber-antes-de-dormir | se o álcool atrapalha o sono, o que muda no sono REM e na segunda metade da noite e como observar o efeito de beber antes de dormir | rotina-integrada | 2026-11-20 |  |
 | boleto-falso-conferir-antes-de-pagar | como conferir se um boleto é verdadeiro antes de pagar e o que fazer se já pagou um boleto falso | alimentacao-orcamento | 2026-11-20 |  |
 | alongamento-antes-do-treino-estatico-dinamico | se vale alongar antes do treino, que tipo de alongamento usar no aquecimento e por quanto tempo segurar cada alongamento | rotina-integrada | 2026-11-23 |  |
+| ceia-de-natal-quanto-comprar-por-pessoa-orcamento | como calcular quanto comprar por pessoa para a ceia de Natal, quanto ela vai custar, como dividir a conta e como guardar as sobras | alimentacao-orcamento | 2026-11-23 |  |
 | portabilidade-credito-como-fazer-emprestimo | como funciona e como pedir a portabilidade de um empréstimo ou financiamento para outra instituição e conferir se a troca compensa | alimentacao-orcamento | 2026-11-23 |  |
