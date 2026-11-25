@@ -103,3 +103,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | golpe-falsa-central-banco-falso-funcionario | como reconhecer o golpe da falsa central de atendimento ou do falso funcionário do banco e o que fazer antes e depois de cair nele | alimentacao-orcamento | 2026-11-24 |  |
 | quantos-ovos-por-dia-colesterol | quantos ovos por dia cabem numa alimentação saudável, se o colesterol do ovo aumenta o do sangue e quanta proteína e colesterol um ovo tem | alimentacao-orcamento | 2026-11-24 |  |
 | treinar-a-noite-atrapalha-sono-exercicio-antes-de-dormir | se treinar à noite atrapalha o sono, quanto tempo antes de deitar terminar o treino e como observar o próprio padrão de treino e sono | rotina-integrada | 2026-11-24 |  |
+| saque-aniversario-fgts-como-funciona-vale-a-pena | entender o saque-aniversário do FGTS para decidir se adere, sai ou antecipa | alimentacao-orcamento | 2026-11-25 |  |
