@@ -104,4 +104,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | quantos-ovos-por-dia-colesterol | quantos ovos por dia cabem numa alimentação saudável, se o colesterol do ovo aumenta o do sangue e quanta proteína e colesterol um ovo tem | alimentacao-orcamento | 2026-11-24 |  |
 | treinar-a-noite-atrapalha-sono-exercicio-antes-de-dormir | se treinar à noite atrapalha o sono, quanto tempo antes de deitar terminar o treino e como observar o próprio padrão de treino e sono | rotina-integrada | 2026-11-24 |  |
 | dor-muscular-depois-do-treino-quanto-dura | entender a dor muscular dos dias seguintes ao treino, quanto dura, se pode treinar com ela e quando ela é sinal de alerta | rotina-integrada | 2026-11-25 |  |
+| pao-integral-de-verdade-como-saber-rotulo | saber, na hora da compra, se um pão ou produto de cereal chamado integral é de fato integral e o que a embalagem precisa informar | alimentacao-orcamento | 2026-11-25 |  |
 | saque-aniversario-fgts-como-funciona-vale-a-pena | entender o saque-aniversário do FGTS para decidir se adere, sai ou antecipa | alimentacao-orcamento | 2026-11-25 |  |
