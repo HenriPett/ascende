@@ -106,4 +106,5 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | dor-muscular-depois-do-treino-quanto-dura | entender a dor muscular dos dias seguintes ao treino, quanto dura, se pode treinar com ela e quando ela é sinal de alerta | rotina-integrada | 2026-11-25 |  |
 | pao-integral-de-verdade-como-saber-rotulo | saber, na hora da compra, se um pão ou produto de cereal chamado integral é de fato integral e o que a embalagem precisa informar | alimentacao-orcamento | 2026-11-25 |  |
 | saque-aniversario-fgts-como-funciona-vale-a-pena | entender o saque-aniversário do FGTS para decidir se adere, sai ou antecipa | alimentacao-orcamento | 2026-11-25 |  |
+| acordar-de-madrugada-nao-consegue-voltar-a-dormir | por que acordo de madrugada e não consigo voltar a dormir, o que fazer na hora e quando isso pede avaliação de insônia | rotina-integrada | 2026-11-26 |  |
 | quitar-emprestimo-antecipado-desconto-juros | como funciona o desconto de juros ao quitar ou antecipar parcelas de um empréstimo ou financiamento e como pedir o saldo devedor | alimentacao-orcamento | 2026-11-26 |  |
