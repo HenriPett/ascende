@@ -109,3 +109,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | acordar-de-madrugada-nao-consegue-voltar-a-dormir | por que acordo de madrugada e não consigo voltar a dormir, o que fazer na hora e quando isso pede avaliação de insônia | rotina-integrada | 2026-11-26 |  |
 | descanso-entre-series-quanto-tempo-musculacao | quanto tempo descansar entre as séries na musculação e se o descanso muda conforme o objetivo de força, hipertrofia ou resistência | rotina-integrada | 2026-11-26 |  |
 | quitar-emprestimo-antecipado-desconto-juros | como funciona o desconto de juros ao quitar ou antecipar parcelas de um empréstimo ou financiamento e como pedir o saldo devedor | alimentacao-orcamento | 2026-11-26 |  |
+| divida-caduca-5-anos-prescricao-nome-negativado | o que acontece com uma dívida depois de cinco anos: se sai do cadastro negativo, se prescreve e se ainda pode ser cobrada | alimentacao-orcamento | 2026-11-27 |  |
