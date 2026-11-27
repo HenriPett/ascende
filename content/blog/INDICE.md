@@ -111,3 +111,4 @@ O slug não muda depois de publicado, e a intenção não se repete.
 | quitar-emprestimo-antecipado-desconto-juros | como funciona o desconto de juros ao quitar ou antecipar parcelas de um empréstimo ou financiamento e como pedir o saldo devedor | alimentacao-orcamento | 2026-11-26 |  |
 | alimentos-ricos-em-ferro-absorcao-vitamina-c | quais alimentos têm ferro, quanto ferro é preciso por dia e o que fazer na refeição para o corpo absorver melhor o ferro | alimentacao-orcamento | 2026-11-27 |  |
 | divida-caduca-5-anos-prescricao-nome-negativado | o que acontece com uma dívida depois de cinco anos: se sai do cadastro negativo, se prescreve e se ainda pode ser cobrada | alimentacao-orcamento | 2026-11-27 |  |
+| quanto-tempo-sem-treinar-perde-massa-muscular | quanto tempo sem treinar se perde força, massa muscular e condicionamento e como manter ou retomar o treino depois de uma pausa | rotina-integrada | 2026-11-27 |  |
